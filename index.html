@@ -113,6 +113,12 @@
         <button id="btnLoadModel" type="button" disabled>Modell laden</button>
         <button id="btnSaveModelAs" type="button" disabled>Als neuen Stand speichern</button>
         <button id="btnResetModel" type="button" disabled>Aktives Modell neu initialisieren</button>
+        <label for="datasetSelect">Datensatz</label>
+        <select id="datasetSelect">
+          <option value="mnist">MNIST</option>
+          <option value="usps">USPS</option>
+          <option value="emnistDigits">EMNIST Digits</option>
+        </select>
         <label for="epochsInput">Epochs</label>
         <input id="epochsInput" type="number" min="1" max="200" step="1" value="1" />
         <label for="lrInput">LR</label>
@@ -136,7 +142,7 @@
             <p id="epochTrackHeader">Epoch-Tracking</p>
             <ul id="epochTrackList"></ul>
           </div>
-          <div id="hint">MNIST-CSV: erste Spalte Label 0–9, danach 784 Pixel 0–255. Dateien z. B. von Kaggle „mnist-as-csv“.</div>
+          <div id="hint">CSV-Format: erste Spalte Label 0–9, danach 784 Pixel 0–255. Dateipfade: /data/csv/{mnist|usps|emnist_digits}_{train|test}.csv</div>
         </div>
       </div>
     </div>

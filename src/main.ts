@@ -4,8 +4,8 @@ import { activationSlices, MLP } from "./nn/network.js";
 import { trainLoop, type TrainEpochSummary } from "./train/trainer.js";
 import { Network3D } from "./viz/network3d.js";
 import { animateLoop, createScene } from "./viz/scene.js";
-import trainCsvUrl from "./data/csv/mnist_train.csv?url";
-import testCsvUrl from "./data/csv/mnist_test.csv?url";
+import mnistTrainCsvUrl from "./data/csv/mnist_train.csv?url";
+import mnistTestCsvUrl from "./data/csv/mnist_test.csv?url";
 
 const LAYER_SIZES = [784, 64, 32, 10];
 const HIDDEN = [64, 32];
@@ -19,9 +19,42 @@ const MODEL_STORAGE_KEY_V1 = "neuronal3d:model:v1";
 const MODEL_STORAGE_KEY_V2 = "neuronal3d:models:v2";
 const EPOCH_TRACK_STORAGE_KEY = "neuronal3d:epochTrack:v1";
 const EPOCH_TRACK_MAX_ROWS_PER_MODEL = 500;
+const ACTIVE_DATASET_STORAGE_KEY = "neuronal3d:activeDataset:v1";
 const VIZ_DEBUG_INFER =
   typeof globalThis.location !== "undefined" &&
   new URLSearchParams(globalThis.location.search).has("vizdebug");
+
+type DatasetConfig = {
+  key: "mnist" | "usps" | "emnistDigits";
+  label: string;
+  trainPath: string;
+  testPath: string;
+  bundledTrainUrl?: string;
+  bundledTestUrl?: string;
+};
+
+const DATASETS: DatasetConfig[] = [
+  {
+    key: "mnist",
+    label: "MNIST",
+    trainPath: "/data/csv/mnist_train.csv",
+    testPath: "/data/csv/mnist_test.csv",
+    bundledTrainUrl: mnistTrainCsvUrl,
+    bundledTestUrl: mnistTestCsvUrl,
+  },
+  {
+    key: "usps",
+    label: "USPS",
+    trainPath: "/data/csv/usps_train.csv",
+    testPath: "/data/csv/usps_test.csv",
+  },
+  {
+    key: "emnistDigits",
+    label: "EMNIST Digits",
+    trainPath: "/data/csv/emnist_digits_train.csv",
+    testPath: "/data/csv/emnist_digits_test.csv",
+  },
+];
 
 const el = {
   btnTrain: document.getElementById("btnTrain") as HTMLButtonElement,
@@ -30,6 +63,7 @@ const el = {
   btnLoadModel: document.getElementById("btnLoadModel") as HTMLButtonElement,
   btnSaveModelAs: document.getElementById("btnSaveModelAs") as HTMLButtonElement,
   btnResetModel: document.getElementById("btnResetModel") as HTMLButtonElement,
+  datasetSelect: document.getElementById("datasetSelect") as HTMLSelectElement,
   epochsInput: document.getElementById("epochsInput") as HTMLInputElement,
   lrInput: document.getElementById("lrInput") as HTMLInputElement,
   batchSizeInput: document.getElementById("batchSizeInput") as HTMLInputElement,
@@ -109,6 +143,7 @@ let epochTrackRows: PersistedEpochRow[] = [];
 let currentEpochRun = 0;
 let currentEpochRunStartedAt = "";
 let currentEpochRunStartedMs = 0;
+let activeDatasetKey: DatasetConfig["key"] = "mnist";
 
 const ctxDraw = el.drawCanvas.getContext("2d");
 if (!ctxDraw) throw new Error("canvas");
@@ -321,10 +356,26 @@ function updateButtons(): void {
   el.btnResetModel.disabled = !net || trainingRunning;
   el.btnInferRandom.disabled = !net || !hasTest;
   el.btnInferDraw.disabled = !net;
+  el.datasetSelect.disabled = trainingRunning;
   el.epochsInput.disabled = trainingRunning;
   el.lrInput.disabled = trainingRunning;
   el.batchSizeInput.disabled = trainingRunning;
   el.vizEveryInput.disabled = trainingRunning;
+}
+
+function datasetByKey(key: string): DatasetConfig | null {
+  return DATASETS.find((d) => d.key === key) ?? null;
+}
+
+function applyDatasetSelectionToUi(): void {
+  el.datasetSelect.innerHTML = "";
+  for (const d of DATASETS) {
+    const option = document.createElement("option");
+    option.value = d.key;
+    option.textContent = d.label;
+    el.datasetSelect.append(option);
+  }
+  el.datasetSelect.value = activeDatasetKey;
 }
 
 function parseIntInRange(raw: string, fallback: number, min: number, max: number): number {
@@ -520,28 +571,84 @@ function zeroActivationsForLayout(): number[][] {
 }
 
 async function loadCsvData(): Promise<void> {
+  const ds = datasetByKey(activeDatasetKey);
+  if (!ds) {
+    trainData = [];
+    testData = [];
+    setStatus("Datensatz-Konfiguration ungültig");
+    updateButtons();
+    return;
+  }
+  const trainSources = [ds.trainPath, ds.bundledTrainUrl].filter((x): x is string => typeof x === "string" && x.length > 0);
+  const testSources = [ds.testPath, ds.bundledTestUrl].filter((x): x is string => typeof x === "string" && x.length > 0);
   try {
-    setStatus("MNIST-Train-CSV wird geladen …");
-    const trainResp = await fetch(trainCsvUrl);
-    if (!trainResp.ok) throw new Error(`Train-CSV nicht gefunden (${trainResp.status})`);
-    const trainText = await trainResp.text();
-    trainData = parseMnistCsv(trainText);
-    setStatus(`Train geladen: ${trainData.length} Zeilen`);
+    setStatus(`${ds.label}: Train-CSV wird geladen …`);
+    let trainErr = "";
+    let loadedTrain: MnistSample[] = [];
+    for (const src of trainSources) {
+      try {
+        const resp = await fetch(src);
+        if (!resp.ok) {
+          trainErr = `Train-CSV nicht gefunden (${resp.status})`;
+          continue;
+        }
+        const text = await resp.text();
+        const parsed = parseMnistCsv(text);
+        if (parsed.length === 0) {
+          trainErr = "Train-CSV enthält keine gültigen Zeilen";
+          continue;
+        }
+        loadedTrain = parsed;
+        break;
+      } catch (e) {
+        trainErr = String(e);
+      }
+    }
+    if (loadedTrain.length === 0) throw new Error(trainErr || "Train-CSV konnte nicht geladen werden");
+    trainData = loadedTrain;
+    setStatus(`${ds.label}: Train geladen (${trainData.length} Zeilen)`);
   } catch (e) {
-    setStatus(`Fehler Train-CSV: ${e}`);
+    setStatus(`${ds.label}: Fehler Train-CSV: ${e}`);
     trainData = [];
   }
   try {
-    setStatus("MNIST-Test-CSV wird geladen …");
-    const testResp = await fetch(testCsvUrl);
-    if (!testResp.ok) throw new Error(`Test-CSV nicht gefunden (${testResp.status})`);
-    const testText = await testResp.text();
-    testData = parseMnistCsv(testText);
-    setStatus(`Train ${trainData.length} | Test ${testData.length} geladen`);
+    setStatus(`${ds.label}: Test-CSV wird geladen …`);
+    let testErr = "";
+    let loadedTest: MnistSample[] = [];
+    for (const src of testSources) {
+      try {
+        const resp = await fetch(src);
+        if (!resp.ok) {
+          testErr = `Test-CSV nicht gefunden (${resp.status})`;
+          continue;
+        }
+        const text = await resp.text();
+        const parsed = parseMnistCsv(text);
+        if (parsed.length === 0) {
+          testErr = "Test-CSV enthält keine gültigen Zeilen";
+          continue;
+        }
+        loadedTest = parsed;
+        break;
+      } catch (e) {
+        testErr = String(e);
+      }
+    }
+    if (loadedTest.length === 0) throw new Error(testErr || "Test-CSV konnte nicht geladen werden");
+    testData = loadedTest;
+    setStatus(`${ds.label}: Train ${trainData.length} | Test ${testData.length} geladen`);
   } catch (e) {
-    setStatus(`Fehler Test-CSV: ${e}`);
+    setStatus(`${ds.label}: Fehler Test-CSV: ${e}`);
     testData = [];
   }
+  if (trainData.length === 0 && activeDatasetKey !== "mnist") {
+    activeDatasetKey = "mnist";
+    localStorage.setItem(ACTIVE_DATASET_STORAGE_KEY, activeDatasetKey);
+    applyDatasetSelectionToUi();
+    await loadCsvData();
+    return;
+  }
+  lastInferSampleIndex = -1;
   updateButtons();
 }
 
@@ -568,8 +675,9 @@ function publishVizState(mode: VizMode, activations: number[][]): void {
 }
 
 function flushVizState(): void {
-  if (!net3d || !pendingVizState || !net) return;
+  if (!net3d || !pendingVizState) return;
   if (pendingVizState.stamp === lastAppliedVizStamp) return;
+  net3d.setIdleDim(pendingVizState.mode === "idle");
   net3d.setActivations(pendingVizState.activations);
   net3d.setEdgeFocus(
     pendingVizState.mode === "infer" ? "infer" : (pendingVizState.mode === "train" ? "trainRecent" : "off"),
@@ -709,6 +817,14 @@ el.btnPause.addEventListener("click", () => {
 el.modelSelect.addEventListener("change", () => {
   applyEpochHistoryToUi(el.modelSelect.value || null);
   updateButtons();
+});
+
+el.datasetSelect.addEventListener("change", () => {
+  const selected = datasetByKey(el.datasetSelect.value);
+  if (!selected) return;
+  activeDatasetKey = selected.key;
+  localStorage.setItem(ACTIVE_DATASET_STORAGE_KEY, activeDatasetKey);
+  void loadCsvData();
 });
 
 el.btnLoadModel.addEventListener("click", () => {
@@ -881,7 +997,14 @@ window.addEventListener("beforeunload", () => {
   disposeScene();
 });
 
-setStatus("MNIST-CSV wird automatisch geladen …");
+try {
+  const savedDataset = localStorage.getItem(ACTIVE_DATASET_STORAGE_KEY);
+  const ds = savedDataset ? datasetByKey(savedDataset) : null;
+  if (ds) activeDatasetKey = ds.key;
+} catch {
+}
+applyDatasetSelectionToUi();
+setStatus("Datensatz wird automatisch geladen …");
 updateButtons();
 void loadCsvData();
 try {
@@ -899,6 +1022,6 @@ try {
     applyEpochHistoryToUi(null);
   }
 } catch {
-  setStatus("MNIST-CSV wird automatisch geladen …");
+  setStatus("Datensatz wird automatisch geladen …");
   applyEpochHistoryToUi(null);
 }

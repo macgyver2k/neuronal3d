@@ -74,6 +74,8 @@ export class Network3D {
   private readonly edgeRecentDeltaThreshold = 0.18;
   private readonly edgeRecentDeltaAbsMin = 0.0008;
   private readonly edgeRecentWindow = 10;
+  private readonly edgeBaseOpacity: number[] = [];
+  private idleDimmed = false;
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -146,13 +148,15 @@ export class Network3D {
       const edgeColors = new THREE.BufferAttribute(colors, 3);
       edgeColors.setUsage(THREE.DynamicDrawUsage);
       geom.setAttribute("color", edgeColors);
+      const baseOpacity = L === 0 ? 0.25 : 0.55;
       const mat = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
-        opacity: L === 0 ? 0.25 : 0.55,
+        opacity: baseOpacity,
       });
       const lines = new THREE.LineSegments(geom, mat);
       this.edgeLines.push(lines);
+      this.edgeBaseOpacity.push(baseOpacity);
       this.edgeFromTo.push(fromTo);
       this.edgeWeightScale.push(0);
       this.edgeRecentLastWeight.push(new Float32Array(segCount));
@@ -184,6 +188,7 @@ export class Network3D {
       this.outputDigitSprites.push(spr);
       this.root.add(spr);
     }
+    this.setIdleDim(true);
   }
 
   resetActivationScaling(): void {
@@ -193,6 +198,25 @@ export class Network3D {
   setEdgeFocus(mode: "off" | "infer" | "trainRecent", activations: number[][] | null): void {
     this.edgeFocusMode = mode;
     this.edgeFocusActivations = activations ? activations.map((a) => [...a]) : null;
+  }
+
+  setIdleDim(dim: boolean): void {
+    if (this.idleDimmed === dim) return;
+    this.idleDimmed = dim;
+    const emissiveIntensity = dim ? 0.28 : 1.9;
+    for (const mesh of this.meshes) {
+      const mat = mesh.material as THREE.MeshPhongMaterial;
+      mat.emissiveIntensity = emissiveIntensity;
+    }
+    const edgeScale = dim ? 0.33 : 1;
+    for (let i = 0; i < this.edgeLines.length; i++) {
+      const mat = this.edgeLines[i].material as THREE.LineBasicMaterial;
+      mat.opacity = this.edgeBaseOpacity[i] * edgeScale;
+    }
+    for (const s of this.outputDigitSprites) {
+      const mat = s.material as THREE.SpriteMaterial;
+      if (mat.opacity <= 0.16) mat.opacity = dim ? 0.05 : 0.16;
+    }
   }
 
   setActivations(activations: number[][]): void {
