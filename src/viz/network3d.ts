@@ -10,7 +10,7 @@ function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
     if (L === 0 && n === 784) {
       for (let i = 0; i < 784; i++) {
         const u = 27 - (i % 28);
-        const v = Math.floor(i / 28);
+        const v = 27 - Math.floor(i / 28);
         pts.push(new THREE.Vector3(x, (v - 13.5) * 0.12, (u - 13.5) * 0.12));
       }
     } else if (n <= 128) {

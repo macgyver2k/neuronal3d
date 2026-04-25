@@ -21,9 +21,13 @@ export function parseMnistCsv(text: string): MnistSample[] {
   for (const line of lines) {
     const nums = parseCsvLine(line);
     if (nums.length !== 785) continue;
-    const label = Math.round(nums[0]);
-    if (label < 0 || label > 9) continue;
-    const pixels = nums.slice(1, 785).map((v) => v / 255);
+    const rawLabel = nums[0];
+    if (!Number.isFinite(rawLabel)) continue;
+    const label = Math.round(rawLabel);
+    if (!Number.isInteger(label) || label < 0 || label > 9) continue;
+    const rawPixels = nums.slice(1, 785);
+    if (rawPixels.some((v) => !Number.isFinite(v))) continue;
+    const pixels = rawPixels.map((v) => Math.max(0, Math.min(1, v / 255)));
     out.push({ label, pixels });
   }
   return out;
