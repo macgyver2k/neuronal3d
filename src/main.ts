@@ -20,6 +20,7 @@ const MODEL_STORAGE_KEY_V2 = "neuronal3d:models:v2";
 const EPOCH_TRACK_STORAGE_KEY = "neuronal3d:epochTrack:v1";
 const EPOCH_TRACK_MAX_ROWS_PER_MODEL = 500;
 const ACTIVE_DATASET_STORAGE_KEY = "neuronal3d:activeDataset:v1";
+const APP_MODE_STORAGE_KEY = "neuronal3d:appMode:v1";
 const VIZ_DEBUG_INFER =
   typeof globalThis.location !== "undefined" &&
   new URLSearchParams(globalThis.location.search).has("vizdebug");
@@ -57,6 +58,11 @@ const DATASETS: DatasetConfig[] = [
 ];
 
 const el = {
+  app: document.getElementById("app") as HTMLElement,
+  modeTabTrain: document.getElementById("modeTabTrain") as HTMLButtonElement,
+  modeTabInfer: document.getElementById("modeTabInfer") as HTMLButtonElement,
+  dockTrain: document.getElementById("dockTrain") as HTMLElement,
+  dockInfer: document.getElementById("dockInfer") as HTMLElement,
   btnTrain: document.getElementById("btnTrain") as HTMLButtonElement,
   btnPause: document.getElementById("btnPause") as HTMLButtonElement,
   modelSelect: document.getElementById("modelSelect") as HTMLSelectElement,
@@ -213,8 +219,54 @@ el.btnClearDraw.addEventListener("click", () => {
   scheduleLiveCanvasInfer();
 });
 
+el.modeTabTrain.addEventListener("click", () => {
+  setAppMode("train");
+});
+
+el.modeTabInfer.addEventListener("click", () => {
+  setAppMode("infer");
+});
+
+window.addEventListener("keydown", (e: KeyboardEvent) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.code !== "Digit1" && e.code !== "Digit2") return;
+  const t = e.target;
+  if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
+  if (t instanceof HTMLElement && t.isContentEditable) return;
+  e.preventDefault();
+  setAppMode(e.code === "Digit1" ? "train" : "infer");
+});
+
 function setStatus(t: string): void {
   el.status.textContent = t;
+}
+
+function readStoredAppMode(): "train" | "infer" {
+  try {
+    const raw = localStorage.getItem(APP_MODE_STORAGE_KEY);
+    if (raw === "infer" || raw === "train") return raw;
+  } catch {
+  }
+  return "train";
+}
+
+function setAppMode(mode: "train" | "infer"): void {
+  el.app.dataset.appMode = mode;
+  el.modeTabTrain.setAttribute("aria-selected", mode === "train" ? "true" : "false");
+  el.modeTabInfer.setAttribute("aria-selected", mode === "infer" ? "true" : "false");
+  el.modeTabTrain.tabIndex = mode === "train" ? 0 : -1;
+  el.modeTabInfer.tabIndex = mode === "infer" ? 0 : -1;
+  el.dockTrain.toggleAttribute("hidden", mode !== "train");
+  el.dockInfer.toggleAttribute("hidden", mode !== "infer");
+  el.dockTrain.inert = mode !== "train";
+  el.dockInfer.inert = mode !== "infer";
+  try {
+    localStorage.setItem(APP_MODE_STORAGE_KEY, mode);
+  } catch {
+  }
+  queueMicrotask(() => {
+    window.dispatchEvent(new Event("resize"));
+  });
 }
 
 function renderEpochTracking(): void {
@@ -1047,6 +1099,7 @@ try {
 } catch {
 }
 applyDatasetSelectionToUi();
+setAppMode(readStoredAppMode());
 setStatus("Datensatz wird automatisch geladen …");
 updateButtons();
 void loadCsvData();
