@@ -64,10 +64,16 @@ export class Network3D {
   private readonly layerSizes: number[];
   private readonly positions: THREE.Vector3[][];
   private readonly outputDigitSprites: THREE.Sprite[] = [];
-  private edgeFocusMode: "off" | "infer" = "off";
+  private edgeFocusMode: "off" | "infer" | "trainRecent" = "off";
   private edgeFocusActivations: number[][] | null = null;
   private readonly edgeFocusThreshold = 0.22;
   private readonly edgeFocusThresholdFirstLayer = 0.38;
+  private readonly edgeRecentLastWeight: Float32Array[] = [];
+  private readonly edgeRecentDelta: Float32Array[] = [];
+  private readonly edgeRecentAge: Uint16Array[] = [];
+  private readonly edgeRecentDeltaThreshold = 0.18;
+  private readonly edgeRecentDeltaAbsMin = 0.0008;
+  private readonly edgeRecentWindow = 6;
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -146,6 +152,11 @@ export class Network3D {
       this.edgeLines.push(lines);
       this.edgeFromTo.push(fromTo);
       this.edgeWeightScale.push(0);
+      this.edgeRecentLastWeight.push(new Float32Array(segCount));
+      this.edgeRecentDelta.push(new Float32Array(segCount));
+      const age = new Uint16Array(segCount);
+      age.fill(this.edgeRecentWindow + 1);
+      this.edgeRecentAge.push(age);
       this.root.add(lines);
     }
     const outIdx = this.layerSizes.length - 1;
@@ -175,7 +186,7 @@ export class Network3D {
     for (let i = 0; i < this.activationScale.length; i++) this.activationScale[i] = 1;
   }
 
-  setEdgeFocus(mode: "off" | "infer", activations: number[][] | null): void {
+  setEdgeFocus(mode: "off" | "infer" | "trainRecent", activations: number[][] | null): void {
     this.edgeFocusMode = mode;
     this.edgeFocusActivations = activations ? activations.map((a) => [...a]) : null;
   }
@@ -271,8 +282,12 @@ export class Network3D {
       const posAttr = lines.geometry.getAttribute("position") as THREE.BufferAttribute;
       const posArr = posAttr.array as Float32Array;
       const map = this.edgeFromTo[L];
+      const lastWeight = this.edgeRecentLastWeight[L];
+      const deltaArr = this.edgeRecentDelta[L];
+      const ageArr = this.edgeRecentAge[L];
       let mx = 1e-12;
       let contribMx = 1e-12;
+      let deltaMx = 1e-12;
       const fromActs =
         this.edgeFocusMode === "infer" && this.edgeFocusActivations && this.edgeFocusActivations[L]
           ? this.edgeFocusActivations[L]
@@ -283,6 +298,10 @@ export class Network3D {
           const wrc = Number.isFinite(layerW[r][c]) ? layerW[r][c] : 0;
           const a = Math.abs(wrc);
           if (a > mx) mx = a;
+          const idx = r * layerW[r].length + c;
+          const delta = Math.abs(wrc - lastWeight[idx]);
+          deltaArr[idx] = delta;
+          if (delta > deltaMx) deltaMx = delta;
           if (fromActs && c < fromActs.length) {
             const fa = Number.isFinite(fromActs[c]) ? Math.max(0, fromActs[c]) : 0;
             const contrib = Math.abs(wrc) * fa;
@@ -297,24 +316,49 @@ export class Network3D {
         const ref = map[k];
         const wRaw = layerW[ref.to][ref.from] ?? 0;
         const w = Number.isFinite(wRaw) ? wRaw : 0;
+        const idx = ref.to * layerW[ref.to].length + ref.from;
+        lastWeight[idx] = w;
         let visible = true;
         let contribNorm = 1;
+        let recentNorm = 0;
         if (fromActs && ref.from < fromActs.length) {
           const fa = Number.isFinite(fromActs[ref.from]) ? Math.max(0, fromActs[ref.from]) : 0;
           contribNorm = (Math.abs(w) * fa) / Math.max(1e-9, contribMx);
           visible = contribNorm >= threshold;
+        }
+        if (this.edgeFocusMode === "trainRecent") {
+          recentNorm = deltaArr[idx] / Math.max(1e-9, deltaMx);
+          const changedEnough =
+            deltaArr[idx] >= this.edgeRecentDeltaAbsMin &&
+            recentNorm >= this.edgeRecentDeltaThreshold;
+          if (changedEnough) {
+            ageArr[k] = 0;
+          } else {
+            ageArr[k] = Math.min(this.edgeRecentWindow + 1, ageArr[k] + 1);
+          }
+          visible = ageArr[k] <= this.edgeRecentWindow;
         }
         const tBase = Math.min(1, Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65));
         const tInfer =
           fromActs && visible
             ? Math.min(1, Math.max(0, (contribNorm - threshold) / Math.max(1e-9, 1 - threshold)))
             : 0;
-        const t = fromActs ? (visible ? tInfer : 0) : tBase;
+        const tTrainRecent =
+          this.edgeFocusMode === "trainRecent" && visible
+            ? 1 - ageArr[k] / Math.max(1, this.edgeRecentWindow)
+            : 0;
+        const t = this.edgeFocusMode === "trainRecent" ? tTrainRecent : (fromActs ? (visible ? tInfer : 0) : tBase);
+        const tRecentVis = this.edgeFocusMode === "trainRecent" ? Math.pow(Math.max(0, tTrainRecent), 1.6) : 0;
+        if (this.edgeFocusMode === "trainRecent") visible = visible && tRecentVis >= 0.06;
         let r = 0;
         let g = 0;
         let b = 0;
         if (visible) {
-          if (w >= 0) {
+          if (this.edgeFocusMode === "trainRecent") {
+            r = 0.95 * tRecentVis;
+            g = 0.62 * tRecentVis;
+            b = 0.18 * tRecentVis;
+          } else if (w >= 0) {
             r = 0.25 + 0.75 * t;
             g = 0.14 + 0.58 * t;
             b = 0.07 + 0.16 * t;
@@ -331,7 +375,7 @@ export class Network3D {
         const i = k * 6;
         const pFrom = this.positions[L][ref.from];
         const pTo = this.positions[L + 1][ref.to];
-        if (this.edgeFocusMode === "infer" && !visible) {
+        if ((this.edgeFocusMode === "infer" || this.edgeFocusMode === "trainRecent") && !visible) {
           posArr[i + 0] = pFrom.x;
           posArr[i + 1] = pFrom.y;
           posArr[i + 2] = pFrom.z;

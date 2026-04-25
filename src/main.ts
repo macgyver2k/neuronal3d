@@ -12,7 +12,7 @@ const HIDDEN = [64, 32];
 const TRAIN_DEFAULTS = {
   lr: 0.02,
   batchSize: 32,
-  epochs: 8,
+  epochs: 1,
   vizEveryNBatches: 4,
 } as const;
 const MODEL_STORAGE_KEY_V1 = "neuronal3d:model:v1";
@@ -425,7 +425,7 @@ function flushVizState(): void {
   if (pendingVizState.stamp === lastAppliedVizStamp) return;
   net3d.setActivations(pendingVizState.activations);
   net3d.setEdgeFocus(
-    pendingVizState.mode === "infer" ? "infer" : "off",
+    pendingVizState.mode === "infer" ? "infer" : (pendingVizState.mode === "train" ? "trainRecent" : "off"),
     pendingVizState.mode === "infer" ? pendingVizState.activations : null,
   );
   lastAppliedVizStamp = pendingVizState.stamp;
