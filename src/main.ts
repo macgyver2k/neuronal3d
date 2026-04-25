@@ -9,7 +9,7 @@ import testCsvUrl from "./data/csv/mnist_test.csv?url";
 
 const LAYER_SIZES = [784, 64, 32, 10];
 const HIDDEN = [64, 32];
-const TRAIN_CFG = {
+const TRAIN_DEFAULTS = {
   lr: 0.02,
   batchSize: 32,
   epochs: 8,
@@ -28,6 +28,10 @@ const el = {
   btnLoadModel: document.getElementById("btnLoadModel") as HTMLButtonElement,
   btnSaveModelAs: document.getElementById("btnSaveModelAs") as HTMLButtonElement,
   btnResetModel: document.getElementById("btnResetModel") as HTMLButtonElement,
+  epochsInput: document.getElementById("epochsInput") as HTMLInputElement,
+  lrInput: document.getElementById("lrInput") as HTMLInputElement,
+  batchSizeInput: document.getElementById("batchSizeInput") as HTMLInputElement,
+  vizEveryInput: document.getElementById("vizEveryInput") as HTMLInputElement,
   btnInferRandom: document.getElementById("btnInferRandom") as HTMLButtonElement,
   btnInferDraw: document.getElementById("btnInferDraw") as HTMLButtonElement,
   btnClearDraw: document.getElementById("btnClearDraw") as HTMLButtonElement,
@@ -171,6 +175,34 @@ function updateButtons(): void {
   el.btnResetModel.disabled = !net || trainingRunning;
   el.btnInferRandom.disabled = !net || !hasTest;
   el.btnInferDraw.disabled = !net;
+  el.epochsInput.disabled = trainingRunning;
+  el.lrInput.disabled = trainingRunning;
+  el.batchSizeInput.disabled = trainingRunning;
+  el.vizEveryInput.disabled = trainingRunning;
+}
+
+function parseIntInRange(raw: string, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function parseFloatInRange(raw: string, fallback: number, min: number, max: number): number {
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function getTrainConfig(): { lr: number; batchSize: number; epochs: number; vizEveryNBatches: number } {
+  const epochs = parseIntInRange(el.epochsInput.value, TRAIN_DEFAULTS.epochs, 1, 200);
+  const lr = parseFloatInRange(el.lrInput.value, TRAIN_DEFAULTS.lr, 0.0001, 1);
+  const batchSize = parseIntInRange(el.batchSizeInput.value, TRAIN_DEFAULTS.batchSize, 1, 512);
+  const vizEveryNBatches = parseIntInRange(el.vizEveryInput.value, TRAIN_DEFAULTS.vizEveryNBatches, 1, 1000);
+  el.epochsInput.value = String(epochs);
+  el.lrInput.value = String(lr);
+  el.batchSizeInput.value = String(batchSize);
+  el.vizEveryInput.value = String(vizEveryNBatches);
+  return { lr, batchSize, epochs, vizEveryNBatches };
 }
 
 function fmtPct(v: number | null): string {
@@ -571,6 +603,7 @@ el.btnResetModel.addEventListener("click", () => {
 el.btnTrain.addEventListener("click", () => {
   void (async () => {
     if (trainData.length === 0) return;
+    const trainCfg = getTrainConfig();
     trainingRunning = true;
     stopTraining = false;
     pauseTraining = false;
@@ -599,7 +632,7 @@ el.btnTrain.addEventListener("click", () => {
     await trainLoop(
       net,
       trainData,
-      TRAIN_CFG,
+      trainCfg,
       (s) => {
         if (net) publishVizState("train", s.activations);
         lastTrainLoss = s.loss;
@@ -626,7 +659,7 @@ el.btnTrain.addEventListener("click", () => {
             lastBatchAcc: lastTrainBatchAcc,
             testAcc: testMetrics ? testMetrics.accuracy : currentEntry.metrics.testAcc,
             errorRate: testMetrics ? testMetrics.errorRate : currentEntry.metrics.errorRate,
-            epochsTrained: currentEntry.metrics.epochsTrained + TRAIN_CFG.epochs,
+            epochsTrained: currentEntry.metrics.epochsTrained + trainCfg.epochs,
           },
         });
       }
