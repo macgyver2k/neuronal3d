@@ -156,11 +156,21 @@ ctx2d.lineJoin = "round";
 ctx2d.strokeStyle = "#ffffff";
 
 let drawing = false;
+let liveCanvasInferRaf: number | null = null;
 function canvasPos(ev: PointerEvent): { x: number; y: number } {
   const r = el.drawCanvas.getBoundingClientRect();
   const sx = el.drawCanvas.width / r.width;
   const sy = el.drawCanvas.height / r.height;
   return { x: (ev.clientX - r.left) * sx, y: (ev.clientY - r.top) * sy };
+}
+function scheduleLiveCanvasInfer(): void {
+  if (liveCanvasInferRaf !== null) return;
+  liveCanvasInferRaf = requestAnimationFrame(() => {
+    liveCanvasInferRaf = null;
+    if (!net || !net3d) return;
+    const pixels = canvasToMnistPixels();
+    inferWithPixels(pixels, undefined, undefined, { live: true });
+  });
 }
 el.drawCanvas.addEventListener("pointerdown", (e) => {
   drawing = true;
@@ -174,16 +184,24 @@ el.drawCanvas.addEventListener("pointermove", (e) => {
   const p = canvasPos(e);
   ctx2d.lineTo(p.x, p.y);
   ctx2d.stroke();
+  scheduleLiveCanvasInfer();
 });
 el.drawCanvas.addEventListener("pointerup", () => {
   drawing = false;
+  scheduleLiveCanvasInfer();
+});
+el.drawCanvas.addEventListener("pointercancel", () => {
+  drawing = false;
+  scheduleLiveCanvasInfer();
 });
 el.drawCanvas.addEventListener("pointerleave", () => {
   drawing = false;
+  scheduleLiveCanvasInfer();
 });
 el.btnClearDraw.addEventListener("click", () => {
   ctx2d.fillStyle = "#000000";
   ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
+  scheduleLiveCanvasInfer();
 });
 
 function setStatus(t: string): void {
@@ -753,10 +771,16 @@ function canvasToMnistPixels(): number[] {
   return out;
 }
 
-function inferWithPixels(pixels: number[], label?: number, sampleIndex?: number): void {
+function inferWithPixels(
+  pixels: number[],
+  label?: number,
+  sampleIndex?: number,
+  opts?: { live?: boolean },
+): void {
   if (!net || !net3d) return;
+  const live = opts?.live === true;
   try {
-    inferCounter += 1;
+    if (!live) inferCounter += 1;
     const x = matFromColVec(pixels);
     const fwd = net.forward(x);
     const pred = net.predictClass(fwd.prob);
@@ -785,9 +809,17 @@ function inferWithPixels(pixels: number[], label?: number, sampleIndex?: number)
         );
       }
     } else if (invalidProb) {
-      setStatus(`Infer #${fmtInt(inferCounter, 4)} (Canvas): ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren`);
+      setStatus(
+        live
+          ? "Canvas (live): ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren"
+          : `Infer #${fmtInt(inferCounter, 4)} (Canvas): ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren`,
+      );
     } else {
-      setStatus(`Infer #${fmtInt(inferCounter, 4)} (Canvas): pred=${pred}  softmax ${probStr}  top ${top}${diffStr}`);
+      setStatus(
+        live
+          ? `Canvas (live): pred=${pred}  softmax ${probStr}  top ${top}${diffStr}`
+          : `Infer #${fmtInt(inferCounter, 4)} (Canvas): pred=${pred}  softmax ${probStr}  top ${top}${diffStr}`,
+      );
     }
   } catch (err) {
     setStatus(`Infer-Fehler: ${String(err)}`);
