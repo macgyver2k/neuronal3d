@@ -1,5 +1,22 @@
 import * as THREE from "three";
 
+function createDigitTexture(digit: number): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext("2d");
+  if (!g) throw new Error("canvas2d");
+  g.clearRect(0, 0, 128, 128);
+  g.fillStyle = "#ffffff";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = "bold 92px system-ui, sans-serif";
+  g.fillText(String(digit), 64, 68);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
   const spacing = 3.2;
   const out: THREE.Vector3[][] = [];
@@ -46,6 +63,7 @@ export class Network3D {
   private readonly dummy = new THREE.Object3D();
   private readonly layerSizes: number[];
   private readonly positions: THREE.Vector3[][];
+  private readonly outputDigitSprites: THREE.Sprite[] = [];
   private edgeFocusMode: "off" | "infer" = "off";
   private edgeFocusActivations: number[][] | null = null;
   private readonly edgeFocusThreshold = 0.22;
@@ -130,6 +148,27 @@ export class Network3D {
       this.edgeWeightScale.push(0);
       this.root.add(lines);
     }
+    const outIdx = this.layerSizes.length - 1;
+    const outCount = this.layerSizes[outIdx];
+    const outX = this.positions[outIdx][0]?.x ?? (outIdx * 3.2);
+    const labelX = outX + 1.8;
+    const labelR = 1.75;
+    for (let i = 0; i < outCount; i++) {
+      const t = (i / Math.max(1, outCount)) * Math.PI * 2;
+      const tex = createDigitTexture(i);
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        opacity: 0.16,
+        color: 0x5f6770,
+        depthWrite: false,
+      });
+      const spr = new THREE.Sprite(mat);
+      spr.position.set(labelX, Math.sin(t) * labelR, Math.cos(t) * labelR);
+      spr.scale.setScalar(0.34);
+      this.outputDigitSprites.push(spr);
+      this.root.add(spr);
+    }
   }
 
   resetActivationScaling(): void {
@@ -172,6 +211,28 @@ export class Network3D {
           arr[i * 3 + 0] = 0.12 + 0.88 * t;
           arr[i * 3 + 1] = 0.1 + 0.42 * (1 - t * 0.2);
           arr[i * 3 + 2] = 0.1 + 0.68 * (1 - t);
+        }
+        let best = 0;
+        let bestVal = -Infinity;
+        for (let i = 0; i < v.length; i++) {
+          const vi = Number.isFinite(v[i]) ? v[i] : -Infinity;
+          if (vi > bestVal) {
+            bestVal = vi;
+            best = i;
+          }
+        }
+        for (let i = 0; i < this.outputDigitSprites.length; i++) {
+          const s = this.outputDigitSprites[i];
+          const mat = s.material as THREE.SpriteMaterial;
+          if (this.edgeFocusMode === "infer" && i === best) {
+            mat.opacity = 0.95;
+            mat.color.setHex(0xffcc4d);
+            s.scale.setScalar(0.46);
+          } else {
+            mat.opacity = 0.16;
+            mat.color.setHex(0x5f6770);
+            s.scale.setScalar(0.34);
+          }
         }
       } else {
         let mx = 1e-12;
@@ -307,6 +368,11 @@ export class Network3D {
       l.geometry.dispose();
       if (Array.isArray(l.material)) l.material.forEach((mat: THREE.Material) => mat.dispose());
       else l.material.dispose();
+    }
+    for (const s of this.outputDigitSprites) {
+      const mat = s.material as THREE.SpriteMaterial;
+      mat.map?.dispose();
+      mat.dispose();
     }
   }
 }
