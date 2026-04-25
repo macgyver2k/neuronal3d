@@ -5,13 +5,14 @@ import { trainLoop, type TrainSnapshot } from "./train/trainer.js";
 import { applySnapshotToNetwork } from "./viz/bridge.js";
 import { Network3D } from "./viz/network3d.js";
 import { animateLoop, createScene } from "./viz/scene.js";
+import trainCsvUrl from "./data/csv/mnist_train.csv?url";
+import testCsvUrl from "./data/csv/mnist_test.csv?url";
 
 const LAYER_SIZES = [784, 64, 32, 10];
 const HIDDEN = [64, 32];
+const MODEL_STORAGE_KEY = "neuronal3d:model:v1";
 
 const el = {
-  trainFile: document.getElementById("trainFile") as HTMLInputElement,
-  testFile: document.getElementById("testFile") as HTMLInputElement,
   btnTrain: document.getElementById("btnTrain") as HTMLButtonElement,
   btnPause: document.getElementById("btnPause") as HTMLButtonElement,
   btnInferRandom: document.getElementById("btnInferRandom") as HTMLButtonElement,
@@ -30,6 +31,15 @@ let latestSnap: TrainSnapshot | null = null;
 let trainingRunning = false;
 let pauseTraining = false;
 let stopTraining = false;
+
+type StoredModel = {
+  version: 1;
+  inputDim: number;
+  hidden: number[];
+  outputDim: number;
+  weights: number[][][];
+  biases: number[][][];
+};
 
 const ctxDraw = el.drawCanvas.getContext("2d");
 if (!ctxDraw) throw new Error("canvas");
@@ -72,17 +82,16 @@ el.btnClearDraw.addEventListener("click", () => {
   ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
 });
 
-function readFileText(f: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result ?? ""));
-    r.onerror = () => reject(r.error);
-    r.readAsText(f);
-  });
-}
-
 function setStatus(t: string): void {
   el.status.textContent = t;
+}
+
+function fmtInt(n: number, width: number): string {
+  return String(n).padStart(width, " ");
+}
+
+function fmtFloat(n: number, width: number, digits: number): string {
+  return n.toFixed(digits).padStart(width, " ");
 }
 
 function updateButtons(): void {
@@ -94,38 +103,62 @@ function updateButtons(): void {
   el.btnInferDraw.disabled = !net;
 }
 
-async function onTrainFile(ev: Event): Promise<void> {
-  const t = (ev.target as HTMLInputElement).files?.[0];
-  if (!t) return;
+function saveModelToStorage(model: MLP): void {
+  const payload: StoredModel = {
+    version: 1,
+    inputDim: model.inputDim,
+    hidden: [...model.hidden],
+    outputDim: model.outputDim,
+    weights: model.weights.map((m) => m.map((row) => [...row])),
+    biases: model.biases.map((m) => m.map((row) => [...row])),
+  };
+  localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function loadModelFromStorage(): MLP | null {
+  const raw = localStorage.getItem(MODEL_STORAGE_KEY);
+  if (!raw) return null;
+  const data = JSON.parse(raw) as StoredModel;
+  if (
+    data.version !== 1 ||
+    data.inputDim !== 784 ||
+    data.outputDim !== 10 ||
+    data.hidden.length !== HIDDEN.length ||
+    data.hidden.some((v, i) => v !== HIDDEN[i])
+  ) {
+    return null;
+  }
+  const model = new MLP(data.inputDim, data.hidden, data.outputDim);
+  model.weights = data.weights.map((m) => m.map((row) => [...row]));
+  model.biases = data.biases.map((m) => m.map((row) => [...row]));
+  return model;
+}
+
+async function loadCsvData(): Promise<void> {
   try {
-    setStatus("Train-CSV wird gelesen …");
-    const text = await readFileText(t);
-    trainData = parseMnistCsv(text);
-    setStatus(`Train: ${trainData.length} Zeilen`);
+    setStatus("MNIST-Train-CSV wird geladen …");
+    const trainResp = await fetch(trainCsvUrl);
+    if (!trainResp.ok) throw new Error(`Train-CSV nicht gefunden (${trainResp.status})`);
+    const trainText = await trainResp.text();
+    trainData = parseMnistCsv(trainText);
+    setStatus(`Train geladen: ${trainData.length} Zeilen`);
   } catch (e) {
     setStatus(`Fehler Train-CSV: ${e}`);
     trainData = [];
   }
-  updateButtons();
-}
-
-async function onTestFile(ev: Event): Promise<void> {
-  const t = (ev.target as HTMLInputElement).files?.[0];
-  if (!t) return;
   try {
-    setStatus("Test-CSV wird gelesen …");
-    const text = await readFileText(t);
-    testData = parseMnistCsv(text);
-    setStatus(`Test: ${testData.length} Zeilen`);
+    setStatus("MNIST-Test-CSV wird geladen …");
+    const testResp = await fetch(testCsvUrl);
+    if (!testResp.ok) throw new Error(`Test-CSV nicht gefunden (${testResp.status})`);
+    const testText = await testResp.text();
+    testData = parseMnistCsv(testText);
+    setStatus(`Train ${trainData.length} | Test ${testData.length} geladen`);
   } catch (e) {
     setStatus(`Fehler Test-CSV: ${e}`);
     testData = [];
   }
   updateButtons();
 }
-
-el.trainFile.addEventListener("change", (e) => void onTrainFile(e));
-el.testFile.addEventListener("change", (e) => void onTestFile(e));
 
 const { scene, camera, renderer, controls, dispose: disposeScene } = createScene(el.viz);
 const net3dInst = new Network3D(LAYER_SIZES);
@@ -139,6 +172,7 @@ function tickViz(): void {
     lastFrameSnap = s;
     applySnapshotToNetwork(net3d, s);
   }
+  if (net3d && net) net3d.setWeights(net.weights);
 }
 
 const stopAnim = animateLoop(renderer, scene, camera, controls, tickViz);
@@ -182,6 +216,7 @@ function inferWithPixels(pixels: number[], label?: number): void {
   const pred = net.predictClass(fwd.prob);
   const acts = activationSlices(x, fwd);
   net3d.setActivations(acts);
+  net3d.setWeights(net.weights);
   const probStr = fwd.prob
     .map((row) => row[0].toFixed(2))
     .join(" ");
@@ -219,6 +254,7 @@ el.btnTrain.addEventListener("click", () => {
     lastFrameSnap = null;
     updateButtons();
     net = new MLP(784, HIDDEN, 10);
+    net3d?.setWeights(net.weights);
     await trainLoop(
       net,
       trainData,
@@ -231,15 +267,17 @@ el.btnTrain.addEventListener("click", () => {
       (s) => {
         latestSnap = s;
         setStatus(
-          `Epoche ${s.epoch + 1} Batch ${s.batchIndex} loss=${s.loss.toFixed(4)} acc=${(s.trainAccBatch * 100).toFixed(1)}%`,
+          `Ep ${fmtInt(s.epoch + 1, 3)}  Batch ${fmtInt(s.batchIndex, 5)}  loss ${fmtFloat(s.loss, 8, 4)}  acc ${fmtFloat(s.trainAccBatch * 100, 6, 1)}%`,
         );
+        if (net && s.batchIndex % 25 === 0) saveModelToStorage(net);
       },
       () => pauseTraining,
       () => stopTraining,
     );
     trainingRunning = false;
+    if (net) saveModelToStorage(net);
     updateButtons();
-    setStatus("Training beendet");
+    setStatus("Training beendet, Modell im Browser gespeichert");
   })();
 });
 
@@ -250,5 +288,17 @@ window.addEventListener("beforeunload", () => {
   disposeScene();
 });
 
-setStatus("MNIST-Trainings- und Test-CSV wählen");
+setStatus("MNIST-CSV wird automatisch geladen …");
 updateButtons();
+void loadCsvData();
+try {
+  const stored = loadModelFromStorage();
+  if (stored) {
+    net = stored;
+    net3d?.setWeights(net.weights);
+    setStatus("Modell aus Browser-Speicher geladen");
+    updateButtons();
+  }
+} catch {
+  setStatus("MNIST-CSV wird automatisch geladen …");
+}

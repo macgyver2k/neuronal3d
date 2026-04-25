@@ -39,6 +39,9 @@ function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
 export class Network3D {
   readonly root = new THREE.Group();
   private readonly meshes: THREE.InstancedMesh[] = [];
+  private readonly edgeLines: THREE.LineSegments[] = [];
+  private readonly edgeFromTo: Array<Array<{ from: number; to: number }>> = [];
+  private readonly edgeWeightScale: number[] = [];
   private readonly dummy = new THREE.Object3D();
   private readonly layerSizes: number[];
   private readonly positions: THREE.Vector3[][];
@@ -75,6 +78,49 @@ export class Network3D {
       this.meshes.push(mesh);
       this.root.add(mesh);
     }
+    for (let L = 0; L < this.layerSizes.length - 1; L++) {
+      const fromCount = this.layerSizes[L];
+      const toCount = this.layerSizes[L + 1];
+      const segCount = fromCount * toCount;
+      const positions = new Float32Array(segCount * 2 * 3);
+      const colors = new Float32Array(segCount * 2 * 3);
+      const fromTo: Array<{ from: number; to: number }> = new Array(segCount);
+      let k = 0;
+      for (let to = 0; to < toCount; to++) {
+        const pTo = this.positions[L + 1][to];
+        for (let from = 0; from < fromCount; from++) {
+          const pFrom = this.positions[L][from];
+          const i = k * 6;
+          positions[i + 0] = pFrom.x;
+          positions[i + 1] = pFrom.y;
+          positions[i + 2] = pFrom.z;
+          positions[i + 3] = pTo.x;
+          positions[i + 4] = pTo.y;
+          positions[i + 5] = pTo.z;
+          colors[i + 0] = 0.35;
+          colors[i + 1] = 0.35;
+          colors[i + 2] = 0.38;
+          colors[i + 3] = 0.35;
+          colors[i + 4] = 0.35;
+          colors[i + 5] = 0.38;
+          fromTo[k] = { from, to };
+          k++;
+        }
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      const mat = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: L === 0 ? 0.25 : 0.55,
+      });
+      const lines = new THREE.LineSegments(geom, mat);
+      this.edgeLines.push(lines);
+      this.edgeFromTo.push(fromTo);
+      this.edgeWeightScale.push(0);
+      this.root.add(lines);
+    }
   }
 
   setActivations(activations: number[][]): void {
@@ -106,11 +152,62 @@ export class Network3D {
     }
   }
 
+  setWeights(weights: number[][][]): void {
+    for (let L = 0; L < this.edgeLines.length; L++) {
+      const layerW = weights[L];
+      if (!layerW || layerW.length === 0) continue;
+      const lines = this.edgeLines[L];
+      const colorAttr = lines.geometry.getAttribute("color") as THREE.BufferAttribute;
+      const arr = colorAttr.array as Float32Array;
+      const map = this.edgeFromTo[L];
+      let mx = 1e-12;
+      for (let r = 0; r < layerW.length; r++) {
+        for (let c = 0; c < layerW[r].length; c++) {
+          const a = Math.abs(layerW[r][c]);
+          if (a > mx) mx = a;
+        }
+      }
+      const prevScale = this.edgeWeightScale[L];
+      const nextScale = prevScale <= 0 ? mx : Math.max(mx, prevScale * 0.995);
+      this.edgeWeightScale[L] = Math.max(nextScale, 1e-6);
+      for (let k = 0; k < map.length; k++) {
+        const ref = map[k];
+        const w = layerW[ref.to][ref.from] ?? 0;
+        const t = Math.min(1, Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65));
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        if (w >= 0) {
+          r = 0.25 + 0.75 * t;
+          g = 0.14 + 0.58 * t;
+          b = 0.07 + 0.16 * t;
+        } else {
+          r = 0.06 + 0.28 * t;
+          g = 0.22 + 0.48 * t;
+          b = 0.32 + 0.68 * t;
+        }
+        const i = k * 6;
+        arr[i + 0] = r;
+        arr[i + 1] = g;
+        arr[i + 2] = b;
+        arr[i + 3] = r;
+        arr[i + 4] = g;
+        arr[i + 5] = b;
+      }
+      colorAttr.needsUpdate = true;
+    }
+  }
+
   dispose(): void {
     for (const m of this.meshes) {
       m.geometry.dispose();
       if (Array.isArray(m.material)) m.material.forEach((mat: THREE.Material) => mat.dispose());
       else m.material.dispose();
+    }
+    for (const l of this.edgeLines) {
+      l.geometry.dispose();
+      if (Array.isArray(l.material)) l.material.forEach((mat: THREE.Material) => mat.dispose());
+      else l.material.dispose();
     }
   }
 }

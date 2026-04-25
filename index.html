@@ -14,7 +14,14 @@
       #toolbar button:disabled { opacity: 0.5; cursor: not-allowed; }
       #viz { flex: 1; min-height: 0; position: relative; }
       #viz canvas { display: block; width: 100%; height: 100%; }
-      #status { font-size: 0.85rem; color: #8b949e; margin-left: auto; }
+      #status {
+        font-size: 0.85rem;
+        color: #8b949e;
+        margin-left: auto;
+        white-space: pre;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-variant-numeric: tabular-nums;
+      }
       #drawPanel { width: 280px; padding: 0.5rem; background: #161b22; border-top: 1px solid #30363d; display: flex; flex-direction: column; gap: 0.5rem; }
       #drawCanvas { border: 1px solid #30363d; border-radius: 6px; background: #000; touch-action: none; align-self: center; }
       #hint { font-size: 0.75rem; color: #8b949e; max-width: 280px; }
@@ -25,8 +32,6 @@
   <body>
     <div id="app">
       <div id="toolbar">
-        <label>MNIST train CSV <input id="trainFile" type="file" accept=".csv,text/csv" /></label>
-        <label>MNIST test CSV <input id="testFile" type="file" accept=".csv,text/csv" /></label>
         <button id="btnTrain" type="button" disabled>Training starten</button>
         <button id="btnPause" type="button" disabled>Pause</button>
         <button id="btnInferRandom" type="button" disabled>Zufälliges Testbild</button>
