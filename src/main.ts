@@ -38,7 +38,7 @@ const el = {
   btnInferDraw: document.getElementById("btnInferDraw") as HTMLButtonElement,
   btnClearDraw: document.getElementById("btnClearDraw") as HTMLButtonElement,
   status: document.getElementById("status") as HTMLSpanElement,
-  epochTrack: document.getElementById("epochTrack") as HTMLPreElement,
+  epochTrackList: document.getElementById("epochTrackList") as HTMLUListElement,
   viz: document.getElementById("viz") as HTMLElement,
   drawCanvas: document.getElementById("drawCanvas") as HTMLCanvasElement,
 };
@@ -99,9 +99,16 @@ let modelStore: StoredModelCollection = { version: 2, activeModelId: null, model
 let activeModelId: string | null = null;
 let lastTrainLoss = 0;
 let lastTrainBatchAcc = 0;
-type PersistedEpochRow = TrainEpochSummary & { savedAt: string; run: number };
+type PersistedEpochRow = TrainEpochSummary & {
+  savedAt: string;
+  run: number;
+  runStartedAt: string;
+  runElapsedMs: number;
+};
 let epochTrackRows: PersistedEpochRow[] = [];
 let currentEpochRun = 0;
+let currentEpochRunStartedAt = "";
+let currentEpochRunStartedMs = 0;
 
 const ctxDraw = el.drawCanvas.getContext("2d");
 if (!ctxDraw) throw new Error("canvas");
@@ -149,18 +156,53 @@ function setStatus(t: string): void {
 }
 
 function renderEpochTracking(): void {
+  el.epochTrackList.innerHTML = "";
   if (epochTrackRows.length === 0) {
-    el.epochTrack.textContent = "Epoch-Tracking\nNoch kein Training";
+    const empty = document.createElement("li");
+    empty.className = "epochEmpty";
+    empty.textContent = "Noch kein Training";
+    el.epochTrackList.append(empty);
     return;
   }
-  const rows = epochTrackRows.slice(-200).map((r) => {
-    const run = String(r.run).padStart(2, "0");
-    const ep = fmtInt(r.epoch + 1, 3);
-    const loss = fmtFloat(r.loss, 8, 4);
-    const acc = fmtFloat(r.trainAcc * 100, 6, 2);
-    return `R${run} Ep ${ep}  loss ${loss}  acc ${acc}%`;
-  });
-  el.epochTrack.textContent = ["Epoch-Tracking", ...rows].join("\n");
+  const rows = epochTrackRows.slice(-200);
+  for (const r of rows) {
+    const item = document.createElement("li");
+    item.className = "epochRow";
+    const run = document.createElement("span");
+    run.className = "epochRun";
+    run.textContent = `R${String(r.run).padStart(2, "0")}`;
+    const ep = document.createElement("span");
+    ep.className = "epochNum";
+    ep.textContent = `Ep ${r.epoch + 1}`;
+    const loss = document.createElement("span");
+    loss.className = "epochLoss";
+    loss.textContent = `loss ${r.loss.toFixed(4)}`;
+    const acc = document.createElement("span");
+    acc.className = "epochAcc";
+    acc.textContent = `${(r.trainAcc * 100).toFixed(2)}%`;
+    const meta = document.createElement("span");
+    meta.className = "epochMeta";
+    const at = formatTimeLabel(r.savedAt);
+    const dur = formatDurationLabel(r.runElapsedMs);
+    meta.textContent = `${at}  |  Dauer ${dur}`;
+    item.append(run, ep, loss, acc, meta);
+    el.epochTrackList.append(item);
+  }
+}
+
+function formatTimeLabel(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "--:--:--";
+  return d.toLocaleTimeString("de-DE", { hour12: false });
+}
+
+function formatDurationLabel(ms: number): string {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 type EpochTrackStore = { version: 1; byModelId: Record<string, PersistedEpochRow[]> };
@@ -191,6 +233,8 @@ function loadEpochTrackStore(): EpochTrackStore {
           trainAcc: o.trainAcc,
           savedAt: typeof o.savedAt === "string" ? o.savedAt : "",
           run: typeof o.run === "number" ? o.run : 0,
+          runStartedAt: typeof o.runStartedAt === "string" ? o.runStartedAt : "",
+          runElapsedMs: typeof o.runElapsedMs === "number" ? o.runElapsedMs : 0,
         });
       }
       byModelId[id] = norm;
@@ -768,6 +812,8 @@ el.btnTrain.addEventListener("click", () => {
       return;
     }
     currentEpochRun = nextRunSeq(trainModelId);
+    currentEpochRunStartedMs = Date.now();
+    currentEpochRunStartedAt = new Date(currentEpochRunStartedMs).toISOString();
     epochTrackRows = [];
     renderEpochTracking();
     publishVizState("train", zeroActivationsForLayout());
@@ -788,6 +834,8 @@ el.btnTrain.addEventListener("click", () => {
           ...ep,
           run: currentEpochRun,
           savedAt: new Date().toISOString(),
+          runStartedAt: currentEpochRunStartedAt,
+          runElapsedMs: Date.now() - currentEpochRunStartedMs,
         };
         epochTrackRows.push(row);
         appendEpochToStorage(trainModelId, row);
