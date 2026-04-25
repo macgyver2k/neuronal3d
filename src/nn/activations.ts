@@ -1,18 +1,18 @@
 import type { Mat } from "./matrix.js";
 import { zeros } from "./matrix.js";
 
-export function relu(z: Mat): Mat {
+export function leakyRelu(z: Mat, alpha = 0.01): Mat {
   const r = zeros(z.length, z[0].length);
   for (let i = 0; i < z.length; i++) {
-    for (let j = 0; j < z[0].length; j++) r[i][j] = z[i][j] > 0 ? z[i][j] : 0;
+    for (let j = 0; j < z[0].length; j++) r[i][j] = z[i][j] > 0 ? z[i][j] : alpha * z[i][j];
   }
   return r;
 }
 
-export function reluGrad(z: Mat): Mat {
+export function leakyReluGrad(z: Mat, alpha = 0.01): Mat {
   const r = zeros(z.length, z[0].length);
   for (let i = 0; i < z.length; i++) {
-    for (let j = 0; j < z[0].length; j++) r[i][j] = z[i][j] > 0 ? 1 : 0;
+    for (let j = 0; j < z[0].length; j++) r[i][j] = z[i][j] > 0 ? 1 : alpha;
   }
   return r;
 }
@@ -21,19 +21,30 @@ export function softmax(z: Mat): Mat {
   let max = -Infinity;
   for (let i = 0; i < z.length; i++) {
     for (let j = 0; j < z[0].length; j++) {
-      if (z[i][j] > max) max = z[i][j];
+      const zij = Number.isFinite(z[i][j]) ? z[i][j] : 0;
+      if (zij > max) max = zij;
     }
   }
+  if (!Number.isFinite(max)) max = 0;
   const exps = zeros(z.length, z[0].length);
   let sum = 0;
   for (let i = 0; i < z.length; i++) {
     for (let j = 0; j < z[0].length; j++) {
-      const e = Math.exp(z[i][j] - max);
+      const zij = Number.isFinite(z[i][j]) ? z[i][j] : 0;
+      const shifted = Math.max(-60, Math.min(60, zij - max));
+      const e = Math.exp(shifted);
       exps[i][j] = e;
       sum += e;
     }
   }
   const r = zeros(z.length, z[0].length);
+  if (!Number.isFinite(sum) || sum <= 0) {
+    const uniform = 1 / Math.max(1, z.length);
+    for (let i = 0; i < z.length; i++) {
+      for (let j = 0; j < z[0].length; j++) r[i][j] = uniform;
+    }
+    return r;
+  }
   for (let i = 0; i < z.length; i++) {
     for (let j = 0; j < z[0].length; j++) r[i][j] = exps[i][j] / sum;
   }

@@ -79,7 +79,12 @@ export function matAccInPlace(target: Mat, delta: Mat): void {
 
 export function matSubInPlace(target: Mat, grad: Mat, lr: number): void {
   for (let i = 0; i < target.length; i++) {
-    for (let j = 0; j < target[0].length; j++) target[i][j] -= lr * grad[i][j];
+    for (let j = 0; j < target[0].length; j++) {
+      const gij = Number.isFinite(grad[i][j]) ? grad[i][j] : 0;
+      const gClip = Math.max(-100, Math.min(100, gij));
+      const next = target[i][j] - lr * gClip;
+      if (Number.isFinite(next)) target[i][j] = Math.max(-1e4, Math.min(1e4, next));
+    }
   }
 }
 

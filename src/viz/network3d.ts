@@ -9,7 +9,7 @@ function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
     const pts: THREE.Vector3[] = [];
     if (L === 0 && n === 784) {
       for (let i = 0; i < 784; i++) {
-        const u = i % 28;
+        const u = 27 - (i % 28);
         const v = Math.floor(i / 28);
         pts.push(new THREE.Vector3(x, (v - 13.5) * 0.12, (u - 13.5) * 0.12));
       }
@@ -42,6 +42,7 @@ export class Network3D {
   private readonly edgeLines: THREE.LineSegments[] = [];
   private readonly edgeFromTo: Array<Array<{ from: number; to: number }>> = [];
   private readonly edgeWeightScale: number[] = [];
+  private readonly activationScale: number[] = [];
   private readonly dummy = new THREE.Object3D();
   private readonly layerSizes: number[];
   private readonly positions: THREE.Vector3[][];
@@ -61,6 +62,7 @@ export class Network3D {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       const colors = new Float32Array(n * 3);
       const colorAttr = new THREE.InstancedBufferAttribute(colors, 3);
+      colorAttr.setUsage(THREE.DynamicDrawUsage);
       mesh.instanceColor = colorAttr;
       const pos = this.positions[L];
       for (let i = 0; i < n; i++) {
@@ -76,6 +78,7 @@ export class Network3D {
       mesh.instanceMatrix.needsUpdate = true;
       colorAttr.needsUpdate = true;
       this.meshes.push(mesh);
+      this.activationScale.push(1);
       this.root.add(mesh);
     }
     for (let L = 0; L < this.layerSizes.length - 1; L++) {
@@ -109,7 +112,9 @@ export class Network3D {
       }
       const geom = new THREE.BufferGeometry();
       geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      const edgeColors = new THREE.BufferAttribute(colors, 3);
+      edgeColors.setUsage(THREE.DynamicDrawUsage);
+      geom.setAttribute("color", edgeColors);
       const mat = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
@@ -123,29 +128,63 @@ export class Network3D {
     }
   }
 
+  resetActivationScaling(): void {
+    for (let i = 0; i < this.activationScale.length; i++) this.activationScale[i] = 1;
+  }
+
   setActivations(activations: number[][]): void {
     for (let L = 0; L < this.meshes.length; L++) {
       const mesh = this.meshes[L];
       const pos = this.positions[L];
       const v = activations[L];
       if (!v || v.length !== this.layerSizes[L]) continue;
-      let mx = 1e-12;
-      for (let i = 0; i < v.length; i++) {
-        const t = v[i];
-        if (t > mx) mx = t;
-      }
       const colorAttr = mesh.instanceColor as THREE.InstancedBufferAttribute;
       const arr = colorAttr.array as Float32Array;
-      for (let i = 0; i < v.length; i++) {
-        const t = Math.max(0, v[i] / mx);
-        this.dummy.position.copy(pos[i]);
-        const s = 0.25 + 0.95 * t;
-        this.dummy.scale.setScalar(s);
-        this.dummy.updateMatrix();
-        mesh.setMatrixAt(i, this.dummy.matrix);
-        arr[i * 3 + 0] = 0.08 + 0.75 * t;
-        arr[i * 3 + 1] = 0.12 + 0.55 * (1 - t * 0.35);
-        arr[i * 3 + 2] = 0.15 + 0.85 * (1 - t);
+      const isOutput = L === this.meshes.length - 1;
+      if (isOutput) {
+        let mean = 0;
+        let mx = -Infinity;
+        for (let i = 0; i < v.length; i++) {
+          const vi = Number.isFinite(v[i]) ? v[i] : 0;
+          mean += vi;
+          if (vi > mx) mx = vi;
+        }
+        mean /= Math.max(1, v.length);
+        const denom = Math.max(1e-6, mx - mean);
+        for (let i = 0; i < v.length; i++) {
+          const vi = Number.isFinite(v[i]) ? v[i] : 0;
+          const raw = (vi - mean) / denom;
+          const t = Math.min(1, Math.max(0, Math.pow(raw, 0.65)));
+          this.dummy.position.copy(pos[i]);
+          const s = 0.18 + 1.28 * t;
+          this.dummy.scale.setScalar(s);
+          this.dummy.updateMatrix();
+          mesh.setMatrixAt(i, this.dummy.matrix);
+          arr[i * 3 + 0] = 0.12 + 0.88 * t;
+          arr[i * 3 + 1] = 0.1 + 0.42 * (1 - t * 0.2);
+          arr[i * 3 + 2] = 0.1 + 0.68 * (1 - t);
+        }
+      } else {
+        let mx = 1e-12;
+        for (let i = 0; i < v.length; i++) {
+          const t = Number.isFinite(v[i]) ? v[i] : 0;
+          if (t > mx) mx = t;
+        }
+        const scale = Math.max(mx, 1e-6);
+        this.activationScale[L] = scale;
+        for (let i = 0; i < v.length; i++) {
+          const vi = Number.isFinite(v[i]) ? v[i] : 0;
+          const raw = Math.max(0, vi / scale);
+          const t = Math.min(1, Math.pow(raw, 0.7));
+          this.dummy.position.copy(pos[i]);
+          const s = 0.16 + 0.98 * t;
+          this.dummy.scale.setScalar(s);
+          this.dummy.updateMatrix();
+          mesh.setMatrixAt(i, this.dummy.matrix);
+          arr[i * 3 + 0] = 0.05 + 0.9 * t;
+          arr[i * 3 + 1] = 0.08 + 0.45 * (1 - t * 0.2);
+          arr[i * 3 + 2] = 0.1 + 0.75 * (1 - t);
+        }
       }
       mesh.instanceMatrix.needsUpdate = true;
       colorAttr.needsUpdate = true;
@@ -163,7 +202,8 @@ export class Network3D {
       let mx = 1e-12;
       for (let r = 0; r < layerW.length; r++) {
         for (let c = 0; c < layerW[r].length; c++) {
-          const a = Math.abs(layerW[r][c]);
+          const wrc = Number.isFinite(layerW[r][c]) ? layerW[r][c] : 0;
+          const a = Math.abs(wrc);
           if (a > mx) mx = a;
         }
       }
@@ -172,7 +212,8 @@ export class Network3D {
       this.edgeWeightScale[L] = Math.max(nextScale, 1e-6);
       for (let k = 0; k < map.length; k++) {
         const ref = map[k];
-        const w = layerW[ref.to][ref.from] ?? 0;
+        const wRaw = layerW[ref.to][ref.from] ?? 0;
+        const w = Number.isFinite(wRaw) ? wRaw : 0;
         const t = Math.min(1, Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65));
         let r = 0;
         let g = 0;

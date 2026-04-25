@@ -9,7 +9,7 @@ import {
   transpose,
   zeros,
 } from "./matrix.js";
-import { relu, reluGrad, softmax, softmaxCrossEntropyGrad } from "./activations.js";
+import { leakyRelu, leakyReluGrad, softmax, softmaxCrossEntropyGrad } from "./activations.js";
 
 export type LayerCache = {
   z: Mat;
@@ -39,7 +39,7 @@ export class MLP {
     for (let i = 0; i < dims.length - 1; i++) {
       const nIn = dims[i];
       const nOut = dims[i + 1];
-      const scale = Math.sqrt(2 / (nIn + nOut));
+      const scale = Math.sqrt(2 / Math.max(1, nIn));
       this.weights.push(randnMat(nOut, nIn, scale));
       this.biases.push(zeros(nOut, 1));
     }
@@ -50,7 +50,7 @@ export class MLP {
     let a = xCol;
     for (let L = 0; L < this.weights.length - 1; L++) {
       const z = matAdd(matMul(this.weights[L], a), this.biases[L]);
-      const an = relu(z);
+      const an = leakyRelu(z);
       layers.push({ z, a: an });
       a = an;
     }
@@ -83,7 +83,7 @@ export class MLP {
     this.accumGradOuter(delta, aPrev, dW[Ln], db[Ln]);
     for (let L = Ln - 1; L >= 0; L--) {
       delta = matMul(transpose(this.weights[L + 1]), delta);
-      const rg = reluGrad(fwd.layers[L].z);
+      const rg = leakyReluGrad(fwd.layers[L].z);
       for (let i = 0; i < delta.length; i++) {
         for (let j = 0; j < delta[0].length; j++) delta[i][j] *= rg[i][j];
       }
