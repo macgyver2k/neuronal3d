@@ -49,10 +49,6 @@ export function createScene(container: HTMLElement): {
   rim.position.set(-2, 7, 12);
   scene.add(rim);
 
-  const accent = new THREE.PointLight(0xb18cff, 18, 30, 2);
-  accent.position.set(10, -2, 6);
-  scene.add(accent);
-
   const backAccent = new THREE.PointLight(0x5fd3ff, 14, 24, 2);
   backAccent.position.set(-4, 3, -10);
   scene.add(backAccent);
@@ -65,14 +61,51 @@ export function createScene(container: HTMLElement): {
   floor.position.y = -3.2;
   scene.add(floor);
 
-  const glowGeom = new THREE.SphereGeometry(0.08, 10, 8);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0xb18cff });
-  const glow = new THREE.Mesh(glowGeom, glowMat);
-  accent.add(glow);
-
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.target.set(4, 0, 0);
+
+  const navCodes = new Set([
+    "KeyW",
+    "KeyS",
+    "KeyA",
+    "KeyD",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+  ]);
+  const keysDown = new Set<string>();
+  const inputClock = new THREE.Clock();
+  const vForward = new THREE.Vector3();
+  const vRight = new THREE.Vector3();
+  const vMove = new THREE.Vector3();
+  const worldUp = new THREE.Vector3(0, 1, 0);
+  const moveSpeed = 12;
+
+  const isTypingFocus = (t: EventTarget | null) =>
+    t instanceof HTMLElement && t.closest("input, textarea, [contenteditable='true']") !== null;
+
+  const onKeyNavDown = (event: KeyboardEvent) => {
+    if (!navCodes.has(event.code) || isTypingFocus(event.target)) return;
+    keysDown.add(event.code);
+    event.preventDefault();
+  };
+  const onKeyNavUp = (event: KeyboardEvent) => {
+    if (!navCodes.has(event.code)) return;
+    keysDown.delete(event.code);
+    event.preventDefault();
+  };
+  const clearKeys = () => {
+    keysDown.clear();
+  };
+  const onVisibility = () => {
+    if (document.hidden) clearKeys();
+  };
+  window.addEventListener("keydown", onKeyNavDown);
+  window.addEventListener("keyup", onKeyNavUp);
+  window.addEventListener("blur", clearKeys);
+  document.addEventListener("visibilitychange", onVisibility);
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -98,9 +131,11 @@ export function createScene(container: HTMLElement): {
 
   const dispose = () => {
     window.removeEventListener("resize", onResize);
+    window.removeEventListener("keydown", onKeyNavDown);
+    window.removeEventListener("keyup", onKeyNavUp);
+    window.removeEventListener("blur", clearKeys);
+    document.removeEventListener("visibilitychange", onVisibility);
     controls.dispose();
-    glowGeom.dispose();
-    glowMat.dispose();
     floor.geometry.dispose();
     (floor.material as THREE.Material).dispose();
     renderer.dispose();
@@ -109,7 +144,35 @@ export function createScene(container: HTMLElement): {
     }
   };
 
+  const applyCameraRelativePan = () => {
+    const dt = inputClock.getDelta();
+    if (dt <= 0) return;
+    const w = keysDown.has("KeyW") || keysDown.has("ArrowUp");
+    const s = keysDown.has("KeyS") || keysDown.has("ArrowDown");
+    const a = keysDown.has("KeyA") || keysDown.has("ArrowLeft");
+    const d = keysDown.has("KeyD") || keysDown.has("ArrowRight");
+    if (!w && !s && !a && !d) return;
+    camera.getWorldDirection(vForward);
+    vForward.y = 0;
+    if (vForward.lengthSq() < 1e-10) {
+      vForward.set(0, 0, -1);
+    } else {
+      vForward.normalize();
+    }
+    vRight.crossVectors(vForward, worldUp).normalize();
+    vMove.set(0, 0, 0);
+    if (w) vMove.add(vForward);
+    if (s) vMove.sub(vForward);
+    if (d) vMove.add(vRight);
+    if (a) vMove.sub(vRight);
+    if (vMove.lengthSq() < 1e-10) return;
+    vMove.normalize().multiplyScalar(moveSpeed * dt);
+    camera.position.add(vMove);
+    controls.target.add(vMove);
+  };
+
   const render = () => {
+    applyCameraRelativePan();
     composer.render();
   };
 
