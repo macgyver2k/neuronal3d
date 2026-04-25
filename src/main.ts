@@ -906,7 +906,7 @@ el.btnInferDraw.addEventListener("click", () => {
 
 el.btnPause.addEventListener("click", () => {
   pauseTraining = !pauseTraining;
-  el.btnPause.textContent = pauseTraining ? "Weiter" : "Pause";
+  el.btnPause.textContent = pauseTraining ? "Training fortsetzen" : "Training anhalten";
 });
 
 el.modelSelect.addEventListener("change", () => {
@@ -995,7 +995,7 @@ el.btnTrain.addEventListener("click", () => {
     trainingRunning = true;
     stopTraining = false;
     pauseTraining = false;
-    el.btnPause.textContent = "Pause";
+    el.btnPause.textContent = "Training anhalten";
     updateButtons();
     if (!net) {
       net = new MLP(784, HIDDEN, 10);

@@ -284,12 +284,6 @@
         opacity: 0.45;
         cursor: not-allowed;
       }
-      #hint {
-        font-size: 0.72rem;
-        color: #6b7c95;
-        line-height: 1.45;
-        margin-top: auto;
-      }
       #epochTrackWrap {
         flex: 1;
         min-height: 7rem;
@@ -355,6 +349,25 @@
         align-self: center;
         text-align: center;
       }
+      .dockGroup {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .dockGroupTitle {
+        margin: 0;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7d8fab;
+      }
+      .dockHelp {
+        margin: 0 0 0.15rem 0;
+        font-size: 0.7rem;
+        line-height: 1.45;
+        color: #6b7c95;
+      }
     </style>
   </head>
   <body>
@@ -372,7 +385,7 @@
           <span class="modeHint" aria-hidden="true">Alt+1 · Alt+2</span>
         </div>
         <div class="shellStatusWrap">
-          <span id="status">CSV laden …</span>
+          <span id="status">Daten laden …</span>
         </div>
       </header>
       <div id="shellStage">
@@ -381,39 +394,75 @@
         </div>
         <aside id="shellDock" aria-label="Steuerung">
           <div id="dockTrain" class="shellDockPanel" role="tabpanel" aria-labelledby="modeTabTrain">
-            <div class="dockBlock">
-              <button id="btnTrain" type="button" disabled>Training starten</button>
-              <button id="btnPause" type="button" disabled>Pause</button>
+            <div class="dockGroup">
+              <p class="dockGroupTitle">Trainingslauf</p>
+              <p class="dockHelp">
+                Startet einen Durchgang mit dem gewählten Datensatz und den Parametern unten. Die Gewichte werden im
+                <strong>aktuell ausgewählten Modellstand</strong> weitertrainiert (oder ein neuer Stand wird angelegt,
+                falls noch keiner aktiv ist).
+              </p>
+              <div class="dockBlock">
+                <button id="btnTrain" type="button" disabled>Trainingslauf starten</button>
+                <button id="btnPause" type="button" disabled>Training anhalten</button>
+              </div>
             </div>
-            <div class="dockBlock">
-              <select id="modelSelect"></select>
+            <div class="dockGroup">
+              <p class="dockGroupTitle">Modellstände im Browser</p>
+              <p class="dockHelp">
+                Stände liegen nur lokal im Browser-Speicher. <strong>Laden</strong> kopiert Gewichte und Schwellen in
+                das Netz im Arbeitsspeicher. <strong>Neu sichern</strong> legt einen zusätzlichen Stand an (Dialog
+                fragt den Namen). <strong>Zurücksetzen</strong> ersetzt die Gewichte des aktiven Stands durch frische
+                Zufallswerte und leert die Epoch-Historie nur für diesen Stand.
+              </p>
+              <div class="dockBlock">
+                <label for="modelSelect">Stand auswählen</label>
+                <select id="modelSelect" title="Gespeicherte Modellstände (Gewichte + Metriken)"></select>
+              </div>
+              <div class="dockBlock">
+                <button id="btnLoadModel" type="button" disabled title="Gewichte des ausgewählten Stands ins Netz übernehmen">
+                  Gewichte des Stands laden
+                </button>
+                <button id="btnSaveModelAs" type="button" disabled title="Aktuelles Netz unter neuem Namen als zusätzlichen Stand speichern">
+                  Aktuelles Netz als neuen Stand speichern
+                </button>
+                <button id="btnResetModel" type="button" disabled title="Nur der aktive Stand: frische Zufallsgewichte, Epoch-Historie dieses Stands wird gelöscht">
+                  Aktiven Stand auf Zufallsgewichte zurücksetzen
+                </button>
+              </div>
             </div>
-            <div class="dockBlock">
-              <button id="btnLoadModel" type="button" disabled>Modell laden</button>
-              <button id="btnSaveModelAs" type="button" disabled>Als neuen Stand speichern</button>
-              <button id="btnResetModel" type="button" disabled>Aktives Modell neu initialisieren</button>
+            <div class="dockGroup">
+              <p class="dockGroupTitle">Daten &amp; Hyperparameter</p>
+              <p class="dockHelp">
+                <strong>Datensatz</strong> lädt Trainings- und Testdaten vom Server neu. <strong>Epochs</strong> = volle
+                Durchläufe über die Trainingsmenge. <strong>LR</strong> = Lernrate (SGD). <strong>Batch</strong> =
+                Stichproben pro Update. <strong>Viz</strong> = alle wie viele Batches die 3D-Aktivierungen aktualisiert
+                werden (höher = flüssiger, mehr Last).
+              </p>
+              <div class="dockBlock">
+                <label for="datasetSelect">Trainings-/Test-Datensatz</label>
+                <select id="datasetSelect">
+                  <option value="mnist">MNIST</option>
+                  <option value="usps">USPS</option>
+                  <option value="emnistDigits">EMNIST Digits</option>
+                </select>
+                <label for="epochsInput">Epochs</label>
+                <input id="epochsInput" type="number" min="1" max="200" step="1" value="1" title="Anzahl kompletter Durchläufe über die Trainingsdaten" />
+                <label for="lrInput">Lernrate</label>
+                <input id="lrInput" type="number" min="0.0001" max="1" step="0.0001" value="0.02" title="Schrittweite beim Gradientenabstieg" />
+                <label for="batchSizeInput">Batchgröße</label>
+                <input id="batchSizeInput" type="number" min="1" max="512" step="1" value="32" title="Anzahl Bilder pro Gradientenschritt" />
+                <label for="vizEveryInput">Viz alle N Batches</label>
+                <input id="vizEveryInput" type="number" min="1" max="1000" step="1" value="4" title="3D-Ansicht nach jedem N-ten Batch aktualisieren" />
+              </div>
             </div>
-            <div class="dockBlock">
-              <label for="datasetSelect">Datensatz</label>
-              <select id="datasetSelect">
-                <option value="mnist">MNIST</option>
-                <option value="usps">USPS</option>
-                <option value="emnistDigits">EMNIST Digits</option>
-              </select>
-              <label for="epochsInput">Epochs</label>
-              <input id="epochsInput" type="number" min="1" max="200" step="1" value="1" />
-              <label for="lrInput">LR</label>
-              <input id="lrInput" type="number" min="0.0001" max="1" step="0.0001" value="0.02" />
-              <label for="batchSizeInput">Batch</label>
-              <input id="batchSizeInput" type="number" min="1" max="512" step="1" value="32" />
-              <label for="vizEveryInput">Viz</label>
-              <input id="vizEveryInput" type="number" min="1" max="1000" step="1" value="4" />
-            </div>
-            <div id="epochTrackWrap">
-              <p id="epochTrackHeader">Epoch-Tracking</p>
+            <div class="dockGroup" id="epochTrackWrap">
+              <p id="epochTrackHeader">Epoch-Verlauf (aktueller Modellstand)</p>
+              <p class="dockHelp">
+                Pro abgeschlossener Epoche: Verlust und Trainings-Accuracy des Laufs. Einträge werden im Browser
+                gespeichert und beim Wechsel des Stands in der Liste oben umgeschaltet.
+              </p>
               <ul id="epochTrackList"></ul>
             </div>
-            <div id="hint">CSV-Format: erste Spalte Label 0–9, danach 784 Pixel 0–255. Dateipfade: /data/csv/{mnist|usps|emnist_digits}_{train|test}.csv</div>
           </div>
           <div id="dockInfer" class="shellDockPanel" role="tabpanel" aria-labelledby="modeTabInfer" hidden>
             <p class="inferLead">Testbild oder Zeichenfläche — die 3D-Aktivierungen aktualisieren sich live.</p>
