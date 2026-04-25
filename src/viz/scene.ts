@@ -77,11 +77,11 @@ export function createScene(container: HTMLElement): {
   ]);
   const keysDown = new Set<string>();
   const inputClock = new THREE.Clock();
-  const vForward = new THREE.Vector3();
+  const vToTarget = new THREE.Vector3();
   const vRight = new THREE.Vector3();
   const vMove = new THREE.Vector3();
-  const worldUp = new THREE.Vector3(0, 1, 0);
   const moveSpeed = 12;
+  const minDollyDist = 0.35;
 
   const isTypingFocus = (t: EventTarget | null) =>
     t instanceof HTMLElement &&
@@ -156,23 +156,27 @@ export function createScene(container: HTMLElement): {
     const a = keysDown.has("KeyA") || keysDown.has("ArrowLeft");
     const d = keysDown.has("KeyD") || keysDown.has("ArrowRight");
     if (!w && !s && !a && !d) return;
-    camera.getWorldDirection(vForward);
-    vForward.y = 0;
-    if (vForward.lengthSq() < 1e-10) {
-      vForward.set(0, 0, -1);
-    } else {
-      vForward.normalize();
+    const step = moveSpeed * dt;
+    vToTarget.subVectors(controls.target, camera.position);
+    const dist = vToTarget.length();
+    if (dist > 1e-6) vToTarget.multiplyScalar(1 / dist);
+    else return;
+    if (w) {
+      const dolly = Math.min(step, Math.max(0, dist - minDollyDist));
+      if (dolly > 0) camera.position.addScaledVector(vToTarget, dolly);
     }
-    vRight.crossVectors(vForward, worldUp).normalize();
+    if (s) {
+      camera.position.addScaledVector(vToTarget, -step);
+    }
+    camera.updateMatrixWorld();
+    vRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
     vMove.set(0, 0, 0);
-    if (w) vMove.add(vForward);
-    if (s) vMove.sub(vForward);
-    if (d) vMove.add(vRight);
-    if (a) vMove.sub(vRight);
-    if (vMove.lengthSq() < 1e-10) return;
-    vMove.normalize().multiplyScalar(moveSpeed * dt);
-    camera.position.add(vMove);
-    controls.target.add(vMove);
+    if (d) vMove.addScaledVector(vRight, step);
+    if (a) vMove.addScaledVector(vRight, -step);
+    if (vMove.lengthSq() > 1e-10) {
+      camera.position.add(vMove);
+      controls.target.add(vMove);
+    }
   };
 
   const render = () => {
