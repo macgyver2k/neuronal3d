@@ -397,11 +397,10 @@ async function loadCsvData(): Promise<void> {
   updateButtons();
 }
 
-const { scene, camera, renderer, controls, dispose: disposeScene } = createScene(el.viz);
+const { scene, renderer, controls, render: renderScene, dispose: disposeScene } = createScene(el.viz);
 
 function renderFrame(): void {
-  controls.update();
-  renderer.render(scene, camera);
+  renderScene();
 }
 const net3dInst = new Network3D(LAYER_SIZES);
 net3d = net3dInst;
@@ -436,7 +435,7 @@ function tickViz(): void {
   if (net3d && net) net3d.setWeights(net.weights);
 }
 
-const stopAnim = animateLoop(renderer, scene, camera, controls, tickViz);
+const stopAnim = animateLoop(renderScene, controls, tickViz);
 
 function canvasToMnistPixels(): number[] {
   const w = el.drawCanvas.width;

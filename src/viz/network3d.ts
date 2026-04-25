@@ -73,7 +73,7 @@ export class Network3D {
   private readonly edgeRecentAge: Uint16Array[] = [];
   private readonly edgeRecentDeltaThreshold = 0.18;
   private readonly edgeRecentDeltaAbsMin = 0.0008;
-  private readonly edgeRecentWindow = 6;
+  private readonly edgeRecentWindow = 10;
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -82,8 +82,11 @@ export class Network3D {
     for (let L = 0; L < this.layerSizes.length; L++) {
       const n = this.layerSizes[L];
       const mat = new THREE.MeshPhongMaterial({
-        shininess: 110,
-        specular: 0x7aa7ff,
+        shininess: 0,
+        specular: 0x000000,
+        emissive: 0x2a6bff,
+        emissiveIntensity: 1.9,
+        toneMapped: false,
         vertexColors: true,
       });
       const mesh = new THREE.InstancedMesh(geom, mat, n);
@@ -99,9 +102,9 @@ export class Network3D {
         this.dummy.scale.setScalar(s);
         this.dummy.updateMatrix();
         mesh.setMatrixAt(i, this.dummy.matrix);
-        colors[i * 3 + 0] = 0.25;
-        colors[i * 3 + 1] = 0.45;
-        colors[i * 3 + 2] = 0.85;
+        colors[i * 3 + 0] = 0.18;
+        colors[i * 3 + 1] = 0.5;
+        colors[i * 3 + 2] = 1.0;
       }
       mesh.instanceMatrix.needsUpdate = true;
       colorAttr.needsUpdate = true;
@@ -164,6 +167,7 @@ export class Network3D {
     const outX = this.positions[outIdx][0]?.x ?? (outIdx * 3.2);
     const labelX = outX + 1.8;
     const labelR = 1.75;
+    const labelYOffset = 2.4;
     for (let i = 0; i < outCount; i++) {
       const t = (i / Math.max(1, outCount)) * Math.PI * 2;
       const tex = createDigitTexture(i);
@@ -175,7 +179,7 @@ export class Network3D {
         depthWrite: false,
       });
       const spr = new THREE.Sprite(mat);
-      spr.position.set(labelX, Math.sin(t) * labelR, Math.cos(t) * labelR);
+      spr.position.set(labelX, labelYOffset + Math.sin(t) * labelR, Math.cos(t) * labelR);
       spr.scale.setScalar(0.34);
       this.outputDigitSprites.push(spr);
       this.root.add(spr);
@@ -219,9 +223,9 @@ export class Network3D {
           this.dummy.scale.setScalar(s);
           this.dummy.updateMatrix();
           mesh.setMatrixAt(i, this.dummy.matrix);
-          arr[i * 3 + 0] = 0.12 + 0.88 * t;
-          arr[i * 3 + 1] = 0.1 + 0.42 * (1 - t * 0.2);
-          arr[i * 3 + 2] = 0.1 + 0.68 * (1 - t);
+          arr[i * 3 + 0] = 0.2 + 0.4 * t;
+          arr[i * 3 + 1] = 0.45 + 0.4 * t;
+          arr[i * 3 + 2] = 0.85 + 0.15 * t;
         }
         let best = 0;
         let bestVal = -Infinity;
@@ -262,9 +266,9 @@ export class Network3D {
           this.dummy.scale.setScalar(s);
           this.dummy.updateMatrix();
           mesh.setMatrixAt(i, this.dummy.matrix);
-          arr[i * 3 + 0] = 0.05 + 0.9 * t;
-          arr[i * 3 + 1] = 0.08 + 0.45 * (1 - t * 0.2);
-          arr[i * 3 + 2] = 0.1 + 0.75 * (1 - t);
+          arr[i * 3 + 0] = 0.12 + 0.25 * t;
+          arr[i * 3 + 1] = 0.35 + 0.45 * t;
+          arr[i * 3 + 2] = 0.8 + 0.2 * t;
         }
       }
       mesh.instanceMatrix.needsUpdate = true;

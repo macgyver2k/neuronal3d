@@ -1,11 +1,15 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 export function createScene(container: HTMLElement): {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
+  render: () => void;
   dispose: () => void;
 } {
   const scene = new THREE.Scene();
@@ -18,7 +22,7 @@ export function createScene(container: HTMLElement): {
     0.1,
     200,
   );
-  camera.position.set(8, 4, 12);
+  camera.position.set(-8, 4, 4);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -70,6 +74,16 @@ export function createScene(container: HTMLElement): {
   controls.enableDamping = true;
   controls.target.set(4, 0, 0);
 
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight)),
+    1.05,
+    0.65,
+    0.12,
+  );
+  composer.addPass(bloom);
+
   container.appendChild(renderer.domElement);
 
   const onResize = () => {
@@ -78,6 +92,7 @@ export function createScene(container: HTMLElement): {
     camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    composer.setSize(w, h);
   };
   window.addEventListener("resize", onResize);
 
@@ -94,13 +109,15 @@ export function createScene(container: HTMLElement): {
     }
   };
 
-  return { scene, camera, renderer, controls, dispose };
+  const render = () => {
+    composer.render();
+  };
+
+  return { scene, camera, renderer, controls, render, dispose };
 }
 
 export function animateLoop(
-  renderer: THREE.WebGLRenderer,
-  scene: THREE.Scene,
-  camera: THREE.PerspectiveCamera,
+  renderScene: () => void,
   controls: OrbitControls,
   onFrame?: () => void,
 ): () => void {
@@ -109,7 +126,7 @@ export function animateLoop(
     id = requestAnimationFrame(tick);
     onFrame?.();
     controls.update();
-    renderer.render(scene, camera);
+    renderScene();
   };
   tick();
   return () => cancelAnimationFrame(id);
