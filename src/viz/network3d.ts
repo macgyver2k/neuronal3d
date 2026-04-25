@@ -76,6 +76,8 @@ export class Network3D {
   private readonly edgeRecentWindow = 10;
   private readonly edgeBaseOpacity: number[] = [];
   private idleDimmed = false;
+  private inferPredictedDigit: number | null = null;
+  private inferExpectedDigit: number | null = null;
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -200,6 +202,11 @@ export class Network3D {
     this.edgeFocusActivations = activations ? activations.map((a) => [...a]) : null;
   }
 
+  setInferResult(predictedDigit: number | null, expectedDigit: number | null): void {
+    this.inferPredictedDigit = predictedDigit;
+    this.inferExpectedDigit = expectedDigit;
+  }
+
   setIdleDim(dim: boolean): void {
     if (this.idleDimmed === dim) return;
     this.idleDimmed = dim;
@@ -263,7 +270,14 @@ export class Network3D {
         for (let i = 0; i < this.outputDigitSprites.length; i++) {
           const s = this.outputDigitSprites[i];
           const mat = s.material as THREE.SpriteMaterial;
-          if (this.edgeFocusMode === "infer" && i === best) {
+          const inferPred = this.inferPredictedDigit ?? best;
+          const inferExpected = this.inferExpectedDigit;
+          const inferWrong = inferExpected !== null && inferPred !== inferExpected;
+          if (this.edgeFocusMode === "infer" && inferWrong && i === inferExpected) {
+            mat.opacity = 0.98;
+            mat.color.setHex(0xff3b30);
+            s.scale.setScalar(0.48);
+          } else if (this.edgeFocusMode === "infer" && i === inferPred) {
             mat.opacity = 0.95;
             mat.color.setHex(0xffcc4d);
             s.scale.setScalar(0.46);

@@ -36,6 +36,23 @@
         min-height: 0;
       }
       #drawCanvas { border: 1px solid #30363d; border-radius: 6px; background: #000; touch-action: none; width: 100%; max-width: 400px; height: auto; aspect-ratio: 1; align-self: center; }
+      #drawActions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+      }
+      #drawActions button {
+        padding: 0.4rem 0.6rem;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        background: #21262d;
+        color: inherit;
+        cursor: pointer;
+      }
+      #drawActions button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
       #hint { font-size: 0.75rem; color: #8b949e; line-height: 1.35; }
       #epochTrackWrap {
         flex: 1;
@@ -128,8 +145,6 @@
         <label for="vizEveryInput">Viz</label>
         <input id="vizEveryInput" type="number" min="1" max="1000" step="1" value="4" />
         <button id="btnInferRandom" type="button" disabled>Zufälliges Testbild</button>
-        <button id="btnInferDraw" type="button" disabled>Canvas inferieren</button>
-        <button id="btnClearDraw" type="button">Canvas leeren</button>
         <span id="status">CSV laden …</span>
       </div>
       <div id="mainRow">
@@ -138,6 +153,10 @@
         </div>
         <div id="drawPanel">
           <canvas id="drawCanvas" width="320" height="320"></canvas>
+          <div id="drawActions">
+            <button id="btnInferDraw" type="button" disabled>Canvas inferieren</button>
+            <button id="btnClearDraw" type="button">Canvas leeren</button>
+          </div>
           <div id="epochTrackWrap">
             <p id="epochTrackHeader">Epoch-Tracking</p>
             <ul id="epochTrackList"></ul>

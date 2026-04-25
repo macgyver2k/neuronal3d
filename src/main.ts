@@ -678,11 +678,12 @@ function flushVizState(): void {
   if (!net3d || !pendingVizState) return;
   if (pendingVizState.stamp === lastAppliedVizStamp) return;
   net3d.setIdleDim(pendingVizState.mode === "idle");
-  net3d.setActivations(pendingVizState.activations);
+  if (pendingVizState.mode !== "infer") net3d.setInferResult(null, null);
   net3d.setEdgeFocus(
     pendingVizState.mode === "infer" ? "infer" : (pendingVizState.mode === "train" ? "trainRecent" : "off"),
     pendingVizState.mode === "infer" ? pendingVizState.activations : null,
   );
+  net3d.setActivations(pendingVizState.activations);
   lastAppliedVizStamp = pendingVizState.stamp;
 }
 
@@ -764,6 +765,7 @@ function inferWithPixels(pixels: number[], label?: number, sampleIndex?: number)
     let diffStr = "";
     if (VIZ_DEBUG_INFER && lastInferActsDebug) diffStr = inferLayerMaxDiffs(lastInferActsDebug, acts);
     if (VIZ_DEBUG_INFER) lastInferActsDebug = acts.map((row) => [...row]);
+    net3d.setInferResult(pred, label ?? null);
     publishVizState("infer", acts);
     renderFrame();
     const probs = fwd.prob.map((row, i) => ({ digit: i, p: row[0] }));
