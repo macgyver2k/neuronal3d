@@ -1,7 +1,7 @@
-import type { MnistSample } from "../data/mnist.js";
-import { batchIndices, oneHot, shuffleInPlace } from "../data/mnist.js";
-import { matAccInPlace, matFromColVec, zeros } from "../nn/matrix.js";
-import { activationSlices, MLP } from "../nn/network.js";
+import type { MnistSample } from "../data/mnist";
+import { batchIndices, oneHot, shuffleInPlace } from "../data/mnist";
+import { matAccInPlace, matFromColVec, zeros } from "../nn/matrix";
+import { activationSlices, MLP } from "../nn/network";
 
 export type TrainSnapshot = {
   epoch: number;

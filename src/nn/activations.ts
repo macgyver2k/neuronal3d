@@ -1,5 +1,5 @@
-import type { Mat } from "./matrix.js";
-import { zeros } from "./matrix.js";
+import type { Mat } from "./matrix";
+import { zeros } from "./matrix";
 
 export function leakyRelu(z: Mat, alpha = 0.01): Mat {
   const r = zeros(z.length, z[0].length);

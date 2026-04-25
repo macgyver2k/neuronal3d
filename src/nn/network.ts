@@ -1,4 +1,4 @@
-import type { Mat } from "./matrix.js";
+import type { Mat } from "./matrix";
 import {
   colVecFromMat,
   matAdd,
@@ -8,8 +8,8 @@ import {
   randnMat,
   transpose,
   zeros,
-} from "./matrix.js";
-import { leakyRelu, leakyReluGrad, softmax, softmaxCrossEntropyGrad } from "./activations.js";
+} from "./matrix";
+import { leakyRelu, leakyReluGrad, softmax, softmaxCrossEntropyGrad } from "./activations";
 
 export type LayerCache = {
   z: Mat;

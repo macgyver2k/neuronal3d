@@ -1,0 +1,517 @@
+* { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: radial-gradient(120% 80% at 50% -20%, #152238 0%, #070a10 45%, #050608 100%);
+        color: #e8edf4;
+      }
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+      }
+      .modeRailOuter {
+        grid-area: rail;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35rem;
+        min-width: 0;
+      }
+      #shellChrome {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        grid-template-areas: "brand rail status";
+        align-items: center;
+        gap: 0.75rem 1rem;
+        padding: 0.55rem 1rem 0.75rem;
+        background: linear-gradient(180deg, rgba(18, 24, 38, 0.97) 0%, rgba(10, 14, 22, 0.98) 100%);
+        border-bottom: 1px solid rgba(88, 120, 168, 0.22);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+      .shellBrand {
+        grid-area: brand;
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        min-width: 0;
+      }
+      .shellLogo {
+        font-weight: 700;
+        font-size: 1.05rem;
+        letter-spacing: 0.04em;
+        background: linear-gradient(90deg, #9bdcff, #c4a8ff);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .shellTag {
+        font-size: 0.68rem;
+        color: #7a8aa3;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .modeRail {
+        grid-area: rail;
+        display: flex;
+        align-items: stretch;
+        padding: 3px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(100, 130, 180, 0.28);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+      .modeTab {
+        appearance: none;
+        border: none;
+        margin: 0;
+        padding: 0.45rem 1.35rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        color: #8b9cb8;
+        background: transparent;
+        transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      }
+      .modeTab:hover {
+        color: #c5d4eb;
+      }
+      #app[data-app-mode="train"] #modeTabTrain,
+      #app[data-app-mode="infer"] #modeTabInfer {
+        color: #0a0e14;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      #app[data-app-mode="train"] #modeTabTrain {
+        background: linear-gradient(145deg, #ffc46d, #f59e0b);
+      }
+      #app[data-app-mode="infer"] #modeTabInfer {
+        background: linear-gradient(145deg, #6ee7ff, #22d3ee);
+      }
+      .modeHint {
+        margin: 0;
+        padding: 0 0.5rem;
+        font-size: 0.62rem;
+        color: #5c6a82;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      @media (max-width: 720px) {
+        #shellChrome {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "brand"
+            "rail"
+            "status";
+          justify-items: stretch;
+        }
+        .modeRailOuter { width: 100%; }
+        .modeRail { align-self: center; }
+        .modeHint { display: none; }
+        #status { text-align: left; }
+      }
+      .shellStatusWrap {
+        grid-area: status;
+        justify-self: end;
+        min-width: 0;
+        max-width: 100%;
+      }
+      #status {
+        display: block;
+        font-size: 0.78rem;
+        color: #9fb0c9;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-variant-numeric: tabular-nums;
+        padding: 0.35rem 0.65rem;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(80, 100, 140, 0.25);
+        max-width: min(52vw, 28rem);
+      }
+      @media (max-width: 720px) {
+        #status { max-width: 100%; }
+      }
+      #shellStage {
+        flex: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 520px);
+        min-height: 0;
+      }
+      @media (max-width: 900px) {
+        #shellStage {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(200px, 42vh) minmax(0, 1fr);
+        }
+      }
+      #vizWrap {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      #viz {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+      }
+      #viz canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #shellDock {
+        min-height: 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: rgba(8, 11, 18, 0.72);
+        border-left: 1px solid rgba(88, 120, 168, 0.18);
+        backdrop-filter: blur(10px);
+      }
+      @media (max-width: 900px) {
+        #shellDock {
+          border-left: none;
+          border-top: 1px solid rgba(88, 120, 168, 0.18);
+        }
+      }
+      #app[data-app-mode="train"] #shellDock {
+        box-shadow: inset 4px 0 0 -1px rgba(245, 158, 11, 0.45);
+      }
+      #app[data-app-mode="infer"] #shellDock {
+        box-shadow: inset 4px 0 0 -1px rgba(34, 211, 238, 0.5);
+      }
+      @media (max-width: 900px) {
+        #app[data-app-mode="train"] #shellDock {
+          box-shadow: inset 0 4px 0 -1px rgba(245, 158, 11, 0.45);
+        }
+        #app[data-app-mode="infer"] #shellDock {
+          box-shadow: inset 0 4px 0 -1px rgba(34, 211, 238, 0.5);
+        }
+      }
+      .shellDockPanel {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        padding: 0.75rem 0.85rem 1rem;
+        gap: 0.65rem;
+      }
+      .shellDockPanel[hidden] {
+        display: none !important;
+      }
+      .dockBlock {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        align-items: center;
+      }
+      .dockBlock button,
+      .dockBlock label,
+      .dockBlock select,
+      .dockBlock input {
+        cursor: pointer;
+      }
+      .dockBlock button,
+      .dockBlock select,
+      .dockBlock input {
+        padding: 0.38rem 0.62rem;
+        border-radius: 8px;
+        border: 1px solid rgba(100, 130, 170, 0.35);
+        background: rgba(22, 30, 48, 0.95);
+        color: inherit;
+        font-size: 0.8rem;
+      }
+      .dockBlock button:disabled,
+      .dockBlock select:disabled,
+      .dockBlock input:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .dockBlock label {
+        font-size: 0.78rem;
+        color: #9aaac4;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .trainRibbon {
+        margin: 0;
+        font-size: 0.72rem;
+        line-height: 1.45;
+        color: #8b9cb8;
+      }
+      .activeModelTitle {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #e8edf4;
+      }
+      .activeModelDetail {
+        margin: 0;
+        font-size: 0.74rem;
+        line-height: 1.45;
+        color: #7d8fab;
+      }
+      .modelLibraryList {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        max-height: min(28vh, 14rem);
+        overflow: auto;
+        padding: 0.1rem 0;
+      }
+      .modelLibEmpty {
+        margin: 0;
+        font-size: 0.74rem;
+        line-height: 1.45;
+        color: #6b7c95;
+        padding: 0.55rem 0.6rem;
+        border-radius: 8px;
+        border: 1px dashed rgba(100, 130, 170, 0.35);
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .modelLibCard {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.2rem;
+        text-align: left;
+        width: 100%;
+        padding: 0.5rem 0.6rem;
+        border-radius: 10px;
+        border: 1px solid rgba(100, 130, 170, 0.35);
+        background: rgba(16, 22, 34, 0.85);
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+        transition: border-color 0.12s ease, background 0.12s ease;
+      }
+      .modelLibCard:hover:not(:disabled) {
+        border-color: rgba(245, 158, 11, 0.55);
+        background: rgba(22, 30, 48, 0.95);
+      }
+      .modelLibCard--active {
+        border-color: rgba(245, 158, 11, 0.75);
+        box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25);
+      }
+      .modelLibCard:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .modelLibCardName {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #dce6f2;
+      }
+      .modelLibCardMeta {
+        font-size: 0.68rem;
+        color: #6b7c95;
+        font-variant-numeric: tabular-nums;
+      }
+      .epochPresetRow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+      }
+      .epochPresetBtn {
+        min-width: 2.75rem;
+        padding: 0.4rem 0.55rem;
+        border-radius: 8px;
+        border: 1px solid rgba(100, 130, 170, 0.4);
+        background: rgba(22, 30, 48, 0.95);
+        color: #9aaac4;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .epochPresetBtn:hover:not(:disabled) {
+        color: #e8edf4;
+        border-color: rgba(245, 158, 11, 0.5);
+      }
+      .epochPresetBtn--active {
+        color: #0a0e14;
+        background: linear-gradient(145deg, #ffc46d, #f59e0b);
+        border-color: transparent;
+      }
+      .epochPresetBtn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .epochPresetLabel {
+        font-size: 0.68rem;
+        color: #7d8fab;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        width: 100%;
+        margin-bottom: 0.1rem;
+      }
+      .trainPrimaryRow {
+        margin-top: 0.35rem;
+      }
+      .trainPrimaryRow #btnTrain {
+        font-weight: 600;
+        padding: 0.5rem 0.85rem;
+        border-color: rgba(245, 158, 11, 0.55);
+        background: linear-gradient(180deg, rgba(55, 40, 20, 0.95), rgba(28, 22, 14, 0.98));
+      }
+      .trainAdvanced {
+        border-radius: 10px;
+        border: 1px solid rgba(80, 100, 140, 0.28);
+        background: rgba(0, 0, 0, 0.22);
+        padding: 0.35rem 0.55rem 0.55rem;
+      }
+      .trainAdvanced summary {
+        cursor: pointer;
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: #9aaac4;
+        letter-spacing: 0.03em;
+      }
+      .trainAdvanced[open] summary {
+        margin-bottom: 0.45rem;
+        color: #c5d4eb;
+      }
+      .trainAdvanced .dockBlock {
+        margin-top: 0.25rem;
+      }
+      #drawCanvas {
+        border: 1px solid rgba(100, 130, 170, 0.35);
+        border-radius: 10px;
+        background: #000;
+        touch-action: none;
+        width: 100%;
+        max-width: 360px;
+        height: auto;
+        aspect-ratio: 1;
+        align-self: center;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      }
+      #drawActions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        max-width: 360px;
+        width: 100%;
+        align-self: center;
+      }
+      #drawActions button {
+        padding: 0.45rem 0.55rem;
+        border-radius: 8px;
+        border: 1px solid rgba(100, 130, 170, 0.35);
+        background: rgba(22, 30, 48, 0.95);
+        color: inherit;
+        cursor: pointer;
+        font-size: 0.8rem;
+      }
+      #drawActions button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      #epochTrackWrap {
+        flex: 1;
+        min-height: 7rem;
+        max-height: min(38vh, 22rem);
+        overflow: auto;
+        border-radius: 10px;
+        padding: 0.5rem 0.55rem;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(80, 100, 140, 0.22);
+      }
+      #epochTrackHeader {
+        margin: 0 0 0.45rem 0;
+        font-size: 0.72rem;
+        color: #7d8fab;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      #epochTrackList {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .epochRow {
+        display: grid;
+        grid-template-columns: 3.4rem 4.2rem 1fr auto;
+        align-items: center;
+        gap: 0.45rem;
+        border-radius: 8px;
+        padding: 0.38rem 0.45rem;
+        background: rgba(16, 22, 34, 0.9);
+        border: 1px solid rgba(80, 100, 140, 0.2);
+        font-size: 0.72rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .epochRun { color: #8b9cb8; }
+      .epochNum { color: #dce6f2; }
+      .epochLoss { color: #fbbf77; }
+      .epochAcc { color: #6ee7b7; }
+      .epochMeta {
+        grid-column: 1 / -1;
+        color: #6b7c95;
+        font-size: 0.68rem;
+        border-top: 1px solid rgba(60, 80, 110, 0.35);
+        padding-top: 0.28rem;
+      }
+      .epochEmpty {
+        font-size: 0.74rem;
+        color: #6b7c95;
+        border: 1px dashed rgba(100, 130, 170, 0.3);
+        border-radius: 8px;
+        padding: 0.65rem;
+      }
+      .inferLead {
+        font-size: 0.78rem;
+        color: #9aaac4;
+        line-height: 1.4;
+        margin: 0;
+        max-width: 360px;
+        align-self: center;
+        text-align: center;
+      }
+      .dockGroup {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .dockGroupTitle {
+        margin: 0;
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7d8fab;
+      }
+      .dockHelp {
+        margin: 0 0 0.15rem 0;
+        font-size: 0.7rem;
+        line-height: 1.45;
+        color: #6b7c95;
+      }
+
+app-root {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
