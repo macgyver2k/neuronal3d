@@ -392,6 +392,10 @@ function flushVizState(): void {
   if (!net3d || !pendingVizState || !net) return;
   if (pendingVizState.stamp === lastAppliedVizStamp) return;
   net3d.setActivations(pendingVizState.activations);
+  net3d.setEdgeFocus(
+    pendingVizState.mode === "infer" ? "infer" : "off",
+    pendingVizState.mode === "infer" ? pendingVizState.activations : null,
+  );
   lastAppliedVizStamp = pendingVizState.stamp;
 }
 

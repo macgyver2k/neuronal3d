@@ -46,6 +46,10 @@ export class Network3D {
   private readonly dummy = new THREE.Object3D();
   private readonly layerSizes: number[];
   private readonly positions: THREE.Vector3[][];
+  private edgeFocusMode: "off" | "infer" = "off";
+  private edgeFocusActivations: number[][] | null = null;
+  private readonly edgeFocusThreshold = 0.22;
+  private readonly edgeFocusThresholdFirstLayer = 0.38;
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -132,6 +136,11 @@ export class Network3D {
     for (let i = 0; i < this.activationScale.length; i++) this.activationScale[i] = 1;
   }
 
+  setEdgeFocus(mode: "off" | "infer", activations: number[][] | null): void {
+    this.edgeFocusMode = mode;
+    this.edgeFocusActivations = activations ? activations.map((a) => [...a]) : null;
+  }
+
   setActivations(activations: number[][]): void {
     for (let L = 0; L < this.meshes.length; L++) {
       const mesh = this.meshes[L];
@@ -198,13 +207,26 @@ export class Network3D {
       const lines = this.edgeLines[L];
       const colorAttr = lines.geometry.getAttribute("color") as THREE.BufferAttribute;
       const arr = colorAttr.array as Float32Array;
+      const posAttr = lines.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const posArr = posAttr.array as Float32Array;
       const map = this.edgeFromTo[L];
       let mx = 1e-12;
+      let contribMx = 1e-12;
+      const fromActs =
+        this.edgeFocusMode === "infer" && this.edgeFocusActivations && this.edgeFocusActivations[L]
+          ? this.edgeFocusActivations[L]
+          : null;
+      const threshold = L === 0 ? this.edgeFocusThresholdFirstLayer : this.edgeFocusThreshold;
       for (let r = 0; r < layerW.length; r++) {
         for (let c = 0; c < layerW[r].length; c++) {
           const wrc = Number.isFinite(layerW[r][c]) ? layerW[r][c] : 0;
           const a = Math.abs(wrc);
           if (a > mx) mx = a;
+          if (fromActs && c < fromActs.length) {
+            const fa = Number.isFinite(fromActs[c]) ? Math.max(0, fromActs[c]) : 0;
+            const contrib = Math.abs(wrc) * fa;
+            if (contrib > contribMx) contribMx = contrib;
+          }
         }
       }
       const prevScale = this.edgeWeightScale[L];
@@ -214,20 +236,55 @@ export class Network3D {
         const ref = map[k];
         const wRaw = layerW[ref.to][ref.from] ?? 0;
         const w = Number.isFinite(wRaw) ? wRaw : 0;
-        const t = Math.min(1, Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65));
+        let visible = true;
+        let contribNorm = 1;
+        if (fromActs && ref.from < fromActs.length) {
+          const fa = Number.isFinite(fromActs[ref.from]) ? Math.max(0, fromActs[ref.from]) : 0;
+          contribNorm = (Math.abs(w) * fa) / Math.max(1e-9, contribMx);
+          visible = contribNorm >= threshold;
+        }
+        const tBase = Math.min(1, Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65));
+        const tInfer =
+          fromActs && visible
+            ? Math.min(1, Math.max(0, (contribNorm - threshold) / Math.max(1e-9, 1 - threshold)))
+            : 0;
+        const t = fromActs ? (visible ? tInfer : 0) : tBase;
         let r = 0;
         let g = 0;
         let b = 0;
-        if (w >= 0) {
-          r = 0.25 + 0.75 * t;
-          g = 0.14 + 0.58 * t;
-          b = 0.07 + 0.16 * t;
-        } else {
-          r = 0.06 + 0.28 * t;
-          g = 0.22 + 0.48 * t;
-          b = 0.32 + 0.68 * t;
+        if (visible) {
+          if (w >= 0) {
+            r = 0.25 + 0.75 * t;
+            g = 0.14 + 0.58 * t;
+            b = 0.07 + 0.16 * t;
+          } else {
+            r = 0.06 + 0.28 * t;
+            g = 0.22 + 0.48 * t;
+            b = 0.32 + 0.68 * t;
+          }
+        } else if (this.edgeFocusMode === "infer") {
+          r = 0.05;
+          g = 0.07;
+          b = 0.09;
         }
         const i = k * 6;
+        const pFrom = this.positions[L][ref.from];
+        const pTo = this.positions[L + 1][ref.to];
+        if (this.edgeFocusMode === "infer" && !visible) {
+          posArr[i + 0] = pFrom.x;
+          posArr[i + 1] = pFrom.y;
+          posArr[i + 2] = pFrom.z;
+          posArr[i + 3] = pFrom.x;
+          posArr[i + 4] = pFrom.y;
+          posArr[i + 5] = pFrom.z;
+        } else {
+          posArr[i + 0] = pFrom.x;
+          posArr[i + 1] = pFrom.y;
+          posArr[i + 2] = pFrom.z;
+          posArr[i + 3] = pTo.x;
+          posArr[i + 4] = pTo.y;
+          posArr[i + 5] = pTo.z;
+        }
         arr[i + 0] = r;
         arr[i + 1] = g;
         arr[i + 2] = b;
@@ -235,6 +292,7 @@ export class Network3D {
         arr[i + 4] = g;
         arr[i + 5] = b;
       }
+      posAttr.needsUpdate = true;
       colorAttr.needsUpdate = true;
     }
   }
