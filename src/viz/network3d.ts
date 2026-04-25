@@ -22,19 +22,33 @@ const outputDigitSpriteBase = 0.34 * OUTPUT_DIGIT_SPRITE_MUL;
 const outputDigitSpritePred = 0.46 * OUTPUT_DIGIT_SPRITE_MUL;
 const outputDigitSpriteWrongExpected = 0.48 * OUTPUT_DIGIT_SPRITE_MUL;
 const outputDigitRowStep = 0.42 * OUTPUT_DIGIT_SPRITE_MUL;
+const LAYER_SPACING = 3.2;
+const OUTPUT_LABEL_X_OFFSET = 1.8;
+const OUTPUT_LABEL_Y = 2.4;
+const OUTPUT_NEURON_Y_BELOW_LABEL = 0.92;
+
+const digitSpriteColA = new THREE.Color();
+const digitSpriteColB = new THREE.Color();
 
 function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
-  const spacing = 3.2;
   const out: THREE.Vector3[][] = [];
+  const outIdx = layerSizes.length - 1;
   for (let L = 0; L < layerSizes.length; L++) {
     const n = layerSizes[L];
-    const x = L * spacing;
+    const x = L * LAYER_SPACING;
     const pts: THREE.Vector3[] = [];
     if (L === 0 && n === 784) {
       for (let i = 0; i < 784; i++) {
         const u = i % 28;
         const v = 27 - Math.floor(i / 28);
         pts.push(new THREE.Vector3(x, (v - 13.5) * 0.12, (u - 13.5) * 0.12));
+      }
+    } else if (L === outIdx && L > 0) {
+      const labelX = outIdx * LAYER_SPACING + OUTPUT_LABEL_X_OFFSET;
+      const ny = OUTPUT_LABEL_Y - OUTPUT_NEURON_Y_BELOW_LABEL;
+      for (let i = 0; i < n; i++) {
+        const z = (i - (n - 1) * 0.5) * outputDigitRowStep;
+        pts.push(new THREE.Vector3(labelX, ny, z));
       }
     } else if (n <= 128) {
       const ringR = 0.35 + Math.min(1.4, n * 0.018);
@@ -178,9 +192,8 @@ export class Network3D {
     }
     const outIdx = this.layerSizes.length - 1;
     const outCount = this.layerSizes[outIdx];
-    const outX = this.positions[outIdx][0]?.x ?? outIdx * 3.2;
-    const labelX = outX + 1.8;
-    const labelYOffset = 2.4;
+    const labelX = outIdx * LAYER_SPACING + OUTPUT_LABEL_X_OFFSET;
+    const labelYOffset = OUTPUT_LABEL_Y;
     for (let i = 0; i < outCount; i++) {
       const z = (i - (outCount - 1) * 0.5) * outputDigitRowStep;
       const tex = createDigitTexture(i);
@@ -284,28 +297,50 @@ export class Network3D {
           }
         }
         for (let i = 0; i < this.outputDigitSprites.length; i++) {
-          const s = this.outputDigitSprites[i];
-          const mat = s.material as THREE.SpriteMaterial;
+          const spr = this.outputDigitSprites[i];
+          const mat = spr.material as THREE.SpriteMaterial;
+          const pRaw =
+            i < v.length && Number.isFinite(v[i]) ? (v[i] as number) : 0;
+          const p = Math.max(0, Math.min(1, pRaw));
+          const lum = Math.pow(p, 0.48);
+          const dim = this.idleDimmed;
+          const opLo = dim ? 0.042 : 0.075;
+          const opHi = dim ? 0.38 : 0.96;
+          const op = opLo + (opHi - opLo) * lum;
           const inferPred = this.inferPredictedDigit ?? best;
           const inferExpected = this.inferExpectedDigit;
           const inferWrong =
             inferExpected !== null && inferPred !== inferExpected;
+          const scPred =
+            outputDigitSpriteBase +
+            (outputDigitSpritePred - outputDigitSpriteBase) * lum * 0.95;
+          const scWrong =
+            outputDigitSpriteBase +
+            (outputDigitSpriteWrongExpected - outputDigitSpriteBase) *
+              lum *
+              0.95;
           if (
             this.edgeFocusMode === "infer" &&
             inferWrong &&
             i === inferExpected
           ) {
-            mat.opacity = 0.98;
-            mat.color.setHex(0xff3b30);
-            s.scale.setScalar(outputDigitSpriteWrongExpected);
+            mat.opacity = op;
+            mat.color
+              .copy(digitSpriteColA.setHex(0x4a4f58))
+              .lerp(digitSpriteColB.setHex(0xff3b30), 0.2 + 0.8 * lum);
+            spr.scale.setScalar(scWrong);
           } else if (this.edgeFocusMode === "infer" && i === inferPred) {
-            mat.opacity = 0.95;
-            mat.color.setHex(0xffcc4d);
-            s.scale.setScalar(outputDigitSpritePred);
+            mat.opacity = op;
+            mat.color
+              .copy(digitSpriteColA.setHex(0x5f6770))
+              .lerp(digitSpriteColB.setHex(0xffcc4d), 0.18 + 0.82 * lum);
+            spr.scale.setScalar(scPred);
           } else {
-            mat.opacity = 0.16;
-            mat.color.setHex(0x5f6770);
-            s.scale.setScalar(outputDigitSpriteBase);
+            mat.opacity = op;
+            mat.color
+              .copy(digitSpriteColA.setHex(0x5f6770))
+              .lerp(digitSpriteColB.setHex(0xe8eef8), lum);
+            spr.scale.setScalar(scPred);
           }
         }
       } else {
