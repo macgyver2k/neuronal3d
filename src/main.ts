@@ -150,7 +150,9 @@ if (!ctxDraw) throw new Error("canvas");
 const ctx2d = ctxDraw;
 ctx2d.fillStyle = "#000000";
 ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
-ctx2d.lineWidth = 14;
+const canvasLineWidthDraw = 14;
+const canvasLineWidthErase = 32;
+ctx2d.lineWidth = canvasLineWidthDraw;
 ctx2d.lineCap = "round";
 ctx2d.lineJoin = "round";
 ctx2d.strokeStyle = "#ffffff";
@@ -172,8 +174,15 @@ function scheduleLiveCanvasInfer(): void {
     inferWithPixels(pixels, undefined, undefined, { live: true });
   });
 }
+el.drawCanvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+});
 el.drawCanvas.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 && e.button !== 2) return;
+  if (e.button === 2) e.preventDefault();
   drawing = true;
+  ctx2d.strokeStyle = e.button === 2 ? "#000000" : "#ffffff";
+  ctx2d.lineWidth = e.button === 2 ? canvasLineWidthErase : canvasLineWidthDraw;
   el.drawCanvas.setPointerCapture(e.pointerId);
   const p = canvasPos(e);
   ctx2d.beginPath();

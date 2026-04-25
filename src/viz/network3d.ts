@@ -17,6 +17,12 @@ function createDigitTexture(digit: number): THREE.CanvasTexture {
   return tex;
 }
 
+const OUTPUT_DIGIT_SPRITE_MUL = 4;
+const outputDigitSpriteBase = 0.34 * OUTPUT_DIGIT_SPRITE_MUL;
+const outputDigitSpritePred = 0.46 * OUTPUT_DIGIT_SPRITE_MUL;
+const outputDigitSpriteWrongExpected = 0.48 * OUTPUT_DIGIT_SPRITE_MUL;
+const outputDigitRowStep = 0.42 * OUTPUT_DIGIT_SPRITE_MUL;
+
 function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
   const spacing = 3.2;
   const out: THREE.Vector3[][] = [];
@@ -172,10 +178,9 @@ export class Network3D {
     const outCount = this.layerSizes[outIdx];
     const outX = this.positions[outIdx][0]?.x ?? (outIdx * 3.2);
     const labelX = outX + 1.8;
-    const labelR = 1.75;
     const labelYOffset = 2.4;
     for (let i = 0; i < outCount; i++) {
-      const t = (i / Math.max(1, outCount)) * Math.PI * 2;
+      const z = (i - (outCount - 1) * 0.5) * outputDigitRowStep;
       const tex = createDigitTexture(i);
       const mat = new THREE.SpriteMaterial({
         map: tex,
@@ -185,8 +190,8 @@ export class Network3D {
         depthWrite: false,
       });
       const spr = new THREE.Sprite(mat);
-      spr.position.set(labelX, labelYOffset + Math.sin(t) * labelR, Math.cos(t) * labelR);
-      spr.scale.setScalar(0.34);
+      spr.position.set(labelX, labelYOffset, z);
+      spr.scale.setScalar(outputDigitSpriteBase);
       this.outputDigitSprites.push(spr);
       this.root.add(spr);
     }
@@ -276,15 +281,15 @@ export class Network3D {
           if (this.edgeFocusMode === "infer" && inferWrong && i === inferExpected) {
             mat.opacity = 0.98;
             mat.color.setHex(0xff3b30);
-            s.scale.setScalar(0.48);
+            s.scale.setScalar(outputDigitSpriteWrongExpected);
           } else if (this.edgeFocusMode === "infer" && i === inferPred) {
             mat.opacity = 0.95;
             mat.color.setHex(0xffcc4d);
-            s.scale.setScalar(0.46);
+            s.scale.setScalar(outputDigitSpritePred);
           } else {
             mat.opacity = 0.16;
             mat.color.setHex(0x5f6770);
-            s.scale.setScalar(0.34);
+            s.scale.setScalar(outputDigitSpriteBase);
           }
         }
       } else {
