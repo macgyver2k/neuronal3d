@@ -148,7 +148,7 @@
       #shellStage {
         flex: 1;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) clamp(280px, 30vw, 440px);
+        grid-template-columns: minmax(0, 1fr) clamp(300px, 34vw, 520px);
         min-height: 0;
       }
       @media (max-width: 900px) {
@@ -247,9 +247,157 @@
         font-size: 0.78rem;
         color: #9aaac4;
       }
-      #modelSelect {
-        flex: 1 1 12rem;
-        min-width: 8rem;
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .trainRibbon {
+        margin: 0;
+        font-size: 0.72rem;
+        line-height: 1.45;
+        color: #8b9cb8;
+      }
+      .activeModelTitle {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #e8edf4;
+      }
+      .activeModelDetail {
+        margin: 0;
+        font-size: 0.74rem;
+        line-height: 1.45;
+        color: #7d8fab;
+      }
+      .modelLibraryList {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        max-height: min(28vh, 14rem);
+        overflow: auto;
+        padding: 0.1rem 0;
+      }
+      .modelLibEmpty {
+        margin: 0;
+        font-size: 0.74rem;
+        line-height: 1.45;
+        color: #6b7c95;
+        padding: 0.55rem 0.6rem;
+        border-radius: 8px;
+        border: 1px dashed rgba(100, 130, 170, 0.35);
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .modelLibCard {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.2rem;
+        text-align: left;
+        width: 100%;
+        padding: 0.5rem 0.6rem;
+        border-radius: 10px;
+        border: 1px solid rgba(100, 130, 170, 0.35);
+        background: rgba(16, 22, 34, 0.85);
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+        transition: border-color 0.12s ease, background 0.12s ease;
+      }
+      .modelLibCard:hover:not(:disabled) {
+        border-color: rgba(245, 158, 11, 0.55);
+        background: rgba(22, 30, 48, 0.95);
+      }
+      .modelLibCard--active {
+        border-color: rgba(245, 158, 11, 0.75);
+        box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25);
+      }
+      .modelLibCard:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .modelLibCardName {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #dce6f2;
+      }
+      .modelLibCardMeta {
+        font-size: 0.68rem;
+        color: #6b7c95;
+        font-variant-numeric: tabular-nums;
+      }
+      .epochPresetRow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+      }
+      .epochPresetBtn {
+        min-width: 2.75rem;
+        padding: 0.4rem 0.55rem;
+        border-radius: 8px;
+        border: 1px solid rgba(100, 130, 170, 0.4);
+        background: rgba(22, 30, 48, 0.95);
+        color: #9aaac4;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .epochPresetBtn:hover:not(:disabled) {
+        color: #e8edf4;
+        border-color: rgba(245, 158, 11, 0.5);
+      }
+      .epochPresetBtn--active {
+        color: #0a0e14;
+        background: linear-gradient(145deg, #ffc46d, #f59e0b);
+        border-color: transparent;
+      }
+      .epochPresetBtn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .epochPresetLabel {
+        font-size: 0.68rem;
+        color: #7d8fab;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        width: 100%;
+        margin-bottom: 0.1rem;
+      }
+      .trainPrimaryRow {
+        margin-top: 0.35rem;
+      }
+      .trainPrimaryRow #btnTrain {
+        font-weight: 600;
+        padding: 0.5rem 0.85rem;
+        border-color: rgba(245, 158, 11, 0.55);
+        background: linear-gradient(180deg, rgba(55, 40, 20, 0.95), rgba(28, 22, 14, 0.98));
+      }
+      .trainAdvanced {
+        border-radius: 10px;
+        border: 1px solid rgba(80, 100, 140, 0.28);
+        background: rgba(0, 0, 0, 0.22);
+        padding: 0.35rem 0.55rem 0.55rem;
+      }
+      .trainAdvanced summary {
+        cursor: pointer;
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: #9aaac4;
+        letter-spacing: 0.03em;
+      }
+      .trainAdvanced[open] summary {
+        margin-bottom: 0.45rem;
+        color: #c5d4eb;
+      }
+      .trainAdvanced .dockBlock {
+        margin-top: 0.25rem;
       }
       #drawCanvas {
         border: 1px solid rgba(100, 130, 170, 0.35);
@@ -395,72 +543,77 @@
         <aside id="shellDock" aria-label="Steuerung">
           <div id="dockTrain" class="shellDockPanel" role="tabpanel" aria-labelledby="modeTabTrain">
             <div class="dockGroup">
-              <p class="dockGroupTitle">Trainingslauf</p>
-              <p class="dockHelp">
-                Startet einen Durchgang mit dem gewählten Datensatz und den Parametern unten. Die Gewichte werden im
-                <strong>aktuell ausgewählten Modellstand</strong> weitertrainiert (oder ein neuer Stand wird angelegt,
-                falls noch keiner aktiv ist).
-              </p>
+              <p class="dockGroupTitle">1 · Daten</p>
+              <p class="dockHelp">Welcher Bilddatensatz soll für Train und Test geladen werden — jeweils frisch vom Server.</p>
               <div class="dockBlock">
-                <button id="btnTrain" type="button" disabled>Trainingslauf starten</button>
-                <button id="btnPause" type="button" disabled>Training anhalten</button>
-              </div>
-            </div>
-            <div class="dockGroup">
-              <p class="dockGroupTitle">Modellstände im Browser</p>
-              <p class="dockHelp">
-                Stände liegen nur lokal im Browser-Speicher. <strong>Laden</strong> kopiert Gewichte und Schwellen in
-                das Netz im Arbeitsspeicher. <strong>Neu sichern</strong> legt einen zusätzlichen Stand an (Dialog
-                fragt den Namen). <strong>Zurücksetzen</strong> ersetzt die Gewichte des aktiven Stands durch frische
-                Zufallswerte und leert die Epoch-Historie nur für diesen Stand.
-              </p>
-              <div class="dockBlock">
-                <label for="modelSelect">Stand auswählen</label>
-                <select id="modelSelect" title="Gespeicherte Modellstände (Gewichte + Metriken)"></select>
-              </div>
-              <div class="dockBlock">
-                <button id="btnLoadModel" type="button" disabled title="Gewichte des ausgewählten Stands ins Netz übernehmen">
-                  Gewichte des Stands laden
-                </button>
-                <button id="btnSaveModelAs" type="button" disabled title="Aktuelles Netz unter neuem Namen als zusätzlichen Stand speichern">
-                  Aktuelles Netz als neuen Stand speichern
-                </button>
-                <button id="btnResetModel" type="button" disabled title="Nur der aktive Stand: frische Zufallsgewichte, Epoch-Historie dieses Stands wird gelöscht">
-                  Aktiven Stand auf Zufallsgewichte zurücksetzen
-                </button>
-              </div>
-            </div>
-            <div class="dockGroup">
-              <p class="dockGroupTitle">Daten &amp; Hyperparameter</p>
-              <p class="dockHelp">
-                <strong>Datensatz</strong> lädt Trainings- und Testdaten vom Server neu. <strong>Epochs</strong> = volle
-                Durchläufe über die Trainingsmenge. <strong>LR</strong> = Lernrate (SGD). <strong>Batch</strong> =
-                Stichproben pro Update. <strong>Viz</strong> = alle wie viele Batches die 3D-Aktivierungen aktualisiert
-                werden (höher = flüssiger, mehr Last).
-              </p>
-              <div class="dockBlock">
-                <label for="datasetSelect">Trainings-/Test-Datensatz</label>
+                <label for="datasetSelect">Datensatz</label>
                 <select id="datasetSelect">
                   <option value="mnist">MNIST</option>
                   <option value="usps">USPS</option>
                   <option value="emnistDigits">EMNIST Digits</option>
                 </select>
-                <label for="epochsInput">Epochs</label>
+              </div>
+              <p id="datasetRibbon" class="trainRibbon" aria-live="polite">Daten noch nicht geladen.</p>
+            </div>
+            <div class="dockGroup">
+              <p class="dockGroupTitle">2 · Aktives Netz (Arbeitsspeicher)</p>
+              <p id="activeModelTitle" class="activeModelTitle">Noch kein Netz geladen</p>
+              <p id="activeModelDetail" class="activeModelDetail">
+                Wähle einen Stand in der Bibliothek — oder starte unten ein Training; dann wird automatisch ein erster Stand angelegt.
+              </p>
+              <div class="dockBlock">
+                <button id="btnSaveModelAs" type="button" disabled title="Aktuelles Netz unter neuem Namen als zusätzlichen Stand speichern">
+                  Aktuelles Netz als neuen Stand speichern
+                </button>
+                <button id="btnResetModel" type="button" disabled title="Aktiver Stand: frische Zufallsgewichte, Epoch-Historie dieses Stands wird gelöscht">
+                  Aktiven Stand auf Zufallsgewichte zurücksetzen
+                </button>
+              </div>
+              <p class="dockHelp">Speicherung nur in diesem Browser auf diesem Gerät.</p>
+            </div>
+            <div class="dockGroup">
+              <p class="dockGroupTitle">3 · Bibliothek</p>
+              <p class="dockHelp">Karte antippen: Stand wird ins aktive Netz übernommen (wie früher „Laden“).</p>
+              <div id="modelLibraryList" class="modelLibraryList"></div>
+              <select id="modelSelect" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+            </div>
+            <div class="dockGroup">
+              <p class="dockGroupTitle">4 · Lauf</p>
+              <p class="dockHelp">
+                Zuerst Epochen wählen (Schnellauswahl oder genaue Zahl), dann starten. Das Training schreibt in den
+                <strong>aktuellen Modellstand</strong> aus der Bibliothek bzw. legt beim ersten Mal einen an.
+              </p>
+              <span class="epochPresetLabel">Epochen — Schnellauswahl</span>
+              <div class="epochPresetRow" id="epochPresetRow">
+                <button type="button" class="epochPresetBtn" data-epochs="1">1</button>
+                <button type="button" class="epochPresetBtn" data-epochs="3">3</button>
+                <button type="button" class="epochPresetBtn" data-epochs="10">10</button>
+                <button type="button" class="epochPresetBtn" data-epochs="30">30</button>
+              </div>
+              <div class="dockBlock">
+                <label for="epochsInput">Epochen (1–200)</label>
                 <input id="epochsInput" type="number" min="1" max="200" step="1" value="1" title="Anzahl kompletter Durchläufe über die Trainingsdaten" />
+              </div>
+              <p id="epochStepHint" class="trainRibbon" aria-live="polite"></p>
+              <div class="dockBlock trainPrimaryRow">
+                <button id="btnTrain" type="button" disabled>Training starten</button>
+                <button id="btnPause" type="button" disabled>Training anhalten</button>
+              </div>
+            </div>
+            <details class="trainAdvanced" id="trainAdvanced">
+              <summary>Erweitert: Lernrate, Batch, 3D-Update</summary>
+              <div class="dockBlock">
                 <label for="lrInput">Lernrate</label>
                 <input id="lrInput" type="number" min="0.0001" max="1" step="0.0001" value="0.02" title="Schrittweite beim Gradientenabstieg" />
                 <label for="batchSizeInput">Batchgröße</label>
                 <input id="batchSizeInput" type="number" min="1" max="512" step="1" value="32" title="Anzahl Bilder pro Gradientenschritt" />
-                <label for="vizEveryInput">Viz alle N Batches</label>
+                <label for="vizEveryInput">3D alle N Batches</label>
                 <input id="vizEveryInput" type="number" min="1" max="1000" step="1" value="4" title="3D-Ansicht nach jedem N-ten Batch aktualisieren" />
               </div>
-            </div>
+            </details>
             <div class="dockGroup" id="epochTrackWrap">
-              <p id="epochTrackHeader">Epoch-Verlauf (aktueller Modellstand)</p>
-              <p class="dockHelp">
-                Pro abgeschlossener Epoche: Verlust und Trainings-Accuracy des Laufs. Einträge werden im Browser
-                gespeichert und beim Wechsel des Stands in der Liste oben umgeschaltet.
-              </p>
+              <p id="epochTrackHeader">5 · Epoch-Verlauf (aktueller Stand)</p>
+              <p class="dockHelp">Pro abgeschlossener Epoche dieses Laufs. Wechselst du in der Bibliothek den Stand, wechselt auch die Liste.</p>
               <ul id="epochTrackList"></ul>
             </div>
           </div>

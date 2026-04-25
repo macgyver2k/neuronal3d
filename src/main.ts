@@ -66,7 +66,11 @@ const el = {
   btnTrain: document.getElementById("btnTrain") as HTMLButtonElement,
   btnPause: document.getElementById("btnPause") as HTMLButtonElement,
   modelSelect: document.getElementById("modelSelect") as HTMLSelectElement,
-  btnLoadModel: document.getElementById("btnLoadModel") as HTMLButtonElement,
+  modelLibraryList: document.getElementById("modelLibraryList") as HTMLDivElement,
+  activeModelTitle: document.getElementById("activeModelTitle") as HTMLParagraphElement,
+  activeModelDetail: document.getElementById("activeModelDetail") as HTMLParagraphElement,
+  datasetRibbon: document.getElementById("datasetRibbon") as HTMLParagraphElement,
+  epochStepHint: document.getElementById("epochStepHint") as HTMLParagraphElement,
   btnSaveModelAs: document.getElementById("btnSaveModelAs") as HTMLButtonElement,
   btnResetModel: document.getElementById("btnResetModel") as HTMLButtonElement,
   datasetSelect: document.getElementById("datasetSelect") as HTMLSelectElement,
@@ -427,10 +431,8 @@ function inferLayerMaxDiffs(prev: number[][], cur: number[][]): string {
 function updateButtons(): void {
   const hasTrain = trainData.length > 0;
   const hasTest = testData.length > 0;
-  const hasSelectedModel = !!el.modelSelect.value;
   el.btnTrain.disabled = !hasTrain || trainingRunning;
   el.btnPause.disabled = !trainingRunning;
-  el.btnLoadModel.disabled = !hasSelectedModel || trainingRunning;
   el.btnSaveModelAs.disabled = !net || trainingRunning;
   el.btnResetModel.disabled = !net || trainingRunning;
   el.btnInferRandom.disabled = !net || !hasTest;
@@ -440,6 +442,12 @@ function updateButtons(): void {
   el.lrInput.disabled = trainingRunning;
   el.batchSizeInput.disabled = trainingRunning;
   el.vizEveryInput.disabled = trainingRunning;
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".epochPresetBtn")) {
+    btn.disabled = trainingRunning;
+  }
+  syncEpochPresetHighlight();
+  updateRunHint();
+  updateActiveModelPanel();
 }
 
 function datasetByKey(key: string): DatasetConfig | null {
@@ -535,6 +543,110 @@ function refreshModelSelect(): void {
     el.modelSelect.value = selected;
   }
   applyEpochHistoryToUi(el.modelSelect.value || null);
+  renderModelLibrary();
+  updateActiveModelPanel();
+  updateRunHint();
+  syncEpochPresetHighlight();
+}
+
+function renderModelLibrary(): void {
+  el.modelLibraryList.replaceChildren();
+  if (modelStore.models.length === 0) {
+    const p = document.createElement("p");
+    p.className = "modelLibEmpty";
+    p.textContent =
+      "Noch keine Stände. Training starten legt den ersten an; „Als neuen Stand speichern“ kopiert das aktuelle Netz unter einem weiteren Namen. Nur in diesem Browser.";
+    el.modelLibraryList.append(p);
+    return;
+  }
+  for (const entry of modelStore.models) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "modelLibCard" + (entry.id === activeModelId ? " modelLibCard--active" : "");
+    b.disabled = trainingRunning;
+    const name = document.createElement("span");
+    name.className = "modelLibCardName";
+    name.textContent = entry.name;
+    const meta = document.createElement("span");
+    meta.className = "modelLibCardMeta";
+    meta.textContent = `${entry.metrics.epochsTrained} Ep. gesamt · Test ${fmtPct(entry.metrics.testAcc)} · ${formatTimeLabel(entry.updatedAt)}`;
+    b.append(name, meta);
+    b.addEventListener("click", () => {
+      activateModelFromLibrary(entry.id);
+    });
+    el.modelLibraryList.append(b);
+  }
+}
+
+function activateModelFromLibrary(id: string): void {
+  if (trainingRunning) return;
+  const ok = loadSelectedModelIntoNet(id);
+  if (!ok) {
+    setStatus("Stand konnte nicht ins aktive Netz geladen werden.");
+    return;
+  }
+  const entry = modelStore.models.find((m) => m.id === id);
+  setStatus(
+    `Aktiv: ${entry?.name ?? id} · Test-Treffer ${fmtPct(entry?.metrics.testAcc ?? null)} · Fehlerquote ${fmtPct(entry?.metrics.errorRate ?? null)}`,
+  );
+}
+
+function updateActiveModelPanel(): void {
+  if (!net) {
+    el.activeModelTitle.textContent = "Noch kein Netz geladen";
+    el.activeModelDetail.textContent =
+      "Bibliothek: Karte wählen — oder „Training starten“ ohne vorherigen Stand legt automatisch einen ersten Stand an.";
+    return;
+  }
+  const id = activeModelId ?? el.modelSelect.value;
+  const entry = id ? modelStore.models.find((m) => m.id === id) : null;
+  if (entry) {
+    el.activeModelTitle.textContent = entry.name;
+    el.activeModelDetail.textContent = `Test ${fmtPct(entry.metrics.testAcc)} · Fehlerquote ${fmtPct(entry.metrics.errorRate)} · ${entry.metrics.epochsTrained} trainierte Epochen (Summe) · zuletzt ${formatTimeLabel(entry.updatedAt)}`;
+  } else {
+    el.activeModelTitle.textContent = "Netz im Arbeitsspeicher";
+    el.activeModelDetail.textContent = "Kein passender Eintrag in der Bibliothek gefunden.";
+  }
+}
+
+function updateDatasetRibbon(): void {
+  const ds = datasetByKey(activeDatasetKey);
+  const label = ds?.label ?? activeDatasetKey;
+  if (trainData.length === 0 && testData.length === 0) {
+    el.datasetRibbon.textContent = `${label}: Train 0 · Test 0 — warten auf erfolgreichen Abruf (Statuszeile).`;
+    return;
+  }
+  if (trainData.length === 0) {
+    el.datasetRibbon.textContent = `${label}: Trainingsdaten fehlen · Test ${testData.length}.`;
+    return;
+  }
+  if (testData.length === 0) {
+    el.datasetRibbon.textContent = `${label}: Train ${trainData.length} · Testdaten fehlen.`;
+    return;
+  }
+  el.datasetRibbon.textContent = `${label}: ${trainData.length} Train-Bilder · ${testData.length} Test-Bilder bereit.`;
+}
+
+function updateRunHint(): void {
+  const bs = parseIntInRange(el.batchSizeInput.value, TRAIN_DEFAULTS.batchSize, 1, 512);
+  const ep = parseIntInRange(el.epochsInput.value, TRAIN_DEFAULTS.epochs, 1, 200);
+  const n = trainData.length;
+  if (n <= 0) {
+    el.epochStepHint.textContent = "Sobald Trainingsdaten geladen sind, erscheint hier die ungefähre Anzahl Gradientenschritte.";
+    return;
+  }
+  const per = Math.max(1, Math.ceil(n / bs));
+  const total = per * ep;
+  el.epochStepHint.textContent = `Bei Batchgröße ${bs}: rund ${per} Schritte pro Epoche, etwa ${total} für ${ep} Epoche(n).`;
+}
+
+function syncEpochPresetHighlight(): void {
+  const ep = parseIntInRange(el.epochsInput.value, TRAIN_DEFAULTS.epochs, 1, 200);
+  const presets = new Set([1, 3, 10, 30]);
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".epochPresetBtn")) {
+    const v = Number.parseInt(btn.dataset.epochs ?? "", 10);
+    btn.classList.toggle("epochPresetBtn--active", presets.has(ep) && v === ep);
+  }
 }
 
 function upsertModelEntry(entry: StoredModelEntry): void {
@@ -655,6 +767,7 @@ async function loadCsvData(): Promise<void> {
     trainData = [];
     testData = [];
     setStatus("Datensatz-Konfiguration ungültig");
+    updateDatasetRibbon();
     updateButtons();
     return;
   }
@@ -728,6 +841,7 @@ async function loadCsvData(): Promise<void> {
     return;
   }
   lastInferSampleIndex = -1;
+  updateDatasetRibbon();
   updateButtons();
 }
 
@@ -909,31 +1023,12 @@ el.btnPause.addEventListener("click", () => {
   el.btnPause.textContent = pauseTraining ? "Training fortsetzen" : "Training anhalten";
 });
 
-el.modelSelect.addEventListener("change", () => {
-  applyEpochHistoryToUi(el.modelSelect.value || null);
-  updateButtons();
-});
-
 el.datasetSelect.addEventListener("change", () => {
   const selected = datasetByKey(el.datasetSelect.value);
   if (!selected) return;
   activeDatasetKey = selected.key;
   localStorage.setItem(ACTIVE_DATASET_STORAGE_KEY, activeDatasetKey);
   void loadCsvData();
-});
-
-el.btnLoadModel.addEventListener("click", () => {
-  const id = el.modelSelect.value;
-  if (!id) return;
-  const ok = loadSelectedModelIntoNet(id);
-  if (!ok) {
-    setStatus("Ausgewähltes Modell konnte nicht geladen werden");
-    return;
-  }
-  const entry = modelStore.models.find((m) => m.id === id);
-  setStatus(
-    `Modell geladen: ${entry?.name ?? id} | err ${fmtPct(entry?.metrics.errorRate ?? null)} | acc ${fmtPct(entry?.metrics.testAcc ?? null)}`,
-  );
 });
 
 el.btnSaveModelAs.addEventListener("click", () => {
@@ -1084,6 +1179,25 @@ el.btnTrain.addEventListener("click", () => {
     );
   })();
 });
+
+el.epochsInput.addEventListener("input", () => {
+  syncEpochPresetHighlight();
+  updateRunHint();
+});
+el.batchSizeInput.addEventListener("input", () => {
+  updateRunHint();
+});
+for (const btn of document.querySelectorAll<HTMLButtonElement>(".epochPresetBtn")) {
+  btn.addEventListener("click", () => {
+    const raw = btn.dataset.epochs;
+    if (!raw) return;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n)) return;
+    el.epochsInput.value = String(Math.min(200, Math.max(1, n)));
+    syncEpochPresetHighlight();
+    updateRunHint();
+  });
+}
 
 window.addEventListener("beforeunload", () => {
   stopTraining = true;
