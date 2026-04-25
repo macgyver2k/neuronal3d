@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neuronal3D</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; }
+      #app { display: flex; flex-direction: column; height: 100%; }
+      #toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem; align-items: center; background: #161b22; border-bottom: 1px solid #30363d; }
+      #toolbar button, #toolbar label { cursor: pointer; }
+      #toolbar button { padding: 0.35rem 0.65rem; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: inherit; }
+      #toolbar button:disabled { opacity: 0.5; cursor: not-allowed; }
+      #viz { flex: 1; min-height: 0; position: relative; }
+      #viz canvas { display: block; width: 100%; height: 100%; }
+      #status { font-size: 0.85rem; color: #8b949e; margin-left: auto; }
+      #drawPanel { width: 280px; padding: 0.5rem; background: #161b22; border-top: 1px solid #30363d; display: flex; flex-direction: column; gap: 0.5rem; }
+      #drawCanvas { border: 1px solid #30363d; border-radius: 6px; background: #000; touch-action: none; align-self: center; }
+      #hint { font-size: 0.75rem; color: #8b949e; max-width: 280px; }
+      #mainRow { display: flex; flex: 1; min-height: 0; }
+      #vizWrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar">
+        <label>MNIST train CSV <input id="trainFile" type="file" accept=".csv,text/csv" /></label>
+        <label>MNIST test CSV <input id="testFile" type="file" accept=".csv,text/csv" /></label>
+        <button id="btnTrain" type="button" disabled>Training starten</button>
+        <button id="btnPause" type="button" disabled>Pause</button>
+        <button id="btnInferRandom" type="button" disabled>Zufälliges Testbild</button>
+        <button id="btnInferDraw" type="button" disabled>Canvas inferieren</button>
+        <button id="btnClearDraw" type="button">Canvas leeren</button>
+        <span id="status">CSV laden …</span>
+      </div>
+      <div id="mainRow">
+        <div id="vizWrap">
+          <div id="viz"></div>
+        </div>
+        <div id="drawPanel">
+          <canvas id="drawCanvas" width="280" height="280"></canvas>
+          <div id="hint">MNIST-CSV: erste Spalte Label 0–9, danach 784 Pixel 0–255. Dateien z. B. von Kaggle „mnist-as-csv“.</div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
