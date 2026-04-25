@@ -1,7 +1,7 @@
 import { parseMnistCsv, type MnistSample } from "./data/mnist.js";
 import { matFromColVec } from "./nn/matrix.js";
 import { activationSlices, MLP } from "./nn/network.js";
-import { trainLoop } from "./train/trainer.js";
+import { trainLoop, type TrainEpochSummary } from "./train/trainer.js";
 import { Network3D } from "./viz/network3d.js";
 import { animateLoop, createScene } from "./viz/scene.js";
 import trainCsvUrl from "./data/csv/mnist_train.csv?url";
@@ -36,6 +36,7 @@ const el = {
   btnInferDraw: document.getElementById("btnInferDraw") as HTMLButtonElement,
   btnClearDraw: document.getElementById("btnClearDraw") as HTMLButtonElement,
   status: document.getElementById("status") as HTMLSpanElement,
+  epochTrack: document.getElementById("epochTrack") as HTMLPreElement,
   viz: document.getElementById("viz") as HTMLElement,
   drawCanvas: document.getElementById("drawCanvas") as HTMLCanvasElement,
 };
@@ -96,6 +97,7 @@ let modelStore: StoredModelCollection = { version: 2, activeModelId: null, model
 let activeModelId: string | null = null;
 let lastTrainLoss = 0;
 let lastTrainBatchAcc = 0;
+let epochTrackRows: TrainEpochSummary[] = [];
 
 const ctxDraw = el.drawCanvas.getContext("2d");
 if (!ctxDraw) throw new Error("canvas");
@@ -140,6 +142,20 @@ el.btnClearDraw.addEventListener("click", () => {
 
 function setStatus(t: string): void {
   el.status.textContent = t;
+}
+
+function renderEpochTracking(): void {
+  if (epochTrackRows.length === 0) {
+    el.epochTrack.textContent = "Epoch-Tracking\nNoch kein Training";
+    return;
+  }
+  const rows = epochTrackRows.slice(-10).map((r) => {
+    const ep = fmtInt(r.epoch + 1, 3);
+    const loss = fmtFloat(r.loss, 8, 4);
+    const acc = fmtFloat(r.trainAcc * 100, 6, 2);
+    return `Ep ${ep}  loss ${loss}  acc ${acc}%`;
+  });
+  el.epochTrack.textContent = ["Epoch-Tracking", ...rows].join("\n");
 }
 
 function fmtInt(n: number, width: number): string {
@@ -442,28 +458,55 @@ function canvasToMnistPixels(): number[] {
   const h = el.drawCanvas.height;
   const img = ctx2d.getImageData(0, 0, w, h);
   const d = img.data;
-  const cell = w / 28;
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+  const inkThreshold = 20;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const v = (d[i] + d[i + 1] + d[i + 2]) / 3;
+      if (v > inkThreshold) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return new Array<number>(784).fill(0);
+  const bw = maxX - minX + 1;
+  const bh = maxY - minY + 1;
+  const side = Math.max(bw, bh);
+  const pad = Math.max(2, Math.floor(side * 0.2));
+  const cx = (minX + maxX) * 0.5;
+  const cy = (minY + maxY) * 0.5;
+  const cropSide = side + pad * 2;
+  const cropX0 = cx - cropSide * 0.5;
+  const cropY0 = cy - cropSide * 0.5;
   const out = new Array<number>(784);
   let k = 0;
   for (let gy = 0; gy < 28; gy++) {
     for (let gx = 0; gx < 28; gx++) {
+      const sx0 = cropX0 + (gx / 28) * cropSide;
+      const sy0 = cropY0 + (gy / 28) * cropSide;
+      const sx1 = cropX0 + ((gx + 1) / 28) * cropSide;
+      const sy1 = cropY0 + ((gy + 1) / 28) * cropSide;
+      const x0 = Math.max(0, Math.floor(sx0));
+      const y0 = Math.max(0, Math.floor(sy0));
+      const x1 = Math.min(w, Math.ceil(sx1));
+      const y1 = Math.min(h, Math.ceil(sy1));
       let sum = 0;
-      const x0 = Math.floor(gx * cell);
-      const y0 = Math.floor(gy * cell);
-      const x1 = Math.floor((gx + 1) * cell);
-      const y1 = Math.floor((gy + 1) * cell);
       let cnt = 0;
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
           const i = (y * w + x) * 4;
-          const r = d[i];
-          const g = d[i + 1];
-          const b = d[i + 2];
-          sum += (r + g + b) / 3;
+          sum += (d[i] + d[i + 1] + d[i + 2]) / 3;
           cnt++;
         }
       }
-      out[k++] = sum / Math.max(1, cnt) / 255;
+      out[k++] = cnt > 0 ? sum / cnt / 255 : 0;
     }
   }
   return out;
@@ -627,6 +670,8 @@ el.btnTrain.addEventListener("click", () => {
       });
     }
     lastInferActsDebug = null;
+    epochTrackRows = [];
+    renderEpochTracking();
     publishVizState("train", zeroActivationsForLayout());
     await trainLoop(
       net,
@@ -639,6 +684,10 @@ el.btnTrain.addEventListener("click", () => {
         setStatus(
           `Ep ${fmtInt(s.epoch + 1, 3)}  Batch ${fmtInt(s.batchIndex, 5)}  loss ${fmtFloat(s.loss, 8, 4)}  acc ${fmtFloat(s.trainAccBatch * 100, 6, 1)}%`,
         );
+      },
+      (ep) => {
+        epochTrackRows.push(ep);
+        renderEpochTracking();
       },
       () => pauseTraining,
       () => stopTraining,
@@ -681,6 +730,7 @@ window.addEventListener("beforeunload", () => {
 });
 
 setStatus("MNIST-CSV wird automatisch geladen …");
+renderEpochTracking();
 updateButtons();
 void loadCsvData();
 try {
