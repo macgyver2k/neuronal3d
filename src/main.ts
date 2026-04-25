@@ -17,6 +17,8 @@ const TRAIN_DEFAULTS = {
 } as const;
 const MODEL_STORAGE_KEY_V1 = "neuronal3d:model:v1";
 const MODEL_STORAGE_KEY_V2 = "neuronal3d:models:v2";
+const EPOCH_TRACK_STORAGE_KEY = "neuronal3d:epochTrack:v1";
+const EPOCH_TRACK_MAX_ROWS_PER_MODEL = 500;
 const VIZ_DEBUG_INFER =
   typeof globalThis.location !== "undefined" &&
   new URLSearchParams(globalThis.location.search).has("vizdebug");
@@ -97,7 +99,9 @@ let modelStore: StoredModelCollection = { version: 2, activeModelId: null, model
 let activeModelId: string | null = null;
 let lastTrainLoss = 0;
 let lastTrainBatchAcc = 0;
-let epochTrackRows: TrainEpochSummary[] = [];
+type PersistedEpochRow = TrainEpochSummary & { savedAt: string; run: number };
+let epochTrackRows: PersistedEpochRow[] = [];
+let currentEpochRun = 0;
 
 const ctxDraw = el.drawCanvas.getContext("2d");
 if (!ctxDraw) throw new Error("canvas");
@@ -149,13 +153,95 @@ function renderEpochTracking(): void {
     el.epochTrack.textContent = "Epoch-Tracking\nNoch kein Training";
     return;
   }
-  const rows = epochTrackRows.slice(-10).map((r) => {
+  const rows = epochTrackRows.slice(-200).map((r) => {
+    const run = String(r.run).padStart(2, "0");
     const ep = fmtInt(r.epoch + 1, 3);
     const loss = fmtFloat(r.loss, 8, 4);
     const acc = fmtFloat(r.trainAcc * 100, 6, 2);
-    return `Ep ${ep}  loss ${loss}  acc ${acc}%`;
+    return `R${run} Ep ${ep}  loss ${loss}  acc ${acc}%`;
   });
   el.epochTrack.textContent = ["Epoch-Tracking", ...rows].join("\n");
+}
+
+type EpochTrackStore = { version: 1; byModelId: Record<string, PersistedEpochRow[]> };
+
+function loadEpochTrackStore(): EpochTrackStore {
+  try {
+    const raw = localStorage.getItem(EPOCH_TRACK_STORAGE_KEY);
+    if (!raw) return { version: 1, byModelId: {} };
+    const p = JSON.parse(raw) as EpochTrackStore;
+    if (p.version !== 1 || typeof p.byModelId !== "object" || p.byModelId === null) return { version: 1, byModelId: {} };
+    const byModelId: Record<string, PersistedEpochRow[]> = {};
+    for (const [id, arr] of Object.entries(p.byModelId)) {
+      if (!Array.isArray(arr)) continue;
+      const norm: PersistedEpochRow[] = [];
+      for (const x of arr) {
+        if (!x || typeof x !== "object") continue;
+        const o = x as Record<string, unknown>;
+        if (
+          typeof o.epoch !== "number" ||
+          typeof o.loss !== "number" ||
+          typeof o.trainAcc !== "number"
+        ) {
+          continue;
+        }
+        norm.push({
+          epoch: o.epoch,
+          loss: o.loss,
+          trainAcc: o.trainAcc,
+          savedAt: typeof o.savedAt === "string" ? o.savedAt : "",
+          run: typeof o.run === "number" ? o.run : 0,
+        });
+      }
+      byModelId[id] = norm;
+    }
+    return { version: 1, byModelId };
+  } catch {
+    return { version: 1, byModelId: {} };
+  }
+}
+
+function saveEpochTrackStore(store: EpochTrackStore): void {
+  localStorage.setItem(EPOCH_TRACK_STORAGE_KEY, JSON.stringify(store));
+}
+
+function readEpochHistoryForModel(modelId: string): PersistedEpochRow[] {
+  return loadEpochTrackStore().byModelId[modelId] ?? [];
+}
+
+function nextRunSeq(modelId: string): number {
+  const rows = readEpochHistoryForModel(modelId);
+  if (rows.length === 0) return 1;
+  let mx = 0;
+  for (const r of rows) mx = Math.max(mx, r.run);
+  return mx + 1;
+}
+
+function appendEpochToStorage(modelId: string, row: PersistedEpochRow): void {
+  const st = loadEpochTrackStore();
+  const prev = st.byModelId[modelId] ?? [];
+  const next = [...prev, row];
+  if (next.length > EPOCH_TRACK_MAX_ROWS_PER_MODEL) {
+    next.splice(0, next.length - EPOCH_TRACK_MAX_ROWS_PER_MODEL);
+  }
+  st.byModelId[modelId] = next;
+  saveEpochTrackStore(st);
+}
+
+function clearEpochHistoryForModel(modelId: string): void {
+  const st = loadEpochTrackStore();
+  delete st.byModelId[modelId];
+  saveEpochTrackStore(st);
+}
+
+function applyEpochHistoryToUi(modelId: string | null): void {
+  if (!modelId) {
+    epochTrackRows = [];
+    renderEpochTracking();
+    return;
+  }
+  epochTrackRows = [...readEpochHistoryForModel(modelId)];
+  renderEpochTracking();
 }
 
 function fmtInt(n: number, width: number): string {
@@ -274,6 +360,7 @@ function refreshModelSelect(): void {
   if (selected && modelStore.models.some((m) => m.id === selected)) {
     el.modelSelect.value = selected;
   }
+  applyEpochHistoryToUi(el.modelSelect.value || null);
 }
 
 function upsertModelEntry(entry: StoredModelEntry): void {
@@ -378,6 +465,7 @@ function loadSelectedModelIntoNet(id: string): boolean {
   modelStore.activeModelId = entry.id;
   saveModelStoreToStorage(modelStore);
   lastInferActsDebug = null;
+  refreshModelSelect();
   publishVizState("idle", zeroActivationsForLayout());
   updateButtons();
   return true;
@@ -575,6 +663,7 @@ el.btnPause.addEventListener("click", () => {
 });
 
 el.modelSelect.addEventListener("change", () => {
+  applyEpochHistoryToUi(el.modelSelect.value || null);
   updateButtons();
 });
 
@@ -626,6 +715,7 @@ el.btnResetModel.addEventListener("click", () => {
   lastTrainLoss = 0;
   lastTrainBatchAcc = 0;
   lastInferActsDebug = null;
+  clearEpochHistoryForModel(currentId);
   upsertModelEntry({
     ...currentEntry,
     updatedAt: new Date().toISOString(),
@@ -638,6 +728,7 @@ el.btnResetModel.addEventListener("click", () => {
       epochsTrained: 0,
     },
   });
+  applyEpochHistoryToUi(currentId);
   publishVizState("idle", zeroActivationsForLayout());
   setStatus(`Modell neu initialisiert: ${currentEntry.name}`);
 });
@@ -670,6 +761,13 @@ el.btnTrain.addEventListener("click", () => {
       });
     }
     lastInferActsDebug = null;
+    const trainModelId = activeModelId ?? el.modelSelect.value;
+    if (!trainModelId) {
+      trainingRunning = false;
+      updateButtons();
+      return;
+    }
+    currentEpochRun = nextRunSeq(trainModelId);
     epochTrackRows = [];
     renderEpochTracking();
     publishVizState("train", zeroActivationsForLayout());
@@ -686,7 +784,13 @@ el.btnTrain.addEventListener("click", () => {
         );
       },
       (ep) => {
-        epochTrackRows.push(ep);
+        const row: PersistedEpochRow = {
+          ...ep,
+          run: currentEpochRun,
+          savedAt: new Date().toISOString(),
+        };
+        epochTrackRows.push(row);
+        appendEpochToStorage(trainModelId, row);
         renderEpochTracking();
       },
       () => pauseTraining,
@@ -730,7 +834,6 @@ window.addEventListener("beforeunload", () => {
 });
 
 setStatus("MNIST-CSV wird automatisch geladen …");
-renderEpochTracking();
 updateButtons();
 void loadCsvData();
 try {
@@ -742,8 +845,12 @@ try {
     const entry = modelStore.models.find((m) => m.id === toLoad);
     setStatus(`Modell aus Browser-Speicher geladen: ${entry?.name ?? toLoad}`);
   } else if (modelStore.models.length > 0) {
+    applyEpochHistoryToUi(el.modelSelect.value || null);
     setStatus(`${modelStore.models.length} Modellstände im Browser gefunden`);
+  } else {
+    applyEpochHistoryToUi(null);
   }
 } catch {
   setStatus("MNIST-CSV wird automatisch geladen …");
+  applyEpochHistoryToUi(null);
 }

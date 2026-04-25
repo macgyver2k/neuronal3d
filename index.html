@@ -22,18 +22,40 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         font-variant-numeric: tabular-nums;
       }
-      #drawPanel { width: 280px; padding: 0.5rem; background: #161b22; border-top: 1px solid #30363d; display: flex; flex-direction: column; gap: 0.5rem; }
-      #drawCanvas { border: 1px solid #30363d; border-radius: 6px; background: #000; touch-action: none; align-self: center; }
-      #hint { font-size: 0.75rem; color: #8b949e; max-width: 280px; }
+      #drawPanel {
+        flex: 0 0 auto;
+        width: clamp(320px, 32vw, 480px);
+        min-width: min(100%, 320px);
+        max-width: 100%;
+        padding: 0.65rem;
+        background: #161b22;
+        border-left: 1px solid #30363d;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+        min-height: 0;
+      }
+      #drawCanvas { border: 1px solid #30363d; border-radius: 6px; background: #000; touch-action: none; width: 100%; max-width: 400px; height: auto; aspect-ratio: 1; align-self: center; }
+      #hint { font-size: 0.75rem; color: #8b949e; line-height: 1.35; }
+      #epochTrackWrap {
+        flex: 1;
+        min-height: 10rem;
+        max-height: min(42vh, 28rem);
+        overflow: auto;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 0.45rem 0.55rem;
+        background: #0d1117;
+      }
       #epochTrack {
-        font-size: 0.75rem;
+        font-size: 0.78rem;
         color: #9fb0c0;
         margin: 0;
         white-space: pre;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         font-variant-numeric: tabular-nums;
-        line-height: 1.35;
-        min-height: 8.2rem;
+        line-height: 1.4;
+        min-width: max-content;
       }
       #mainRow { display: flex; flex: 1; min-height: 0; }
       #vizWrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -66,9 +88,11 @@
           <div id="viz"></div>
         </div>
         <div id="drawPanel">
-          <canvas id="drawCanvas" width="280" height="280"></canvas>
-          <pre id="epochTrack">Epoch-Tracking
+          <canvas id="drawCanvas" width="320" height="320"></canvas>
+          <div id="epochTrackWrap">
+            <pre id="epochTrack">Epoch-Tracking
 Noch kein Training</pre>
+          </div>
           <div id="hint">MNIST-CSV: erste Spalte Label 0–9, danach 784 Pixel 0–255. Dateien z. B. von Kaggle „mnist-as-csv“.</div>
         </div>
       </div>
