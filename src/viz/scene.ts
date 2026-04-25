@@ -84,7 +84,8 @@ export function createScene(container: HTMLElement): {
   const moveSpeed = 12;
 
   const isTypingFocus = (t: EventTarget | null) =>
-    t instanceof HTMLElement && t.closest("input, textarea, [contenteditable='true']") !== null;
+    t instanceof HTMLElement &&
+    t.closest("input, textarea, [contenteditable='true']") !== null;
 
   const onKeyNavDown = (event: KeyboardEvent) => {
     if (!navCodes.has(event.code) || isTypingFocus(event.target)) return;
@@ -110,7 +111,10 @@ export function createScene(container: HTMLElement): {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(
-    new THREE.Vector2(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight)),
+    new THREE.Vector2(
+      Math.max(1, container.clientWidth),
+      Math.max(1, container.clientHeight),
+    ),
     1.05,
     0.65,
     0.12,

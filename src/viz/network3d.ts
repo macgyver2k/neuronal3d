@@ -40,7 +40,9 @@ function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
       const ringR = 0.35 + Math.min(1.4, n * 0.018);
       for (let i = 0; i < n; i++) {
         const t = (i / Math.max(1, n)) * Math.PI * 2;
-        pts.push(new THREE.Vector3(x, Math.sin(t) * ringR, Math.cos(t) * ringR));
+        pts.push(
+          new THREE.Vector3(x, Math.sin(t) * ringR, Math.cos(t) * ringR),
+        );
       }
     } else {
       const side = Math.ceil(Math.sqrt(n));
@@ -176,7 +178,7 @@ export class Network3D {
     }
     const outIdx = this.layerSizes.length - 1;
     const outCount = this.layerSizes[outIdx];
-    const outX = this.positions[outIdx][0]?.x ?? (outIdx * 3.2);
+    const outX = this.positions[outIdx][0]?.x ?? outIdx * 3.2;
     const labelX = outX + 1.8;
     const labelYOffset = 2.4;
     for (let i = 0; i < outCount; i++) {
@@ -199,15 +201,24 @@ export class Network3D {
   }
 
   resetActivationScaling(): void {
-    for (let i = 0; i < this.activationScale.length; i++) this.activationScale[i] = 1;
+    for (let i = 0; i < this.activationScale.length; i++)
+      this.activationScale[i] = 1;
   }
 
-  setEdgeFocus(mode: "off" | "infer" | "trainRecent", activations: number[][] | null): void {
+  setEdgeFocus(
+    mode: "off" | "infer" | "trainRecent",
+    activations: number[][] | null,
+  ): void {
     this.edgeFocusMode = mode;
-    this.edgeFocusActivations = activations ? activations.map((a) => [...a]) : null;
+    this.edgeFocusActivations = activations
+      ? activations.map((a) => [...a])
+      : null;
   }
 
-  setInferResult(predictedDigit: number | null, expectedDigit: number | null): void {
+  setInferResult(
+    predictedDigit: number | null,
+    expectedDigit: number | null,
+  ): void {
     this.inferPredictedDigit = predictedDigit;
     this.inferExpectedDigit = expectedDigit;
   }
@@ -277,8 +288,13 @@ export class Network3D {
           const mat = s.material as THREE.SpriteMaterial;
           const inferPred = this.inferPredictedDigit ?? best;
           const inferExpected = this.inferExpectedDigit;
-          const inferWrong = inferExpected !== null && inferPred !== inferExpected;
-          if (this.edgeFocusMode === "infer" && inferWrong && i === inferExpected) {
+          const inferWrong =
+            inferExpected !== null && inferPred !== inferExpected;
+          if (
+            this.edgeFocusMode === "infer" &&
+            inferWrong &&
+            i === inferExpected
+          ) {
             mat.opacity = 0.98;
             mat.color.setHex(0xff3b30);
             s.scale.setScalar(outputDigitSpriteWrongExpected);
@@ -324,9 +340,13 @@ export class Network3D {
       const layerW = weights[L];
       if (!layerW || layerW.length === 0) continue;
       const lines = this.edgeLines[L];
-      const colorAttr = lines.geometry.getAttribute("color") as THREE.BufferAttribute;
+      const colorAttr = lines.geometry.getAttribute(
+        "color",
+      ) as THREE.BufferAttribute;
       const arr = colorAttr.array as Float32Array;
-      const posAttr = lines.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const posAttr = lines.geometry.getAttribute(
+        "position",
+      ) as THREE.BufferAttribute;
       const posArr = posAttr.array as Float32Array;
       const map = this.edgeFromTo[L];
       const lastWeight = this.edgeRecentLastWeight[L];
@@ -336,10 +356,13 @@ export class Network3D {
       let contribMx = 1e-12;
       let deltaMx = 1e-12;
       const fromActs =
-        this.edgeFocusMode === "infer" && this.edgeFocusActivations && this.edgeFocusActivations[L]
+        this.edgeFocusMode === "infer" &&
+        this.edgeFocusActivations &&
+        this.edgeFocusActivations[L]
           ? this.edgeFocusActivations[L]
           : null;
-      const threshold = L === 0 ? this.edgeFocusThresholdFirstLayer : this.edgeFocusThreshold;
+      const threshold =
+        L === 0 ? this.edgeFocusThresholdFirstLayer : this.edgeFocusThreshold;
       for (let r = 0; r < layerW.length; r++) {
         for (let c = 0; c < layerW[r].length; c++) {
           const wrc = Number.isFinite(layerW[r][c]) ? layerW[r][c] : 0;
@@ -350,7 +373,9 @@ export class Network3D {
           deltaArr[idx] = delta;
           if (delta > deltaMx) deltaMx = delta;
           if (fromActs && c < fromActs.length) {
-            const fa = Number.isFinite(fromActs[c]) ? Math.max(0, fromActs[c]) : 0;
+            const fa = Number.isFinite(fromActs[c])
+              ? Math.max(0, fromActs[c])
+              : 0;
             const contrib = Math.abs(wrc) * fa;
             if (contrib > contribMx) contribMx = contrib;
           }
@@ -369,7 +394,9 @@ export class Network3D {
         let contribNorm = 1;
         let recentNorm = 0;
         if (fromActs && ref.from < fromActs.length) {
-          const fa = Number.isFinite(fromActs[ref.from]) ? Math.max(0, fromActs[ref.from]) : 0;
+          const fa = Number.isFinite(fromActs[ref.from])
+            ? Math.max(0, fromActs[ref.from])
+            : 0;
           contribNorm = (Math.abs(w) * fa) / Math.max(1e-9, contribMx);
           visible = contribNorm >= threshold;
         }
@@ -385,18 +412,38 @@ export class Network3D {
           }
           visible = ageArr[k] <= this.edgeRecentWindow;
         }
-        const tBase = Math.min(1, Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65));
+        const tBase = Math.min(
+          1,
+          Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65),
+        );
         const tInfer =
           fromActs && visible
-            ? Math.min(1, Math.max(0, (contribNorm - threshold) / Math.max(1e-9, 1 - threshold)))
+            ? Math.min(
+                1,
+                Math.max(
+                  0,
+                  (contribNorm - threshold) / Math.max(1e-9, 1 - threshold),
+                ),
+              )
             : 0;
         const tTrainRecent =
           this.edgeFocusMode === "trainRecent" && visible
             ? 1 - ageArr[k] / Math.max(1, this.edgeRecentWindow)
             : 0;
-        const t = this.edgeFocusMode === "trainRecent" ? tTrainRecent : (fromActs ? (visible ? tInfer : 0) : tBase);
-        const tRecentVis = this.edgeFocusMode === "trainRecent" ? Math.pow(Math.max(0, tTrainRecent), 1.6) : 0;
-        if (this.edgeFocusMode === "trainRecent") visible = visible && tRecentVis >= 0.06;
+        const t =
+          this.edgeFocusMode === "trainRecent"
+            ? tTrainRecent
+            : fromActs
+              ? visible
+                ? tInfer
+                : 0
+              : tBase;
+        const tRecentVis =
+          this.edgeFocusMode === "trainRecent"
+            ? Math.pow(Math.max(0, tTrainRecent), 1.6)
+            : 0;
+        if (this.edgeFocusMode === "trainRecent")
+          visible = visible && tRecentVis >= 0.06;
         let r = 0;
         let g = 0;
         let b = 0;
@@ -422,7 +469,11 @@ export class Network3D {
         const i = k * 6;
         const pFrom = this.positions[L][ref.from];
         const pTo = this.positions[L + 1][ref.to];
-        if ((this.edgeFocusMode === "infer" || this.edgeFocusMode === "trainRecent") && !visible) {
+        if (
+          (this.edgeFocusMode === "infer" ||
+            this.edgeFocusMode === "trainRecent") &&
+          !visible
+        ) {
           posArr[i + 0] = pFrom.x;
           posArr[i + 1] = pFrom.y;
           posArr[i + 2] = pFrom.z;
@@ -452,12 +503,14 @@ export class Network3D {
   dispose(): void {
     for (const m of this.meshes) {
       m.geometry.dispose();
-      if (Array.isArray(m.material)) m.material.forEach((mat: THREE.Material) => mat.dispose());
+      if (Array.isArray(m.material))
+        m.material.forEach((mat: THREE.Material) => mat.dispose());
       else m.material.dispose();
     }
     for (const l of this.edgeLines) {
       l.geometry.dispose();
-      if (Array.isArray(l.material)) l.material.forEach((mat: THREE.Material) => mat.dispose());
+      if (Array.isArray(l.material))
+        l.material.forEach((mat: THREE.Material) => mat.dispose());
       else l.material.dispose();
     }
     for (const s of this.outputDigitSprites) {
