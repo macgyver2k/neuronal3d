@@ -9,9 +9,9 @@ function fmtPct(v: number | null): string {
 export type ModelBarMenuItem = {
   id: string;
   name: string;
-  chipEp: string;
-  chipAcc: string;
-  chipErr: string;
+  epochValue: string;
+  accValue: string;
+  errValue: string;
   active: boolean;
 };
 
@@ -44,7 +44,7 @@ export const selectModelDropdownLabel = createSelector(selectNeuronal, (s) => {
   }
   return {
     name: entry.name,
-    meta: `${entry.metrics.epochsTrained} Ep · Acc ${fmtPct(entry.metrics.testAcc)} · Err ${fmtPct(entry.metrics.errorRate)}`,
+    meta: `Epoch ${entry.metrics.epochsTrained} · Test-Genauigkeit ${fmtPct(entry.metrics.testAcc)} · Fehlerrate ${fmtPct(entry.metrics.errorRate)}`,
   };
 });
 
@@ -59,9 +59,9 @@ export const selectModelDropdownMenu = createSelector(selectNeuronal, (s): Model
   const items: ModelBarMenuItem[] = s.modelCollection.models.map((entry) => ({
     id: entry.id,
     name: entry.name,
-    chipEp: `${entry.metrics.epochsTrained} Ep`,
-    chipAcc: `Acc ${fmtPct(entry.metrics.testAcc)}`,
-    chipErr: `Err ${fmtPct(entry.metrics.errorRate)}`,
+    epochValue: String(entry.metrics.epochsTrained),
+    accValue: fmtPct(entry.metrics.testAcc),
+    errValue: fmtPct(entry.metrics.errorRate),
     active: entry.id === activeId,
   }));
   return { phase: "list", items, trainingRunning: s.training.running };

@@ -62,11 +62,20 @@ import { selectNeuronalModelBar, selectTrainingRunning } from "../store/neuronal
                       (click)="pickActiveModel(item.id)"
                     >
                       <span class="n3-modelbar-option-name">{{ item.name }}</span>
-                      <span class="n3-modelbar-option-meta flex flex-wrap gap-1">
-                        <span class="n3-modelbar-chip">{{ item.chipEp }}</span>
-                        <span class="n3-modelbar-chip">{{ item.chipAcc }}</span>
-                        <span class="n3-modelbar-chip">{{ item.chipErr }}</span>
-                      </span>
+                      <div class="n3-modelbar-option-stats">
+                        <div class="n3-modelbar-stat n3-modelbar-stat--epoch">
+                          <span class="n3-modelbar-stat-label">Epoch</span>
+                          <span class="n3-modelbar-stat-value">{{ item.epochValue }}</span>
+                        </div>
+                        <div class="n3-modelbar-stat n3-modelbar-stat--acc">
+                          <span class="n3-modelbar-stat-label">Test-Genauigkeit</span>
+                          <span class="n3-modelbar-stat-value">{{ item.accValue }}</span>
+                        </div>
+                        <div class="n3-modelbar-stat n3-modelbar-stat--err">
+                          <span class="n3-modelbar-stat-label">Fehlerrate</span>
+                          <span class="n3-modelbar-stat-value">{{ item.errValue }}</span>
+                        </div>
+                      </div>
                     </button>
                   }
                 }

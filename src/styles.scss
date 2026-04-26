@@ -46,18 +46,53 @@ app-root {
   white-space: nowrap;
 }
 
-.n3-root .n3-modelbar-option-meta {
+.n3-root .n3-modelbar-option-stats {
   display: flex;
-  gap: 0.24rem;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.05rem;
 }
 
-.n3-root .n3-modelbar-chip {
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
-  color: #b2bdd3;
-  font-size: 0.64rem;
-  padding: 0.22rem 0.42rem;
+.n3-root .n3-modelbar-stat {
+  flex: 1 1 5rem;
+  min-width: 4.5rem;
+  border-radius: 8px;
+  padding: 0.26rem 0.4rem 0.3rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.n3-root .n3-modelbar-stat-label {
+  display: block;
+  font-size: 0.54rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7a8499;
+  margin-bottom: 0.12rem;
+  line-height: 1.2;
+}
+
+.n3-root .n3-modelbar-stat-value {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: #dce2ee;
+  line-height: 1.15;
+}
+
+.n3-root .n3-modelbar-stat--epoch .n3-modelbar-stat-value {
+  color: #c5e8dc;
+}
+
+.n3-root .n3-modelbar-stat--acc .n3-modelbar-stat-value {
+  color: #cad6ea;
+}
+
+.n3-root .n3-modelbar-stat--err .n3-modelbar-stat-value {
+  color: #ddd0c8;
 }
 
 .n3-root .n3-modelbar-option:hover,
@@ -71,6 +106,11 @@ app-root {
   background: linear-gradient(180deg, rgba(54, 211, 166, 0.28), rgba(54, 211, 166, 0.16));
   border-color: rgba(54, 211, 166, 0.55);
   box-shadow: inset 0 0 0 1px rgba(54, 211, 166, 0.22);
+}
+
+.n3-root .n3-modelbar-option--active .n3-modelbar-stat {
+  border-color: rgba(54, 211, 166, 0.2);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .n3-root .n3-modelbar-option--active::after {
