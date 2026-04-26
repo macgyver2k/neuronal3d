@@ -90,7 +90,7 @@ export const neuronalReducer = createReducer<NeuronalState>(
       currentRunStartedAt: a.runStartedAt,
       currentRunStartedMs: a.runStartedMs,
     },
-    epochDisplayRows: [],
+    epochDisplayRows: epochRowsForId(s, a.modelId),
     modelDropdownOpen: false,
   })),
   on(NeuronalActions.trainingEpochAppended, (s, { modelId, row }): NeuronalState => {

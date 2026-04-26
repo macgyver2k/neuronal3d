@@ -27,7 +27,8 @@ export type EpochTrackView = {
 export const selectEpochTrackView = createSelector(selectNeuronal, (s): EpochTrackView => {
   const id = s.modelCollection.activeModelId;
   const entry = id ? s.modelCollection.models.find((m) => m.id === id) : null;
-  const epochsTotal = entry?.metrics.epochsTrained ?? 0;
+  const trackLen = id ? (s.epochByModelId[id]?.length ?? 0) : 0;
+  const epochsTotal = Math.max(entry?.metrics.epochsTrained ?? 0, trackLen);
   const all = s.epochDisplayRows;
   const rows = all.length === 0 ? [] : [...all].slice(-200).reverse();
   return { epochsTotal, rows };
