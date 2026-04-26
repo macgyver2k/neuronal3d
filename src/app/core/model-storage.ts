@@ -19,28 +19,16 @@ function modelMatchesExpectedLayout(data: StoredModel): boolean {
   );
 }
 
-function saveModelStoreToStorageInternalSync(store: StoredModelCollection): void {
-  localStorage.setItem(MODEL_STORAGE_KEY_V2, JSON.stringify(store));
-}
-
-export function runDeferredStorageWrite(run: () => void): void {
-  const w = globalThis as {
-    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-  };
-  if (typeof w.requestIdleCallback === "function") {
-    w.requestIdleCallback(() => run(), { timeout: 3000 });
-    return;
+export function saveModelStoreToStorageSync(store: StoredModelCollection): void {
+  try {
+    localStorage.setItem(MODEL_STORAGE_KEY_V2, JSON.stringify(store));
+  } catch {
   }
-  setTimeout(run, 0);
 }
 
 export function saveModelStoreToStorage(store: StoredModelCollection): Promise<void> {
-  return new Promise((resolve) => {
-    runDeferredStorageWrite(() => {
-      saveModelStoreToStorageInternalSync(store);
-      resolve();
-    });
-  });
+  saveModelStoreToStorageSync(store);
+  return Promise.resolve();
 }
 
 export function loadModelStoreFromStorage(): StoredModelCollection {
@@ -74,7 +62,7 @@ export function loadModelStoreFromStorage(): StoredModelCollection {
         },
       ],
     };
-    saveModelStoreToStorageInternalSync(migrated);
+    saveModelStoreToStorageSync(migrated);
     return migrated;
   }
   return { version: 2, activeModelId: null, models: [] };

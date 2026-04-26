@@ -1,4 +1,4 @@
-<div id="app" class="n3-root">
+<div #appRoot id="app" class="n3-root">
   <header class="n3-topbar">
     <div class="n3-brand">
       <div class="n3-logo" aria-hidden="true"></div>
@@ -11,18 +11,77 @@
       <div class="n3-modelbar">
         <span class="n3-modelbar-label">Aktives Modell</span>
         <div class="n3-modelbar-row">
-          <div class="n3-modelbar-dropdown">
-            <button id="modelDropdownButton" type="button" class="n3-modelbar-button" aria-haspopup="listbox" aria-expanded="false">
-              <span id="modelDropdownLabel" class="n3-modelbar-selected">
-                <span id="modelDropdownLabelName" class="n3-modelbar-selected-name"></span>
-                <span id="modelDropdownLabelMeta" class="n3-modelbar-selected-meta"></span>
-              </span>
+          <div class="n3-modelbar-dropdown" (pointerdown)="$event.stopPropagation()">
+            <button
+              id="modelDropdownButton"
+              type="button"
+              class="n3-modelbar-button"
+              aria-haspopup="listbox"
+              [disabled]="modelDropdownDisabled()"
+              [attr.aria-expanded]="dropdownOpen() ? 'true' : 'false'"
+              (click)="n.onModelDropdownButton()"
+            >
+              @if (modelBarLabel(); as label) {
+                <span class="n3-modelbar-selected">
+                  <span class="n3-modelbar-selected-name">{{ label.name }}</span>
+                  <span class="n3-modelbar-selected-meta">{{ label.meta }}</span>
+                </span>
+              }
             </button>
-            <div id="modelDropdownMenu" class="n3-modelbar-menu" role="listbox" hidden></div>
+            <div
+              id="modelDropdownMenu"
+              class="n3-modelbar-menu"
+              role="listbox"
+              [hidden]="!dropdownOpen()"
+            >
+              @if (modelMenuVm(); as vm) {
+                @switch (vm.phase) {
+                  @case ("loading") {
+                    <div class="n3-modelbar-empty">Modelle werden geladen …</div>
+                  }
+                  @case ("empty") {
+                    <div class="n3-modelbar-empty">Keine Modelle vorhanden</div>
+                  }
+                  @case ("list") {
+                    @for (item of vm.items; track item.id) {
+                      <button
+                        type="button"
+                        class="n3-modelbar-option"
+                        [class.n3-modelbar-option--active]="item.active"
+                        role="option"
+                        [attr.aria-selected]="item.active ? 'true' : 'false'"
+                        [disabled]="vm.trainingRunning"
+                        (click)="n.onActiveModelFromMenu(item.id)"
+                      >
+                        <span class="n3-modelbar-option-name">{{ item.name }}</span>
+                        <span class="n3-modelbar-option-meta">
+                          <span class="n3-modelbar-chip">{{ item.chipEp }}</span>
+                          <span class="n3-modelbar-chip">{{ item.chipAcc }}</span>
+                          <span class="n3-modelbar-chip">{{ item.chipErr }}</span>
+                        </span>
+                      </button>
+                    }
+                  }
+                }
+              }
+            </div>
           </div>
-          <button id="btnNewModel" type="button" class="n3-btn n3-btn--accent">Neues Modell starten</button>
+          <button
+            id="btnNewModel"
+            type="button"
+            class="n3-btn n3-btn--accent"
+            (click)="n.onNewModel()"
+          >
+            Neues Modell starten
+          </button>
         </div>
-        <select id="modelSelect" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+        <select
+          id="modelSelect"
+          class="sr-only"
+          tabindex="-1"
+          aria-hidden="true"
+          (change)="n.onModelSelectChange()"
+        ></select>
       </div>
       <span id="status" class="n3-status" role="status"></span>
     </div>
@@ -35,14 +94,6 @@
           <div id="viz"></div>
         </div>
       </section>
-      <aside class="n3-librarycard" aria-label="Modelle">
-        <div class="n3-panelhead">
-          <h2 class="n3-paneltitle">Modellbibliothek</h2>
-          <p class="n3-panelsub">Lokal im Browser gespeichert</p>
-        </div>
-        <div id="modelLibraryList" class="n3-modellist"></div>
-        <p class="n3-railhint">Speicherung nur in diesem Browser auf diesem Gerät.</p>
-      </aside>
     </main>
 
     <section class="n3-sidebar" aria-label="Training, Epochs und Inferenz">
@@ -56,25 +107,93 @@
           <p id="activeModelTitle" class="n3-active-title"></p>
           <p id="activeModelDetail" class="n3-active-detail"></p>
           <div class="n3-row">
-            <button id="btnSaveModelAs" type="button" class="n3-btn" disabled>Als neuen Stand speichern</button>
-            <button id="btnResetModel" type="button" class="n3-btn n3-btn--ghost" disabled>Gewichte zurücksetzen</button>
+            <button
+              id="btnSaveModelAs"
+              type="button"
+              class="n3-btn"
+              disabled
+              (click)="n.onSaveAs()"
+            >
+              Als neuen Stand speichern
+            </button>
+            <button
+              id="btnResetModel"
+              type="button"
+              class="n3-btn n3-btn--ghost"
+              disabled
+              (click)="n.onReset()"
+            >
+              Gewichte zurücksetzen
+            </button>
           </div>
         </div>
         <div class="n3-field">
           <span class="n3-label">Epochen</span>
           <div class="n3-chips" id="epochPresetRow">
-            <button type="button" class="epochPresetBtn" data-epochs="1">1</button>
-            <button type="button" class="epochPresetBtn" data-epochs="3">3</button>
-            <button type="button" class="epochPresetBtn" data-epochs="10">10</button>
-            <button type="button" class="epochPresetBtn" data-epochs="30">30</button>
+            <button
+              type="button"
+              class="epochPresetBtn"
+              [attr.data-epochs]="1"
+              (click)="n.onEpochPreset(1)"
+            >
+              1
+            </button>
+            <button
+              type="button"
+              class="epochPresetBtn"
+              [attr.data-epochs]="3"
+              (click)="n.onEpochPreset(3)"
+            >
+              3
+            </button>
+            <button
+              type="button"
+              class="epochPresetBtn"
+              [attr.data-epochs]="10"
+              (click)="n.onEpochPreset(10)"
+            >
+              10
+            </button>
+            <button
+              type="button"
+              class="epochPresetBtn"
+              [attr.data-epochs]="30"
+              (click)="n.onEpochPreset(30)"
+            >
+              30
+            </button>
           </div>
           <label class="n3-labelrow" for="epochsInput">Anzahl (1–200)</label>
-          <input id="epochsInput" type="number" min="1" max="200" step="1" value="1" />
+          <input
+            id="epochsInput"
+            type="number"
+            min="1"
+            max="200"
+            step="1"
+            value="1"
+            (input)="n.onEpochsInput()"
+          />
         </div>
         <p id="epochStepHint" class="n3-hint" aria-live="polite"></p>
         <div class="n3-row n3-row--grow">
-          <button id="btnTrain" type="button" class="n3-btn n3-btn--primary" disabled>Training starten</button>
-          <button id="btnPause" type="button" class="n3-btn" disabled>Anhalten</button>
+          <button
+            id="btnTrain"
+            type="button"
+            class="n3-btn n3-btn--primary"
+            disabled
+            (click)="n.onTrain()"
+          >
+            Training starten
+          </button>
+          <button
+            id="btnPause"
+            type="button"
+            class="n3-btn"
+            disabled
+            (click)="n.onPause()"
+          >
+            Anhalten
+          </button>
         </div>
         <details class="n3-advanced" id="trainAdvanced">
           <summary>Erweitert</summary>
@@ -82,7 +201,15 @@
             <label for="lrInput">Lernrate</label>
             <input id="lrInput" type="number" min="0.0001" max="1" step="0.0001" value="0.02" />
             <label for="batchSizeInput">Batch</label>
-            <input id="batchSizeInput" type="number" min="1" max="512" step="1" value="32" />
+            <input
+              id="batchSizeInput"
+              type="number"
+              min="1"
+              max="512"
+              step="1"
+              value="32"
+              (input)="n.onBatchSizeInput()"
+            />
             <label for="vizEveryInput">3D alle N Batches</label>
             <input id="vizEveryInput" type="number" min="1" max="1000" step="1" value="4" />
           </div>
@@ -103,12 +230,34 @@
         </div>
         <p id="inferModelContext" class="n3-inferctx" aria-live="polite"></p>
         <div class="n3-row">
-          <button id="btnInferRandom" type="button" class="n3-btn" disabled>Zufälliges Testbild</button>
+          <button
+            id="btnInferRandom"
+            type="button"
+            class="n3-btn"
+            disabled
+            (click)="n.onInferRandom()"
+          >
+            Zufälliges Testbild
+          </button>
         </div>
-        <canvas id="drawCanvas" width="320" height="320"></canvas>
+        <canvas
+          id="drawCanvas"
+          width="320"
+          height="320"
+          (contextmenu)="$event.preventDefault()"
+          (pointerdown)="n.onDrawPointerDown($event)"
+          (pointermove)="n.onDrawPointerMove($event)"
+          (pointerup)="n.onDrawPointerUp()"
+          (pointercancel)="n.onDrawPointerCancel()"
+          (pointerleave)="n.onDrawPointerLeave()"
+        ></canvas>
         <div id="drawActions" class="n3-drawactions">
-          <button id="btnInferDraw" type="button" class="n3-btn" disabled>Zeichnung auswerten</button>
-          <button id="btnClearDraw" type="button" class="n3-btn n3-btn--ghost">Leeren</button>
+          <button id="btnInferDraw" type="button" class="n3-btn" disabled (click)="n.onInferDraw()">
+            Zeichnung auswerten
+          </button>
+          <button id="btnClearDraw" type="button" class="n3-btn n3-btn--ghost" (click)="n.onClearDraw()">
+            Leeren
+          </button>
         </div>
       </article>
     </section>

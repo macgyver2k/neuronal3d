@@ -1,4 +1,3 @@
-import { runDeferredStorageWrite } from "./model-storage";
 import type { EpochTrackStore, PersistedEpochRow } from "./model.types";
 
 const EPOCH_TRACK_STORAGE_KEY = "neuronal3d:epochTrack:v1";
@@ -45,11 +44,14 @@ export function loadEpochTrackStoreFromStorage(): EpochTrackStore {
   }
 }
 
+export function saveEpochTrackStoreToStorageSync(store: EpochTrackStore): void {
+  try {
+    localStorage.setItem(EPOCH_TRACK_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+  }
+}
+
 export function saveEpochTrackStoreToStorage(store: EpochTrackStore): Promise<void> {
-  return new Promise((resolve) => {
-    runDeferredStorageWrite(() => {
-      localStorage.setItem(EPOCH_TRACK_STORAGE_KEY, JSON.stringify(store));
-      resolve();
-    });
-  });
+  saveEpochTrackStoreToStorageSync(store);
+  return Promise.resolve();
 }

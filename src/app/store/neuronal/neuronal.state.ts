@@ -1,9 +1,15 @@
 import { loadEpochTrackStoreFromStorage } from "../../core/epoch-storage";
-import { loadModelStoreFromStorage } from "../../core/model-storage";
 import type { PersistedEpochRow, StoredModelCollection } from "../../core/model.types";
+
+const emptyModelCollection = (): StoredModelCollection => ({
+  version: 2,
+  activeModelId: null,
+  models: [],
+});
 
 export type NeuronalState = {
   modelCollection: StoredModelCollection;
+  modelStoreHydrated: boolean;
   epochByModelId: Record<string, PersistedEpochRow[]>;
   epochDisplayRows: PersistedEpochRow[];
   training: {
@@ -19,7 +25,7 @@ export type NeuronalState = {
   modelDropdownOpen: boolean;
 };
 
-function initialEpochDisplay(
+export function initialEpochDisplay(
   by: Record<string, PersistedEpochRow[]>,
   col: StoredModelCollection,
 ): PersistedEpochRow[] {
@@ -29,10 +35,11 @@ function initialEpochDisplay(
 }
 
 export function createInitialNeuronalState(): NeuronalState {
-  const modelCollection = loadModelStoreFromStorage();
+  const modelCollection = emptyModelCollection();
   const epochByModelId = { ...loadEpochTrackStoreFromStorage().byModelId };
   return {
     modelCollection,
+    modelStoreHydrated: false,
     epochByModelId,
     epochDisplayRows: initialEpochDisplay(epochByModelId, modelCollection),
     training: {

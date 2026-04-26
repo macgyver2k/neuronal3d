@@ -2,7 +2,7 @@ import { createReducer, on } from "@ngrx/store";
 import { EPOCH_TRACK_MAX_ROWS_PER_MODEL } from "../../core/epoch-storage";
 import type { PersistedEpochRow, StoredModelEntry } from "../../core/model.types";
 import { NeuronalActions } from "./neuronal.actions";
-import { createInitialNeuronalState, type NeuronalState } from "./neuronal.state";
+import { createInitialNeuronalState, initialEpochDisplay, type NeuronalState } from "./neuronal.state";
 
 function appendEpoch(
   by: Record<string, PersistedEpochRow[]>,
@@ -37,6 +37,12 @@ const initial = createInitialNeuronalState();
 
 export const neuronalReducer = createReducer<NeuronalState>(
   initial,
+  on(NeuronalActions.modelStoreHydrated, (s, { modelCollection }): NeuronalState => ({
+    ...s,
+    modelCollection,
+    modelStoreHydrated: true,
+    epochDisplayRows: initialEpochDisplay(s.epochByModelId, modelCollection),
+  })),
   on(NeuronalActions.activeModelIdSet, (s, { id }): NeuronalState => ({
     ...s,
     modelCollection: { ...s.modelCollection, activeModelId: id },
