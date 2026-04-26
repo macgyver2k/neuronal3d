@@ -5,6 +5,7 @@ export const NeuronalActions = createActionGroup({
   source: "Neuronal",
   events: {
     "Model Store Hydrated": props<{ modelCollection: StoredModelCollection }>(),
+    "Epoch Store Hydrated": props<{ byModelId: Record<string, PersistedEpochRow[]> }>(),
     "Active Model Id Set": props<{ id: string }>(),
     "Model Entry Upserted": props<{ entry: StoredModelEntry }>(),
     "Epoch View Sync From Model": props<{ modelId: string }>(),
@@ -26,6 +27,8 @@ export const NeuronalActions = createActionGroup({
     "Ui Model Dropdown Toggle Requested": emptyProps(),
     "Ui Model Select Changed": emptyProps(),
     "Ui Train Start Requested": emptyProps(),
+    "Ui Export Bundle Requested": emptyProps(),
+    "Ui Reset To Pretrained Files Requested": emptyProps(),
     "Ui Save As Requested": emptyProps(),
     "Ui Reset Requested": emptyProps(),
     "Ui Infer Random Requested": emptyProps(),

@@ -2,7 +2,9 @@ import { inject, Injectable } from "@angular/core";
 import { Store } from "@ngrx/store";
 import { createNeuronalAppRuntime, type NeuronalAppRuntime } from "../../neuronal-app";
 import { NeuronalAppInstance } from "./neuronal-app-instance";
+import { loadEpochTrackStoreFromStorage } from "./epoch-storage";
 import { loadModelStoreFromStorage } from "./model-storage";
+import { ensurePretrainedInLocalStorage } from "./pretrained-bootstrap";
 import type { AppState } from "../store/app.state";
 import { NeuronalActions } from "../store/neuronal/neuronal.actions";
 
@@ -12,13 +14,32 @@ export class NeuronalAppService {
   private runtime: NeuronalAppRuntime | null = null;
 
   start(root: HTMLElement, appInstance: NeuronalAppInstance): () => void {
-    this.store.dispatch(
-      NeuronalActions.modelStoreHydrated({ modelCollection: loadModelStoreFromStorage() }),
-    );
-    this.runtime = createNeuronalAppRuntime(this.store, root, appInstance);
+    let cancelled = false;
+    let teardownRuntime: (() => void) | null = null;
+    void (async () => {
+      await ensurePretrainedInLocalStorage();
+      if (cancelled) return;
+      const modelCollection = loadModelStoreFromStorage();
+      const { byModelId } = loadEpochTrackStoreFromStorage();
+      if (cancelled) return;
+      this.store.dispatch(NeuronalActions.modelStoreHydrated({ modelCollection }));
+      this.store.dispatch(NeuronalActions.epochStoreHydrated({ byModelId: { ...byModelId } }));
+      if (cancelled) return;
+      this.runtime = createNeuronalAppRuntime(this.store, root, appInstance);
+      teardownRuntime = () => {
+        this.runtime?.destroy();
+        this.runtime = null;
+      };
+    })();
     return () => {
-      this.runtime?.destroy();
-      this.runtime = null;
+      cancelled = true;
+      if (teardownRuntime) {
+        teardownRuntime();
+        teardownRuntime = null;
+      } else {
+        this.runtime?.destroy();
+        this.runtime = null;
+      }
     };
   }
 

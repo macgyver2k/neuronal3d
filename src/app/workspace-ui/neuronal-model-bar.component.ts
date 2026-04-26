@@ -3,7 +3,7 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { Store } from "@ngrx/store";
 import type { AppState } from "../store/app.state";
 import { NeuronalActions } from "../store/neuronal/neuronal.actions";
-import { selectNeuronalModelBar } from "../store/neuronal/neuronal.selectors";
+import { selectNeuronalModelBar, selectTrainingRunning } from "../store/neuronal/neuronal.selectors";
 
 @Component({
   selector: "app-neuronal-model-bar",
@@ -15,7 +15,7 @@ import { selectNeuronalModelBar } from "../store/neuronal/neuronal.selectors";
         class="n3-modelbar-label font-semibold uppercase tracking-widest text-muted text-[0.62rem]"
         >Aktives Modell</span
       >
-      <div class="n3-modelbar-row flex min-w-0 items-stretch gap-2">
+      <div class="n3-modelbar-row flex min-w-0 flex-wrap items-stretch gap-2">
         <div
           class="n3-modelbar-dropdown relative z-[60] min-w-0 flex-1"
           (pointerdown)="$event.stopPropagation()"
@@ -82,6 +82,23 @@ import { selectNeuronalModelBar } from "../store/neuronal/neuronal.selectors";
         >
           Neues Modell starten
         </button>
+        <button
+          id="btnExportJson"
+          type="button"
+          class="n3-btn border-border shrink-0"
+          (click)="exportJson()"
+        >
+          JSON exportieren
+        </button>
+        <button
+          id="btnResetToPretrained"
+          type="button"
+          class="n3-btn n3-btn--ghost shrink-0"
+          [disabled]="trainingRunning()"
+          (click)="resetToPretrained()"
+        >
+          Auf Vorgaben zurücksetzen
+        </button>
       </div>
       <select
         id="modelSelect"
@@ -96,6 +113,7 @@ import { selectNeuronalModelBar } from "../store/neuronal/neuronal.selectors";
 export class NeuronalModelBarComponent {
   private readonly store = inject(Store<AppState>);
   readonly model = toSignal(this.store.select(selectNeuronalModelBar), { requireSync: true });
+  readonly trainingRunning = toSignal(this.store.select(selectTrainingRunning), { initialValue: false });
 
   dropdownToggle(): void {
     this.store.dispatch(NeuronalActions.uiModelDropdownToggleRequested());
@@ -111,5 +129,13 @@ export class NeuronalModelBarComponent {
 
   modelSelectChanged(): void {
     this.store.dispatch(NeuronalActions.uiModelSelectChanged());
+  }
+
+  exportJson(): void {
+    this.store.dispatch(NeuronalActions.uiExportBundleRequested());
+  }
+
+  resetToPretrained(): void {
+    this.store.dispatch(NeuronalActions.uiResetToPretrainedFilesRequested());
   }
 }

@@ -1,13 +1,16 @@
 import { inject, Injectable } from "@angular/core";
 import { Actions, createEffect, ofType } from "@ngrx/effects";
 import { Store } from "@ngrx/store";
-import { debounceTime, filter, skip, tap, withLatestFrom } from "rxjs";
+import { EMPTY, exhaustMap, from, of } from "rxjs";
+import { debounceTime, filter, skip, switchMap, tap, withLatestFrom } from "rxjs";
 import { NeuronalAppService } from "../../core/neuronal-app.service";
 import { NeuronalAppInstance } from "../../core/neuronal-app-instance";
+import { downloadJsonFile } from "../../core/download-json";
 import { saveEpochTrackStoreToStorageSync } from "../../core/epoch-storage";
+import { resetLocalStorageToPretrainedFiles } from "../../core/pretrained-bootstrap";
 import type { AppState } from "../app.state";
 import { NeuronalActions } from "./neuronal.actions";
-import { selectEpochByModelId, selectTrainingRunning } from "./neuronal.selectors";
+import { selectEpochByModelId, selectNeuronalState, selectTrainingRunning } from "./neuronal.selectors";
 
 @Injectable()
 export class NeuronalEffects {
@@ -216,6 +219,47 @@ export class NeuronalEffects {
         }),
       ),
     { dispatch: false },
+  );
+
+  uiExportBundle$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.uiExportBundleRequested),
+        withLatestFrom(this.store.select(selectNeuronalState)),
+        tap(([, n]) => {
+          downloadJsonFile("neuronal3d-models.json", n.modelCollection);
+          downloadJsonFile("neuronal3d-epochs.json", { version: 1, byModelId: n.epochByModelId });
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  uiResetToPretrainedFiles$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(NeuronalActions.uiResetToPretrainedFilesRequested),
+      withLatestFrom(this.store.select(selectTrainingRunning)),
+      filter(([, running]) => !running),
+      exhaustMap(() =>
+        from(resetLocalStorageToPretrainedFiles()).pipe(
+          switchMap((bundle) => {
+            if (!bundle) return EMPTY;
+            const pickId =
+              bundle.modelCollection.activeModelId ?? bundle.modelCollection.models[0]?.id ?? "";
+            const hydrated = [
+              NeuronalActions.modelStoreHydrated({ modelCollection: bundle.modelCollection }),
+              NeuronalActions.epochStoreHydrated({ byModelId: { ...bundle.epochStore.byModelId } }),
+            ];
+            if (pickId.length > 0) {
+              return of(
+                ...hydrated,
+                NeuronalActions.activeModelFromToolbarRequested({ id: pickId }),
+              );
+            }
+            return of(...hydrated);
+          }),
+        ),
+      ),
+    ),
   );
 
   persistEpoch$ = createEffect(

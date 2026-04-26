@@ -43,6 +43,11 @@ export const neuronalReducer = createReducer<NeuronalState>(
     modelStoreHydrated: true,
     epochDisplayRows: initialEpochDisplay(s.epochByModelId, modelCollection),
   })),
+  on(NeuronalActions.epochStoreHydrated, (s, { byModelId }): NeuronalState => ({
+    ...s,
+    epochByModelId: { ...byModelId },
+    epochDisplayRows: initialEpochDisplay(byModelId, s.modelCollection),
+  })),
   on(NeuronalActions.activeModelIdSet, (s, { id }): NeuronalState => ({
     ...s,
     modelCollection: { ...s.modelCollection, activeModelId: id },
