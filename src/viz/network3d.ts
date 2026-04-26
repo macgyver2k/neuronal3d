@@ -92,10 +92,10 @@ export class Network3D {
   private readonly edgeFocusThresholdFirstLayer = 0.38;
   private readonly edgeRecentLastWeight: Float32Array[] = [];
   private readonly edgeRecentDelta: Float32Array[] = [];
-  private readonly edgeRecentAge: Uint16Array[] = [];
-  private readonly edgeRecentDeltaThreshold = 0.18;
   private readonly edgeRecentDeltaAbsMin = 0.0008;
-  private readonly edgeRecentWindow = 10;
+  private readonly trainEdgeHighlightMax = 36;
+  private trainPrevActivations: number[][] | null = null;
+  private readonly trainActStepEps = 1e-4;
   private readonly edgeBaseOpacity: number[] = [];
   private idleDimmed = false;
   private inferPredictedDigit: number | null = null;
@@ -185,9 +185,6 @@ export class Network3D {
       this.edgeWeightScale.push(0);
       this.edgeRecentLastWeight.push(new Float32Array(segCount));
       this.edgeRecentDelta.push(new Float32Array(segCount));
-      const age = new Uint16Array(segCount);
-      age.fill(this.edgeRecentWindow + 1);
-      this.edgeRecentAge.push(age);
       this.root.add(lines);
     }
     const outIdx = this.layerSizes.length - 1;
@@ -236,6 +233,15 @@ export class Network3D {
     this.inferExpectedDigit = expectedDigit;
   }
 
+  private activationStepChanged(L: number, i: number, vi: number): boolean {
+    if (this.trainPrevActivations === null) return true;
+    const prev = this.trainPrevActivations[L];
+    if (!prev || i >= prev.length) return true;
+    const p = Number.isFinite(prev[i]) ? prev[i]! : 0;
+    const v = Number.isFinite(vi) ? vi : 0;
+    return Math.abs(v - p) > this.trainActStepEps;
+  }
+
   setIdleDim(dim: boolean): void {
     if (this.idleDimmed === dim) return;
     this.idleDimmed = dim;
@@ -256,6 +262,10 @@ export class Network3D {
   }
 
   setActivations(activations: number[][]): void {
+    const trainFilter = this.edgeFocusMode === "trainRecent";
+    if (!trainFilter) {
+      this.trainPrevActivations = null;
+    }
     for (let L = 0; L < this.meshes.length; L++) {
       const mesh = this.meshes[L];
       const pos = this.positions[L];
@@ -276,6 +286,16 @@ export class Network3D {
         const denom = Math.max(1e-6, mx - mean);
         for (let i = 0; i < v.length; i++) {
           const vi = Number.isFinite(v[i]) ? v[i] : 0;
+          if (trainFilter && !this.activationStepChanged(L, i, vi)) {
+            this.dummy.position.copy(pos[i]);
+            this.dummy.scale.setScalar(0);
+            this.dummy.updateMatrix();
+            mesh.setMatrixAt(i, this.dummy.matrix);
+            arr[i * 3 + 0] = 0.02;
+            arr[i * 3 + 1] = 0.02;
+            arr[i * 3 + 2] = 0.03;
+            continue;
+          }
           const raw = (vi - mean) / denom;
           const t = Math.min(1, Math.max(0, Math.pow(raw, 0.65)));
           this.dummy.position.copy(pos[i]);
@@ -301,6 +321,11 @@ export class Network3D {
           const mat = spr.material as THREE.SpriteMaterial;
           const pRaw =
             i < v.length && Number.isFinite(v[i]) ? (v[i] as number) : 0;
+          if (trainFilter && !this.activationStepChanged(L, i, pRaw)) {
+            mat.opacity = 0;
+            spr.scale.setScalar(0.0001);
+            continue;
+          }
           const p = Math.max(0, Math.min(1, pRaw));
           const lum = Math.pow(p, 0.48);
           const dim = this.idleDimmed;
@@ -353,6 +378,16 @@ export class Network3D {
         this.activationScale[L] = scale;
         for (let i = 0; i < v.length; i++) {
           const vi = Number.isFinite(v[i]) ? v[i] : 0;
+          if (trainFilter && L !== 0 && !this.activationStepChanged(L, i, vi)) {
+            this.dummy.position.copy(pos[i]);
+            this.dummy.scale.setScalar(0);
+            this.dummy.updateMatrix();
+            mesh.setMatrixAt(i, this.dummy.matrix);
+            arr[i * 3 + 0] = 0.02;
+            arr[i * 3 + 1] = 0.02;
+            arr[i * 3 + 2] = 0.03;
+            continue;
+          }
           const raw = Math.max(0, vi / scale);
           const t = Math.min(1, Math.pow(raw, 0.7));
           this.dummy.position.copy(pos[i]);
@@ -360,13 +395,26 @@ export class Network3D {
           this.dummy.scale.setScalar(s);
           this.dummy.updateMatrix();
           mesh.setMatrixAt(i, this.dummy.matrix);
-          arr[i * 3 + 0] = 0.12 + 0.25 * t;
-          arr[i * 3 + 1] = 0.35 + 0.45 * t;
-          arr[i * 3 + 2] = 0.8 + 0.2 * t;
+          if (L === 0) {
+            const c0 = 0.12 + 0.25 * t;
+            const c1 = 0.35 + 0.45 * t;
+            const c2 = 0.8 + 0.2 * t;
+            const f = t * t;
+            arr[i * 3 + 0] = c0 + (1 - c0) * f;
+            arr[i * 3 + 1] = c1 + (1 - c1) * f;
+            arr[i * 3 + 2] = c2 + (1 - c2) * f;
+          } else {
+            arr[i * 3 + 0] = 0.12 + 0.25 * t;
+            arr[i * 3 + 1] = 0.35 + 0.45 * t;
+            arr[i * 3 + 2] = 0.8 + 0.2 * t;
+          }
         }
       }
       mesh.instanceMatrix.needsUpdate = true;
       colorAttr.needsUpdate = true;
+    }
+    if (trainFilter) {
+      this.trainPrevActivations = activations.map((a) => [...a]);
     }
   }
 
@@ -386,7 +434,6 @@ export class Network3D {
       const map = this.edgeFromTo[L];
       const lastWeight = this.edgeRecentLastWeight[L];
       const deltaArr = this.edgeRecentDelta[L];
-      const ageArr = this.edgeRecentAge[L];
       let mx = 1e-12;
       let contribMx = 1e-12;
       let deltaMx = 1e-12;
@@ -419,6 +466,26 @@ export class Network3D {
       const prevScale = this.edgeWeightScale[L];
       const nextScale = prevScale <= 0 ? mx : Math.max(mx, prevScale * 0.995);
       this.edgeWeightScale[L] = Math.max(nextScale, 1e-6);
+      let trainEdgeMask: Uint8Array | null = null;
+      if (this.edgeFocusMode === "trainRecent" && deltaMx > 1e-12) {
+        const n = map.length;
+        const pairs: { k: number; d: number }[] = [];
+        for (let k = 0; k < n; k++) {
+          const ref0 = map[k]!;
+          const idxM = ref0.to * layerW[ref0.to].length + ref0.from;
+          pairs.push({ k, d: deltaArr[idxM]! });
+        }
+        pairs.sort((a, b) => b.d - a.d);
+        const kMax = Math.min(this.trainEdgeHighlightMax, n);
+        trainEdgeMask = new Uint8Array(n);
+        let taken = 0;
+        for (const p of pairs) {
+          if (taken >= kMax) break;
+          if (p.d < this.edgeRecentDeltaAbsMin) break;
+          trainEdgeMask[p.k] = 1;
+          taken += 1;
+        }
+      }
       for (let k = 0; k < map.length; k++) {
         const ref = map[k];
         const wRaw = layerW[ref.to][ref.from] ?? 0;
@@ -427,7 +494,6 @@ export class Network3D {
         lastWeight[idx] = w;
         let visible = true;
         let contribNorm = 1;
-        let recentNorm = 0;
         if (fromActs && ref.from < fromActs.length) {
           const fa = Number.isFinite(fromActs[ref.from])
             ? Math.max(0, fromActs[ref.from])
@@ -436,16 +502,8 @@ export class Network3D {
           visible = contribNorm >= threshold;
         }
         if (this.edgeFocusMode === "trainRecent") {
-          recentNorm = deltaArr[idx] / Math.max(1e-9, deltaMx);
-          const changedEnough =
-            deltaArr[idx] >= this.edgeRecentDeltaAbsMin &&
-            recentNorm >= this.edgeRecentDeltaThreshold;
-          if (changedEnough) {
-            ageArr[k] = 0;
-          } else {
-            ageArr[k] = Math.min(this.edgeRecentWindow + 1, ageArr[k] + 1);
-          }
-          visible = ageArr[k] <= this.edgeRecentWindow;
+          visible =
+            trainEdgeMask !== null && trainEdgeMask[k]! === 1;
         }
         const tBase = Math.min(
           1,
@@ -461,32 +519,24 @@ export class Network3D {
                 ),
               )
             : 0;
-        const tTrainRecent =
-          this.edgeFocusMode === "trainRecent" && visible
-            ? 1 - ageArr[k] / Math.max(1, this.edgeRecentWindow)
-            : 0;
         const t =
           this.edgeFocusMode === "trainRecent"
-            ? tTrainRecent
+            ? visible
+              ? 1
+              : 0
             : fromActs
               ? visible
                 ? tInfer
                 : 0
               : tBase;
-        const tRecentVis =
-          this.edgeFocusMode === "trainRecent"
-            ? Math.pow(Math.max(0, tTrainRecent), 1.6)
-            : 0;
-        if (this.edgeFocusMode === "trainRecent")
-          visible = visible && tRecentVis >= 0.06;
         let r = 0;
         let g = 0;
         let b = 0;
         if (visible) {
           if (this.edgeFocusMode === "trainRecent") {
-            r = 0.95 * tRecentVis;
-            g = 0.62 * tRecentVis;
-            b = 0.18 * tRecentVis;
+            r = 0.95;
+            g = 0.62;
+            b = 0.18;
           } else if (w >= 0) {
             r = 0.25 + 0.75 * t;
             g = 0.14 + 0.58 * t;

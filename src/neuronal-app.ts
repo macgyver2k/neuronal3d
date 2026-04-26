@@ -855,12 +855,14 @@ function publishVizState(mode: VizMode, activations: number[][]): void {
     mode,
     activations: activations.map((a) => [...a]),
   };
-  flushVizState();
+  if (flushVizState() && net3d && net) {
+    net3d.setWeights(net.weights);
+  }
 }
 
-function flushVizState(): void {
-  if (!net3d || !pendingVizState) return;
-  if (pendingVizState.stamp === lastAppliedVizStamp) return;
+function flushVizState(): boolean {
+  if (!net3d || !pendingVizState) return false;
+  if (pendingVizState.stamp === lastAppliedVizStamp) return false;
   net3d.setIdleDim(pendingVizState.mode === "idle");
   if (pendingVizState.mode !== "infer") net3d.setInferResult(null, null);
   net3d.setEdgeFocus(
@@ -869,11 +871,13 @@ function flushVizState(): void {
   );
   net3d.setActivations(pendingVizState.activations);
   lastAppliedVizStamp = pendingVizState.stamp;
+  return true;
 }
 
 function tickViz(): void {
-  flushVizState();
-  if (net3d && net) net3d.setWeights(net.weights);
+  if (flushVizState() && net3d && net) {
+    net3d.setWeights(net.weights);
+  }
 }
 
 
