@@ -175,17 +175,56 @@
 }
 
 
+.n3-statusbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.n3-statusbar-kicker {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--n3-muted);
+}
+
 .n3-status {
-  font-size: 0.72rem;
-  color: #b9c2d7;
+  display: block;
+  width: 100%;
+  min-height: 2.35rem;
+  box-sizing: border-box;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #98a3b8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
   white-space: pre-wrap;
   word-break: break-word;
-  padding: 0.55rem 0.7rem;
+  padding: 0.65rem 0.9rem 0.7rem;
   border-radius: 12px;
   border: 1px solid var(--n3-border);
-  background: rgba(19, 23, 33, 0.8);
+  background: linear-gradient(165deg, rgba(28, 32, 45, 0.96), rgba(15, 18, 28, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.n3-status-val {
+  display: inline;
+  margin: 0 0.08em;
+  padding: 0.15em 0.4em 0.12em;
+  font-weight: 600;
+  font-size: 0.95em;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  color: #c8f5e8;
+  text-shadow: 0 0 18px rgba(79, 212, 176, 0.35);
+  background: linear-gradient(160deg, rgba(54, 211, 166, 0.22), rgba(47, 120, 180, 0.14));
+  border: 1px solid rgba(120, 200, 220, 0.35);
+  border-radius: 6px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .n3-layout {
@@ -335,6 +374,128 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.n3-epochtabs.n3-sidebartabs {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.n3-panel--epochs .n3-epochtabs.n3-sidebartabs {
+  margin: -0.15rem -0.15rem 0.4rem;
+}
+
+.n3-epochtabs .n3-sidebartab {
+  font-size: 0.72rem;
+  padding: 0.32rem 0.45rem;
+}
+
+.n3-epochtabpanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.n3-sidebarpanel--train .n3-epochtabpanel .n3-epochlist {
+  flex: 1;
+  min-height: 0;
+}
+
+.n3-epochchart {
+  gap: 0.35rem;
+}
+
+.n3-epochchart-svg {
+  width: 100%;
+  flex: 1;
+  min-height: 6.5rem;
+  display: block;
+  border-radius: 8px;
+  border: 1px solid var(--n3-border-soft);
+}
+
+.n3-epochchart-bg {
+  fill: rgba(0, 0, 0, 0.35);
+}
+
+.n3-epochchart-grid {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.n3-epochchart-axis {
+  stroke: rgba(158, 167, 184, 0.45);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.n3-epochchart-ticklabel {
+  fill: var(--n3-muted);
+  font-size: 6.5px;
+  font-weight: 500;
+}
+
+.n3-epochchart-ticklabel--loss {
+  font-variant-numeric: tabular-nums;
+}
+
+.n3-epochchart-ticklabel--acc {
+  font-variant-numeric: tabular-nums;
+}
+
+.n3-epochchart-axis-title {
+  fill: var(--n3-muted);
+  font-size: 6px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.n3-epochchart-line {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.n3-epochchart-line--loss {
+  stroke: #36d3a6;
+}
+
+.n3-epochchart-line--acc {
+  stroke: #84d9ff;
+}
+
+.n3-epochchart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-size: 0.65rem;
+  color: var(--n3-muted);
+}
+
+.n3-epochchart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.n3-epochchart-legend-item::before {
+  content: '';
+  width: 0.65rem;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.n3-epochchart-legend-item--loss::before {
+  background: #36d3a6;
+}
+
+.n3-epochchart-legend-item--acc::before {
+  background: #84d9ff;
 }
 
 .n3-sidebarpanel--train .n3-epochlist {

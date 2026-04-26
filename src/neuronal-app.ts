@@ -160,8 +160,19 @@ function scheduleLiveCanvasInfer(): void {
   };
   liveCanvasInferRaf = requestAnimationFrame(step);
 }
+function statusPlainToHtml(plain: string): string {
+  const esc = plain
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return esc.replace(
+    /(\d+:\d+:\d+|\d+:\d+|(?:-)?\b\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?%?)/g,
+    '<span class="n3-status-val">$1</span>',
+  );
+}
+
 function setStatus(t: string): void {
-  el.status.textContent = t;
+  el.status.innerHTML = statusPlainToHtml(t);
 }
 
 function setModelDropdownOpen(open: boolean): void {
