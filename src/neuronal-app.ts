@@ -1,22 +1,26 @@
-import { parseMnistCsv, type MnistSample } from "./data/mnist";
+import { Store } from "@ngrx/store";
+import { type PersistedEpochRow, type StoredModel, type StoredModelEntry, EXPECTED_LAYER_HIDDEN } from "./app/core/model.types";
+import { modelMatchesExpectedLayout } from "./app/core/model-storage";
+import { parseMnistCsvAsync, yieldToMain, type MnistSample } from "./data/mnist";
 import { matFromColVec } from "./nn/matrix";
 import { activationSlices, MLP } from "./nn/network";
-import { trainLoop, type TrainEpochSummary } from "./train/trainer";
+import { trainLoop } from "./train/trainer";
 import { Network3D } from "./viz/network3d";
 import { animateLoop, createScene } from "./viz/scene";
+import type { AppState } from "./app/store/app.state";
+import { NeuronalActions } from "./app/store/neuronal/neuronal.actions";
+import { selectNeuronalState } from "./app/store/neuronal/neuronal.selectors";
+import type { NeuronalState } from "./app/store/neuronal/neuronal.state";
 
 const LAYER_SIZES = [784, 64, 32, 10];
-const HIDDEN = [64, 32];
+const HIDDEN: number[] = [...EXPECTED_LAYER_HIDDEN];
 const TRAIN_DEFAULTS = {
   lr: 0.02,
   batchSize: 32,
   epochs: 1,
   vizEveryNBatches: 4,
 } as const;
-const MODEL_STORAGE_KEY_V1 = "neuronal3d:model:v1";
-const MODEL_STORAGE_KEY_V2 = "neuronal3d:models:v2";
-const EPOCH_TRACK_STORAGE_KEY = "neuronal3d:epochTrack:v1";
-const EPOCH_TRACK_MAX_ROWS_PER_MODEL = 500;
+const METRICS_YIELD_EVERY = 150;
 const VIZ_DEBUG_INFER =
   typeof globalThis.location !== "undefined" &&
   new URLSearchParams(globalThis.location.search).has("vizdebug");
@@ -107,46 +111,13 @@ function bindEl(): ElRefs {
 
 let trainData: MnistSample[] = [];
 let testData: MnistSample[] = [];
+let appStore!: Store<AppState>;
+let nLatest!: NeuronalState;
 let net: MLP | null = null;
 let net3d: Network3D | null = null;
-let trainingRunning = false;
-let pauseTraining = false;
-let stopTraining = false;
 let inferCounter = 0;
 let lastInferSampleIndex = -1;
 let lastInferActsDebug: number[][] | null = null;
-
-type StoredModel = {
-  version: 1;
-  inputDim: number;
-  hidden: number[];
-  outputDim: number;
-  weights: number[][][];
-  biases: number[][][];
-};
-
-type StoredModelMetrics = {
-  lastLoss: number;
-  lastBatchAcc: number;
-  testAcc: number | null;
-  errorRate: number | null;
-  epochsTrained: number;
-};
-
-type StoredModelEntry = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-  model: StoredModel;
-  metrics: StoredModelMetrics;
-};
-
-type StoredModelCollection = {
-  version: 2;
-  activeModelId: string | null;
-  models: StoredModelEntry[];
-};
 
 type VizMode = "idle" | "train" | "infer";
 
@@ -156,22 +127,8 @@ type VizState = {
   activations: number[][];
 };
 
-let saveModelTimer: ReturnType<typeof setTimeout> | null = null;
-let modelStore: StoredModelCollection = { version: 2, activeModelId: null, models: [] };
-let activeModelId: string | null = null;
-let lastTrainLoss = 0;
-let lastTrainBatchAcc = 0;
-type PersistedEpochRow = TrainEpochSummary & {
-  savedAt: string;
-  run: number;
-  runStartedAt: string;
-  runElapsedMs: number;
-};
-let epochTrackRows: PersistedEpochRow[] = [];
-let currentEpochRun = 0;
-let currentEpochRunStartedAt = "";
-let currentEpochRunStartedMs = 0;
-let modelDropdownOpen = false;
+let neuronalUiRaf: number = 0;
+
 let drawing = false;
 let liveCanvasInferRaf: number | null = null;
 function canvasPos(ev: PointerEvent): { x: number; y: number } {
@@ -194,19 +151,18 @@ function setStatus(t: string): void {
 }
 
 function setModelDropdownOpen(open: boolean): void {
-  modelDropdownOpen = open;
-  el.modelDropdownButton.setAttribute("aria-expanded", open ? "true" : "false");
-  el.modelDropdownMenu.hidden = !open;
+  if (nLatest.modelDropdownOpen === open) return;
+  appStore.dispatch(NeuronalActions.modelDropdownSetOpen({ open }));
 }
 
 function syncModelDropdownLabel(): void {
-  if (modelStore.models.length === 0) {
+  if (nLatest.modelCollection.models.length === 0) {
     el.modelDropdownLabelName.textContent = "Kein Modell";
     el.modelDropdownLabelMeta.textContent = "Lege ein neues Modell an";
     return;
   }
-  const id = activeModelId ?? el.modelSelect.value;
-  const entry = id ? modelStore.models.find((m) => m.id === id) : null;
+  const id = nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
+  const entry = id ? nLatest.modelCollection.models.find((m) => m.id === id) : null;
   if (!entry) {
     el.modelDropdownLabelName.textContent = "Modell wählen";
     el.modelDropdownLabelMeta.textContent = "";
@@ -219,15 +175,15 @@ function syncModelDropdownLabel(): void {
 
 function renderModelDropdownMenu(): void {
   el.modelDropdownMenu.replaceChildren();
-  if (modelStore.models.length === 0) {
+  if (nLatest.modelCollection.models.length === 0) {
     const empty = document.createElement("div");
     empty.className = "n3-modelbar-empty";
     empty.textContent = "Keine Modelle vorhanden";
     el.modelDropdownMenu.append(empty);
     return;
   }
-  const activeId = activeModelId ?? el.modelSelect.value;
-  for (const entry of modelStore.models) {
+  const activeId = nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
+  for (const entry of nLatest.modelCollection.models) {
     const item = document.createElement("button");
     item.type = "button";
     item.className = "n3-modelbar-option" + (entry.id === activeId ? " n3-modelbar-option--active" : "");
@@ -249,7 +205,7 @@ function renderModelDropdownMenu(): void {
     chipErr.textContent = `Err ${fmtPct(entry.metrics.errorRate)}`;
     meta.append(chipEp, chipAcc, chipErr);
     item.append(name, meta);
-    item.disabled = trainingRunning;
+    item.disabled = nLatest.training.running;
     item.addEventListener("click", () => {
       if (selectModelById(entry.id, "Aktives Modell")) {
         setModelDropdownOpen(false);
@@ -265,21 +221,21 @@ function selectModelById(id: string, statusPrefix = "Aktiv"): boolean {
     setStatus("Modell konnte nicht geladen werden.");
     return false;
   }
-  const entry = modelStore.models.find((m) => m.id === id);
+  const entry = nLatest.modelCollection.models.find((m) => m.id === id);
   setStatus(`${statusPrefix}: ${entry?.name ?? id}`);
   return true;
 }
 
 function renderEpochTracking(): void {
   el.epochTrackList.innerHTML = "";
-  if (epochTrackRows.length === 0) {
+  if (nLatest.epochDisplayRows.length === 0) {
     const empty = document.createElement("li");
     empty.className = "epochEmpty";
     empty.textContent = "Noch kein Training";
     el.epochTrackList.append(empty);
     return;
   }
-  const rows = epochTrackRows.slice(-200);
+  const rows = nLatest.epochDisplayRows.slice(-200);
   for (const r of rows) {
     const item = document.createElement("li");
     item.className = "epochRow";
@@ -320,87 +276,20 @@ function formatDurationLabel(ms: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-type EpochTrackStore = { version: 1; byModelId: Record<string, PersistedEpochRow[]> };
-
-function loadEpochTrackStore(): EpochTrackStore {
-  try {
-    const raw = localStorage.getItem(EPOCH_TRACK_STORAGE_KEY);
-    if (!raw) return { version: 1, byModelId: {} };
-    const p = JSON.parse(raw) as EpochTrackStore;
-    if (p.version !== 1 || typeof p.byModelId !== "object" || p.byModelId === null) return { version: 1, byModelId: {} };
-    const byModelId: Record<string, PersistedEpochRow[]> = {};
-    for (const [id, arr] of Object.entries(p.byModelId)) {
-      if (!Array.isArray(arr)) continue;
-      const norm: PersistedEpochRow[] = [];
-      for (const x of arr) {
-        if (!x || typeof x !== "object") continue;
-        const o = x as Record<string, unknown>;
-        if (
-          typeof o["epoch"] !== "number" ||
-          typeof o["loss"] !== "number" ||
-          typeof o["trainAcc"] !== "number"
-        ) {
-          continue;
-        }
-        norm.push({
-          epoch: o["epoch"] as number,
-          loss: o["loss"] as number,
-          trainAcc: o["trainAcc"] as number,
-          savedAt: typeof o["savedAt"] === "string" ? (o["savedAt"] as string) : "",
-          run: typeof o["run"] === "number" ? (o["run"] as number) : 0,
-          runStartedAt: typeof o["runStartedAt"] === "string" ? (o["runStartedAt"] as string) : "",
-          runElapsedMs: typeof o["runElapsedMs"] === "number" ? (o["runElapsedMs"] as number) : 0,
-        });
-      }
-      byModelId[id] = norm;
-    }
-    return { version: 1, byModelId };
-  } catch {
-    return { version: 1, byModelId: {} };
-  }
-}
-
-function saveEpochTrackStore(store: EpochTrackStore): void {
-  localStorage.setItem(EPOCH_TRACK_STORAGE_KEY, JSON.stringify(store));
-}
-
-function readEpochHistoryForModel(modelId: string): PersistedEpochRow[] {
-  return loadEpochTrackStore().byModelId[modelId] ?? [];
-}
-
-function nextRunSeq(modelId: string): number {
-  const rows = readEpochHistoryForModel(modelId);
+function nextRunSeq(modelId: string, by: Record<string, PersistedEpochRow[]>): number {
+  const rows = by[modelId] ?? [];
   if (rows.length === 0) return 1;
   let mx = 0;
   for (const r of rows) mx = Math.max(mx, r.run);
   return mx + 1;
 }
 
-function appendEpochToStorage(modelId: string, row: PersistedEpochRow): void {
-  const st = loadEpochTrackStore();
-  const prev = st.byModelId[modelId] ?? [];
-  const next = [...prev, row];
-  if (next.length > EPOCH_TRACK_MAX_ROWS_PER_MODEL) {
-    next.splice(0, next.length - EPOCH_TRACK_MAX_ROWS_PER_MODEL);
-  }
-  st.byModelId[modelId] = next;
-  saveEpochTrackStore(st);
+function applyEpochHistoryToUi(modelId: string | null): void {
+  appStore.dispatch(NeuronalActions.epochViewSyncFromModel({ modelId: modelId ?? "" }));
 }
 
 function clearEpochHistoryForModel(modelId: string): void {
-  const st = loadEpochTrackStore();
-  delete st.byModelId[modelId];
-  saveEpochTrackStore(st);
-}
-
-function applyEpochHistoryToUi(modelId: string | null): void {
-  if (!modelId) {
-    epochTrackRows = [];
-    renderEpochTracking();
-    return;
-  }
-  epochTrackRows = [...readEpochHistoryForModel(modelId)];
-  renderEpochTracking();
+  appStore.dispatch(NeuronalActions.epochHistoryCleared({ modelId }));
 }
 
 function fmtInt(n: number, width: number): string {
@@ -428,22 +317,23 @@ function inferLayerMaxDiffs(prev: number[][], cur: number[][]): string {
 function updateButtons(): void {
   const hasTrain = trainData.length > 0;
   const hasTest = testData.length > 0;
-  el.btnTrain.disabled = !hasTrain || trainingRunning;
-  el.btnPause.disabled = !trainingRunning;
-  el.modelSelect.disabled = trainingRunning;
-  el.modelDropdownButton.disabled = trainingRunning || modelStore.models.length === 0;
-  if (trainingRunning) setModelDropdownOpen(false);
-  el.btnSaveModelAs.disabled = !net || trainingRunning;
-  el.btnResetModel.disabled = !net || trainingRunning;
+  const tr = nLatest.training.running;
+  el.btnTrain.disabled = !hasTrain || tr;
+  el.btnPause.disabled = !tr;
+  el.modelSelect.disabled = tr;
+  el.modelDropdownButton.disabled = tr || nLatest.modelCollection.models.length === 0;
+  if (tr && nLatest.modelDropdownOpen) setModelDropdownOpen(false);
+  el.btnSaveModelAs.disabled = !net || tr;
+  el.btnResetModel.disabled = !net || tr;
   el.btnInferRandom.disabled = !net || !hasTest;
   el.btnInferDraw.disabled = !net;
-  el.btnNewModel.disabled = trainingRunning;
-  el.epochsInput.disabled = trainingRunning;
-  el.lrInput.disabled = trainingRunning;
-  el.batchSizeInput.disabled = trainingRunning;
-  el.vizEveryInput.disabled = trainingRunning;
+  el.btnNewModel.disabled = tr;
+  el.epochsInput.disabled = tr;
+  el.lrInput.disabled = tr;
+  el.batchSizeInput.disabled = tr;
+  el.vizEveryInput.disabled = tr;
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".epochPresetBtn")) {
-    btn.disabled = trainingRunning;
+    btn.disabled = tr;
   }
   syncEpochPresetHighlight();
   updateRunHint();
@@ -503,30 +393,16 @@ function applyStoredModelToNet(data: StoredModel): MLP {
   return model;
 }
 
-function modelMatchesExpectedLayout(data: StoredModel): boolean {
-  return (
-    data.version === 1 &&
-    data.inputDim === 784 &&
-    data.outputDim === 10 &&
-    data.hidden.length === HIDDEN.length &&
-    data.hidden.every((v, i) => v === HIDDEN[i])
-  );
-}
-
-function saveModelStoreToStorage(store: StoredModelCollection): void {
-  localStorage.setItem(MODEL_STORAGE_KEY_V2, JSON.stringify(store));
-}
-
 function refreshModelSelect(): void {
-  const selected = activeModelId ?? el.modelSelect.value;
+  const col = nLatest.modelCollection;
+  const selected = col.activeModelId ?? el.modelSelect.value;
   el.modelSelect.innerHTML = "";
-  if (modelStore.models.length === 0) {
+  if (col.models.length === 0) {
     const empty = document.createElement("option");
     empty.value = "";
     empty.textContent = "Kein Modell";
     empty.selected = true;
     el.modelSelect.append(empty);
-    applyEpochHistoryToUi(null);
     syncModelDropdownLabel();
     renderModelDropdownMenu();
     setModelDropdownOpen(false);
@@ -536,18 +412,17 @@ function refreshModelSelect(): void {
     syncEpochPresetHighlight();
     return;
   }
-  for (const entry of modelStore.models) {
+  for (const entry of col.models) {
     const option = document.createElement("option");
     option.value = entry.id;
     option.textContent = `${entry.name} | err ${fmtPct(entry.metrics.errorRate)} | acc ${fmtPct(entry.metrics.testAcc)} | ep ${entry.metrics.epochsTrained}`;
     el.modelSelect.append(option);
   }
-  if (selected && modelStore.models.some((m) => m.id === selected)) {
+  if (selected && col.models.some((m) => m.id === selected)) {
     el.modelSelect.value = selected;
-  } else if (modelStore.models.length > 0) {
-    el.modelSelect.value = modelStore.models[0].id;
+  } else if (col.models.length > 0) {
+    el.modelSelect.value = col.models[0].id;
   }
-  applyEpochHistoryToUi(el.modelSelect.value || null);
   syncModelDropdownLabel();
   renderModelDropdownMenu();
   renderModelLibrary();
@@ -558,7 +433,7 @@ function refreshModelSelect(): void {
 
 function renderModelLibrary(): void {
   el.modelLibraryList.replaceChildren();
-  if (modelStore.models.length === 0) {
+  if (nLatest.modelCollection.models.length === 0) {
     const p = document.createElement("p");
     p.className = "modelLibEmpty";
     p.textContent =
@@ -566,11 +441,12 @@ function renderModelLibrary(): void {
     el.modelLibraryList.append(p);
     return;
   }
-  for (const entry of modelStore.models) {
+  for (const entry of nLatest.modelCollection.models) {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "modelLibCard" + (entry.id === activeModelId ? " modelLibCard--active" : "");
-    b.disabled = trainingRunning;
+    b.className =
+      "modelLibCard" + (entry.id === nLatest.modelCollection.activeModelId ? " modelLibCard--active" : "");
+    b.disabled = nLatest.training.running;
     const name = document.createElement("span");
     name.className = "modelLibCardName";
     name.textContent = entry.name;
@@ -586,13 +462,13 @@ function renderModelLibrary(): void {
 }
 
 function activateModelFromLibrary(id: string): void {
-  if (trainingRunning) return;
+  if (nLatest.training.running) return;
   const ok = loadSelectedModelIntoNet(id);
   if (!ok) {
     setStatus("Stand konnte nicht ins aktive Netz geladen werden.");
     return;
   }
-  const entry = modelStore.models.find((m) => m.id === id);
+  const entry = nLatest.modelCollection.models.find((m) => m.id === id);
   setStatus(
     `Aktiv: ${entry?.name ?? id} · Test-Treffer ${fmtPct(entry?.metrics.testAcc ?? null)} · Fehlerquote ${fmtPct(entry?.metrics.errorRate ?? null)}`,
   );
@@ -606,8 +482,8 @@ function updateActiveModelPanel(): void {
     el.inferModelContext.textContent = "Kein aktives Modell — zuerst ein Modell wählen oder anlegen.";
     return;
   }
-  const id = activeModelId ?? el.modelSelect.value;
-  const entry = id ? modelStore.models.find((m) => m.id === id) : null;
+  const id = nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
+  const entry = id ? nLatest.modelCollection.models.find((m) => m.id === id) : null;
   if (entry) {
     el.activeModelTitle.textContent = entry.name;
     el.activeModelDetail.textContent = `Test ${fmtPct(entry.metrics.testAcc)} · Fehlerquote ${fmtPct(entry.metrics.errorRate)} · ${entry.metrics.epochsTrained} trainierte Epochen (Summe) · zuletzt ${formatTimeLabel(entry.updatedAt)}`;
@@ -658,110 +534,42 @@ function syncEpochPresetHighlight(): void {
 }
 
 function upsertModelEntry(entry: StoredModelEntry): void {
-  const idx = modelStore.models.findIndex((m) => m.id === entry.id);
-  if (idx >= 0) modelStore.models[idx] = entry;
-  else modelStore.models.unshift(entry);
-  modelStore.activeModelId = entry.id;
-  activeModelId = entry.id;
-  saveModelStoreToStorage(modelStore);
-  refreshModelSelect();
-  updateButtons();
+  appStore.dispatch(NeuronalActions.modelEntryUpserted({ entry }));
 }
 
-function computeDatasetMetrics(model: MLP, data: MnistSample[]): { accuracy: number; errorRate: number; loss: number } | null {
+async function computeDatasetMetrics(
+  model: MLP,
+  data: MnistSample[],
+): Promise<{ accuracy: number; errorRate: number; loss: number } | null> {
   if (data.length === 0) return null;
   let lossSum = 0;
   let correct = 0;
-  for (const s of data) {
+  for (let i = 0; i < data.length; i++) {
+    const s = data[i]!;
     const x = matFromColVec(s.pixels);
     const fwd = model.forward(x);
     const y = new Array<number>(10).fill(0);
     y[s.label] = 1;
     lossSum += model.crossEntropyLoss(fwd.prob, matFromColVec(y));
     if (model.predictClass(fwd.prob) === s.label) correct += 1;
+    if (i > 0 && i % METRICS_YIELD_EVERY === 0) {
+      await yieldToMain();
+    }
   }
   const accuracy = correct / data.length;
   return { accuracy, errorRate: 1 - accuracy, loss: lossSum / data.length };
 }
 
-function scheduleSaveModelToStorage(model: MLP): void {
-  if (saveModelTimer !== null) clearTimeout(saveModelTimer);
-  saveModelTimer = setTimeout(() => {
-    saveModelTimer = null;
-    try {
-      const selectedId = activeModelId ?? el.modelSelect.value;
-      if (!selectedId) return;
-      const existing = modelStore.models.find((m) => m.id === selectedId);
-      if (!existing) return;
-      const testMetrics = computeDatasetMetrics(model, testData);
-      upsertModelEntry({
-        ...existing,
-        updatedAt: new Date().toISOString(),
-        model: cloneStoredModel(model),
-        metrics: {
-          lastLoss: lastTrainLoss,
-          lastBatchAcc: lastTrainBatchAcc,
-          testAcc: testMetrics ? testMetrics.accuracy : existing.metrics.testAcc,
-          errorRate: testMetrics ? testMetrics.errorRate : existing.metrics.errorRate,
-          epochsTrained: existing.metrics.epochsTrained,
-        },
-      });
-    } catch {
-    }
-  }, 400);
-}
-
-function loadModelStoreFromStorage(): StoredModelCollection {
-  const rawV2 = localStorage.getItem(MODEL_STORAGE_KEY_V2);
-  if (rawV2) {
-    const parsed = JSON.parse(rawV2) as StoredModelCollection;
-    if (parsed.version === 2 && Array.isArray(parsed.models)) return parsed;
-  }
-  const rawV1 = localStorage.getItem(MODEL_STORAGE_KEY_V1);
-  if (rawV1) {
-    const legacy = JSON.parse(rawV1) as StoredModel;
-    if (!modelMatchesExpectedLayout(legacy)) return { version: 2, activeModelId: null, models: [] };
-    const now = new Date().toISOString();
-    const migrated: StoredModelCollection = {
-      version: 2,
-      activeModelId: "legacy-v1",
-      models: [
-        {
-          id: "legacy-v1",
-          name: "Migriertes Modell",
-          createdAt: now,
-          updatedAt: now,
-          model: legacy,
-          metrics: {
-            lastLoss: 0,
-            lastBatchAcc: 0,
-            testAcc: null,
-            errorRate: null,
-            epochsTrained: 0,
-          },
-        },
-      ],
-    };
-    saveModelStoreToStorage(migrated);
-    return migrated;
-  }
-  return { version: 2, activeModelId: null, models: [] };
-}
-
 function loadSelectedModelIntoNet(id: string): boolean {
-  const entry = modelStore.models.find((m) => m.id === id);
+  const entry = nLatest.modelCollection.models.find((m) => m.id === id);
   if (!entry) return false;
   if (!modelMatchesExpectedLayout(entry.model)) return false;
   const numW = 1 + entry.model.hidden.length;
   if (entry.model.weights.length !== numW || entry.model.biases.length !== numW) return false;
   net = applyStoredModelToNet(entry.model);
-  activeModelId = entry.id;
-  modelStore.activeModelId = entry.id;
-  saveModelStoreToStorage(modelStore);
   lastInferActsDebug = null;
-  refreshModelSelect();
+  appStore.dispatch(NeuronalActions.activeModelIdSet({ id: entry.id }));
   publishVizState("idle", zeroActivationsForLayout());
-  updateButtons();
   return true;
 }
 
@@ -784,7 +592,7 @@ async function loadCsvData(): Promise<void> {
           continue;
         }
         const text = await resp.text();
-        const parsed = parseMnistCsv(text);
+        const parsed = await parseMnistCsvAsync(text);
         if (parsed.length === 0) {
           trainErr = "Train-CSV enthält keine gültigen Zeilen";
           continue;
@@ -814,7 +622,7 @@ async function loadCsvData(): Promise<void> {
           continue;
         }
         const text = await resp.text();
-        const parsed = parseMnistCsv(text);
+        const parsed = await parseMnistCsvAsync(text);
         if (parsed.length === 0) {
           testErr = "Test-CSV enthält keine gültigen Zeilen";
           continue;
@@ -995,8 +803,28 @@ function inferWithPixels(
   }
 }
 
-export function bootstrapNeuronalApp(): () => void {
+export function bootstrapNeuronalApp(store: Store<AppState>): () => void {
+  appStore = store;
   el = bindEl();
+  const unSubN = appStore.select(selectNeuronalState).subscribe((n: NeuronalState) => {
+    nLatest = n;
+    el.modelDropdownButton.setAttribute("aria-expanded", n.modelDropdownOpen ? "true" : "false");
+    el.modelDropdownMenu.hidden = !n.modelDropdownOpen;
+    el.btnPause.textContent = n.training.pause ? "Fortsetzen" : "Anhalten";
+    if (n.training.running && n.modelDropdownOpen) {
+      appStore.dispatch(NeuronalActions.modelDropdownSetOpen({ open: false }));
+      return;
+    }
+    if (neuronalUiRaf !== 0) {
+      cancelAnimationFrame(neuronalUiRaf);
+    }
+    neuronalUiRaf = requestAnimationFrame(() => {
+      neuronalUiRaf = 0;
+      updateButtons();
+      renderEpochTracking();
+      refreshModelSelect();
+    });
+  });
   setModelDropdownOpen(false);
   const ctxDraw = el.drawCanvas.getContext("2d");
   if (!ctxDraw) throw new Error("canvas");
@@ -1073,17 +901,16 @@ export function bootstrapNeuronalApp(): () => void {
   });
 
   el.btnPause.addEventListener("click", () => {
-    pauseTraining = !pauseTraining;
-    el.btnPause.textContent = pauseTraining ? "Fortsetzen" : "Anhalten";
+    appStore.dispatch(NeuronalActions.trainingPauseToggled());
   });
 
   el.modelDropdownButton.addEventListener("click", () => {
     if (el.modelDropdownButton.disabled) return;
-    setModelDropdownOpen(!modelDropdownOpen);
+    setModelDropdownOpen(!nLatest.modelDropdownOpen);
   });
 
   el.modelSelect.addEventListener("change", () => {
-    if (trainingRunning) return;
+    if (nLatest.training.running) return;
     const id = el.modelSelect.value;
     if (!id) return;
     selectModelById(id, "Aktives Modell");
@@ -1109,12 +936,11 @@ export function bootstrapNeuronalApp(): () => void {
   document.addEventListener("keydown", onDocKeydown);
 
   el.btnNewModel.addEventListener("click", () => {
-    if (trainingRunning) return;
+    if (nLatest.training.running) return;
     const fresh = new MLP(784, HIDDEN, 10);
     net = fresh;
-    lastTrainLoss = 0;
-    lastTrainBatchAcc = 0;
     lastInferActsDebug = null;
+    appStore.dispatch(NeuronalActions.lastTrainMetricsReset());
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
     upsertModelEntry({
@@ -1133,43 +959,45 @@ export function bootstrapNeuronalApp(): () => void {
     });
     applyEpochHistoryToUi(id);
     publishVizState("idle", zeroActivationsForLayout());
-    setStatus(`Neues Modell: ${modelStore.models.find((m) => m.id === id)?.name ?? id}`);
+    setStatus(`Neues Modell: ${nLatest.modelCollection.models.find((m) => m.id === id)?.name ?? id}`);
   });
 
   el.btnSaveModelAs.addEventListener("click", () => {
     if (!net) return;
     const name = (window.prompt("Name für den neuen Modellstand:", defaultModelName()) ?? "").trim();
     if (!name) return;
-    const now = new Date().toISOString();
-    const testMetrics = computeDatasetMetrics(net, testData);
-    upsertModelEntry({
-      id: crypto.randomUUID(),
-      name,
-      createdAt: now,
-      updatedAt: now,
-      model: cloneStoredModel(net),
-      metrics: {
-        lastLoss: lastTrainLoss,
-        lastBatchAcc: lastTrainBatchAcc,
-        testAcc: testMetrics ? testMetrics.accuracy : null,
-        errorRate: testMetrics ? testMetrics.errorRate : null,
-        epochsTrained: 0,
-      },
-    });
-    setStatus(`Neuer Modellstand gespeichert: ${name}`);
+    const n = net;
+    void (async () => {
+      const now = new Date().toISOString();
+      const testMetrics = await computeDatasetMetrics(n, testData);
+      upsertModelEntry({
+        id: crypto.randomUUID(),
+        name,
+        createdAt: now,
+        updatedAt: now,
+        model: cloneStoredModel(n),
+        metrics: {
+          lastLoss: nLatest.lastTrainLoss,
+          lastBatchAcc: nLatest.lastTrainBatchAcc,
+          testAcc: testMetrics ? testMetrics.accuracy : null,
+          errorRate: testMetrics ? testMetrics.errorRate : null,
+          epochsTrained: 0,
+        },
+      });
+      setStatus(`Neuer Modellstand gespeichert: ${name}`);
+    })();
   });
 
   el.btnResetModel.addEventListener("click", () => {
-    if (trainingRunning) return;
-    const currentId = activeModelId ?? el.modelSelect.value;
+    if (nLatest.training.running) return;
+    const currentId = nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
     if (!currentId) return;
-    const currentEntry = modelStore.models.find((m) => m.id === currentId);
+    const currentEntry = nLatest.modelCollection.models.find((m) => m.id === currentId);
     if (!currentEntry) return;
     const fresh = new MLP(784, HIDDEN, 10);
     net = fresh;
-    lastTrainLoss = 0;
-    lastTrainBatchAcc = 0;
     lastInferActsDebug = null;
+    appStore.dispatch(NeuronalActions.lastTrainMetricsReset());
     clearEpochHistoryForModel(currentId);
     upsertModelEntry({
       ...currentEntry,
@@ -1190,13 +1018,11 @@ export function bootstrapNeuronalApp(): () => void {
 
   el.btnTrain.addEventListener("click", () => {
     void (async () => {
+      await new Promise<void>((r) => {
+        setTimeout(r, 0);
+      });
       if (trainData.length === 0) return;
       const trainCfg = getTrainConfig();
-      trainingRunning = true;
-      stopTraining = false;
-      pauseTraining = false;
-      el.btnPause.textContent = "Anhalten";
-      updateButtons();
       if (!net) {
         net = new MLP(784, HIDDEN, 10);
         const now = new Date().toISOString();
@@ -1216,71 +1042,78 @@ export function bootstrapNeuronalApp(): () => void {
         });
       }
       lastInferActsDebug = null;
-      const trainModelId = activeModelId ?? el.modelSelect.value;
+      const trainModelId = nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
       if (!trainModelId) {
-        trainingRunning = false;
-        updateButtons();
         return;
       }
-      currentEpochRun = nextRunSeq(trainModelId);
-      currentEpochRunStartedMs = Date.now();
-      currentEpochRunStartedAt = new Date(currentEpochRunStartedMs).toISOString();
-      epochTrackRows = [];
-      renderEpochTracking();
+      appStore.dispatch(NeuronalActions.lastTrainMetricsReset());
+      const t0 = Date.now();
+      const t0s = new Date(t0).toISOString();
+      const run = nextRunSeq(trainModelId, nLatest.epochByModelId);
+      appStore.dispatch(
+        NeuronalActions.trainingStarted({
+          modelId: trainModelId,
+          run,
+          runStartedAt: t0s,
+          runStartedMs: t0,
+        }),
+      );
+      el.btnPause.textContent = "Anhalten";
+      await new Promise<void>((r) => {
+        setTimeout(r, 0);
+      });
       publishVizState("train", zeroActivationsForLayout());
-      await trainLoop(
-        net,
+      const runMetrics = await trainLoop(
+        net!,
         trainData,
         trainCfg,
         (s) => {
-          if (net) publishVizState("train", s.activations);
-          lastTrainLoss = s.loss;
-          lastTrainBatchAcc = s.trainAccBatch;
-          setStatus(
-            `Ep ${fmtInt(s.epoch + 1, 3)}  Batch ${fmtInt(s.batchIndex, 5)}  loss ${fmtFloat(s.loss, 8, 4)}  acc ${fmtFloat(s.trainAccBatch * 100, 6, 1)}%`,
-          );
+          setTimeout(() => {
+            if (net) publishVizState("train", s.activations);
+            setStatus(
+              `Ep ${fmtInt(s.epoch + 1, 3)}  Batch ${fmtInt(s.batchIndex, 5)}  loss ${fmtFloat(s.loss, 8, 4)}  acc ${fmtFloat(s.trainAccBatch * 100, 6, 1)}%`,
+            );
+          }, 0);
         },
         (ep) => {
           const row: PersistedEpochRow = {
             ...ep,
-            run: currentEpochRun,
+            run,
             savedAt: new Date().toISOString(),
-            runStartedAt: currentEpochRunStartedAt,
-            runElapsedMs: Date.now() - currentEpochRunStartedMs,
+            runStartedAt: t0s,
+            runElapsedMs: Date.now() - t0,
           };
-          epochTrackRows.push(row);
-          appendEpochToStorage(trainModelId, row);
-          renderEpochTracking();
+          appStore.dispatch(NeuronalActions.trainingEpochAppended({ modelId: trainModelId, row }));
         },
-        () => pauseTraining,
-        () => stopTraining,
+        () => nLatest.training.pause,
+        () => nLatest.training.shouldStop,
       );
-      trainingRunning = false;
+      appStore.dispatch(NeuronalActions.trainingFinished(runMetrics));
       if (net) {
-        const testMetrics = computeDatasetMetrics(net, testData);
-        const currentId = activeModelId ?? el.modelSelect.value;
-        const currentEntry = currentId ? modelStore.models.find((m) => m.id === currentId) : null;
+        const testMetrics = await computeDatasetMetrics(net, testData);
+        const currentId = nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
+        const currentEntry = currentId ? nLatest.modelCollection.models.find((m) => m.id === currentId) : null;
         if (currentEntry) {
           upsertModelEntry({
             ...currentEntry,
             updatedAt: new Date().toISOString(),
             model: cloneStoredModel(net),
             metrics: {
-              lastLoss: lastTrainLoss,
-              lastBatchAcc: lastTrainBatchAcc,
+              lastLoss: runMetrics.lastTrainLoss,
+              lastBatchAcc: runMetrics.lastTrainBatchAcc,
               testAcc: testMetrics ? testMetrics.accuracy : currentEntry.metrics.testAcc,
               errorRate: testMetrics ? testMetrics.errorRate : currentEntry.metrics.errorRate,
               epochsTrained: currentEntry.metrics.epochsTrained + trainCfg.epochs,
             },
           });
         }
-        scheduleSaveModelToStorage(net);
       }
       if (net) publishVizState("idle", zeroActivationsForLayout());
-      updateButtons();
-      const active = activeModelId ? modelStore.models.find((m) => m.id === activeModelId) : null;
+      const act = nLatest.modelCollection.activeModelId
+        ? nLatest.modelCollection.models.find((m) => m.id === nLatest.modelCollection.activeModelId)
+        : null;
       setStatus(
-        `Training beendet | aktiv: ${active?.name ?? "-"} | loss ${fmtFloat(lastTrainLoss, 8, 4)} | batch-acc ${fmtFloat(lastTrainBatchAcc * 100, 6, 2)}% | err ${fmtPct(active?.metrics.errorRate ?? null)} | acc ${fmtPct(active?.metrics.testAcc ?? null)}`,
+        `Training beendet | aktiv: ${act?.name ?? "-"} | loss ${fmtFloat(runMetrics.lastTrainLoss, 8, 4)} | batch-acc ${fmtFloat(runMetrics.lastTrainBatchAcc * 100, 6, 2)}% | err ${fmtPct(act?.metrics.errorRate ?? null)} | acc ${fmtPct(act?.metrics.testAcc ?? null)}`,
       );
     })();
   });
@@ -1305,7 +1138,7 @@ export function bootstrapNeuronalApp(): () => void {
   }
 
   const onBeforeUnload = () => {
-    stopTraining = true;
+    appStore.dispatch(NeuronalActions.trainingStopRequested());
     stopAnimCleanup?.();
     net3d?.dispose();
     disposeSceneBound?.();
@@ -1316,26 +1149,24 @@ export function bootstrapNeuronalApp(): () => void {
   updateButtons();
   void loadCsvData();
   try {
-    modelStore = loadModelStoreFromStorage();
-    activeModelId = modelStore.activeModelId;
-    refreshModelSelect();
-    const toLoad = activeModelId ?? el.modelSelect.value;
+    const toLoad = nLatest.modelCollection.activeModelId;
     if (toLoad && loadSelectedModelIntoNet(toLoad)) {
-      const entry = modelStore.models.find((m) => m.id === toLoad);
+      const entry = nLatest.modelCollection.models.find((m) => m.id === toLoad);
       setStatus(`Modell aus Browser-Speicher geladen: ${entry?.name ?? toLoad}`);
-    } else if (modelStore.models.length > 0) {
-      applyEpochHistoryToUi(el.modelSelect.value || null);
-      setStatus(`${modelStore.models.length} Modellstände im Browser gefunden`);
-    } else {
-      applyEpochHistoryToUi(null);
+    } else if (nLatest.modelCollection.models.length > 0) {
+      setStatus(`${nLatest.modelCollection.models.length} Modellstände im Browser gefunden`);
     }
   } catch {
     setStatus("MNIST wird geladen …");
-    applyEpochHistoryToUi(null);
   }
 
   return () => {
-    stopTraining = true;
+    if (neuronalUiRaf !== 0) {
+      cancelAnimationFrame(neuronalUiRaf);
+      neuronalUiRaf = 0;
+    }
+    appStore.dispatch(NeuronalActions.trainingStopRequested());
+    unSubN.unsubscribe();
     document.removeEventListener("pointerdown", onDocPointerDown);
     document.removeEventListener("keydown", onDocKeydown);
     window.removeEventListener("beforeunload", onBeforeUnload);

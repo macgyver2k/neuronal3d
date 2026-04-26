@@ -24,6 +24,11 @@ export type TrainConfig = {
   vizEveryNBatches: number;
 };
 
+export type TrainingRunLastBatch = {
+  lastTrainLoss: number;
+  lastTrainBatchAcc: number;
+};
+
 export async function trainLoop(
   net: MLP,
   data: MnistSample[],
@@ -32,9 +37,13 @@ export async function trainLoop(
   onEpochEnd: (s: TrainEpochSummary) => void,
   isPaused: () => boolean,
   shouldStop: () => boolean,
-): Promise<void> {
+): Promise<TrainingRunLastBatch> {
   const idx = data.map((_, i) => i);
+  let lastTrainLoss = 0;
+  let lastTrainBatchAcc = 0;
+  await sleep(0);
   for (let e = 0; e < cfg.epochs; e++) {
+    await sleep(0);
     shuffleInPlace(idx);
     const batches = batchIndices(data.length, cfg.batchSize);
     let batchCounter = 0;
@@ -42,10 +51,13 @@ export async function trainLoop(
     let epochCorrect = 0;
     let epochSeen = 0;
     for (const bi of batches) {
+      await sleep(0);
       while (isPaused() && !shouldStop()) {
         await sleep(50);
       }
-      if (shouldStop()) return;
+      if (shouldStop()) {
+        return { lastTrainLoss, lastTrainBatchAcc };
+      }
       const bs = bi.length;
       const X = zeros(net.inputDim, bs);
       const Y = zeros(net.outputDim, bs);
@@ -64,6 +76,8 @@ export async function trainLoop(
       const lastActs = activationSlices(X, fwd, bs - 1);
       net.applyGradients(dW, db, cfg.lr, bs);
       const trainAccBatch = correct / bs;
+      lastTrainLoss = loss;
+      lastTrainBatchAcc = trainAccBatch;
       epochLossSum += meanBatchLoss * bs;
       epochCorrect += correct;
       epochSeen += bs;
@@ -77,14 +91,15 @@ export async function trainLoop(
         });
       }
       batchCounter += 1;
-      await sleep(0);
     }
     onEpochEnd({
       epoch: e,
       loss: epochLossSum / Math.max(1, epochSeen),
       trainAcc: epochCorrect / Math.max(1, epochSeen),
     });
+    await sleep(0);
   }
+  return { lastTrainLoss, lastTrainBatchAcc };
 }
 
 function sleep(ms: number): Promise<void> {

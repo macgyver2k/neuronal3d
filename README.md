@@ -4,9 +4,11 @@ Minimal MLP in TypeScript (ohne NN-Bibliothek), MNIST über CSV, 3D-Aktivitäten
 
 ## Start
 
+[Corepack](https://nodejs.org/api/corepack.html) aktivieren (empfohlen, damit die richtige pnpm-Version genutzt wird): `corepack enable`
+
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm start
 ```
 
 ## MNIST-CSV
