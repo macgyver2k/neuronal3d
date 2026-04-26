@@ -1,4 +1,4 @@
-import type { TrainEpochSummary } from "../../train/trainer";
+import type { TrainEpochSummary } from '../../train/trainer';
 
 export const EXPECTED_LAYER_HIDDEN = [64, 32] as const;
 export const INPUT_DIM = 784;
@@ -31,7 +31,7 @@ export type StoredModelEntry = {
 };
 
 export type StoredModelCollection = {
-  version: 2;
+  version: 3;
   activeModelId: string | null;
   models: StoredModelEntry[];
 };
@@ -43,4 +43,7 @@ export type PersistedEpochRow = TrainEpochSummary & {
   runElapsedMs: number;
 };
 
-export type EpochTrackStore = { version: 1; byModelId: Record<string, PersistedEpochRow[]> };
+export type EpochTrackStore = {
+  version: 1;
+  byModelId: Record<string, PersistedEpochRow[]>;
+};

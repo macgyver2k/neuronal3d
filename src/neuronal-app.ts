@@ -56,7 +56,6 @@ type ElRefs = {
   btnInferDraw: HTMLButtonElement;
   btnClearDraw: HTMLButtonElement;
   status: HTMLSpanElement;
-  epochTrackList: HTMLUListElement;
   viz: HTMLElement;
   drawCanvas: HTMLCanvasElement;
 };
@@ -97,7 +96,6 @@ function bindFromHost(root: HTMLElement): ElRefs {
     btnInferDraw: m("btnInferDraw"),
     btnClearDraw: m("btnClearDraw"),
     status: m("status"),
-    epochTrackList: m("epochTrackList"),
     viz: m("viz"),
     drawCanvas: m("drawCanvas"),
   };
@@ -182,54 +180,10 @@ function selectModelById(id: string, statusPrefix = "Aktiv"): boolean {
   return true;
 }
 
-function renderEpochTracking(): void {
-  el.epochTrackList.innerHTML = "";
-  if (nLatest.epochDisplayRows.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "epochEmpty";
-    empty.textContent = "Noch kein Training";
-    el.epochTrackList.append(empty);
-    return;
-  }
-  const rows = nLatest.epochDisplayRows.slice(-200).reverse();
-  for (const r of rows) {
-    const item = document.createElement("li");
-    item.className = "epochRow";
-    const run = document.createElement("span");
-    run.className = "epochRun";
-    run.textContent = `R${String(r.run).padStart(2, "0")}`;
-    const ep = document.createElement("span");
-    ep.className = "epochNum";
-    ep.textContent = `Ep ${r.epoch + 1}`;
-    const loss = document.createElement("span");
-    loss.className = "epochLoss";
-    loss.textContent = `loss ${r.loss.toFixed(4)}`;
-    const acc = document.createElement("span");
-    acc.className = "epochAcc";
-    acc.textContent = `${(r.trainAcc * 100).toFixed(2)}%`;
-    const meta = document.createElement("span");
-    meta.className = "epochMeta";
-    const at = formatTimeLabel(r.savedAt);
-    const dur = formatDurationLabel(r.runElapsedMs);
-    meta.textContent = `${at}  |  Dauer ${dur}`;
-    item.append(run, ep, loss, acc, meta);
-    el.epochTrackList.append(item);
-  }
-}
-
 function formatTimeLabel(iso: string): string {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "--:--:--";
   return d.toLocaleTimeString("de-DE", { hour12: false });
-}
-
-function formatDurationLabel(ms: number): string {
-  const totalSec = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 function nextRunSeq(modelId: string, by: Record<string, PersistedEpochRow[]>): number {
@@ -562,11 +516,12 @@ async function loadCsvData(): Promise<void> {
 }
 
 let renderSceneBound: () => void = () => {};
+let renderDisplayBound: () => void = () => {};
 let disposeSceneBound: (() => void) | null = null;
 let stopAnimCleanup: (() => void) | null = null;
 
 function renderFrame(): void {
-  renderSceneBound();
+  renderDisplayBound();
 }
 
 let vizStampCounter = 0;
@@ -757,7 +712,6 @@ export function createNeuronalAppRuntime(
     neuronalUiRaf = requestAnimationFrame(() => {
       neuronalUiRaf = 0;
       updateButtons();
-      renderEpochTracking();
       refreshModelSelect();
     });
   });
@@ -807,8 +761,9 @@ export function createNeuronalAppRuntime(
   ctx2d.lineJoin = "round";
   ctx2d.strokeStyle = "#ffffff";
 
-  const { scene, controls, render, dispose } = createScene(el.viz);
+  const { scene, controls, render, renderDisplay, dispose } = createScene(el.viz);
   renderSceneBound = render;
+  renderDisplayBound = renderDisplay;
   disposeSceneBound = dispose;
   const net3dInst = new Network3D(LAYER_SIZES);
   net3d = net3dInst;
@@ -1085,6 +1040,11 @@ export function createNeuronalAppRuntime(
 
   return {
     destroy: () => {
+      try {
+        saveModelStoreToStorageSync(nLatest.modelCollection);
+        saveEpochTrackStoreToStorageSync({ version: 1, byModelId: nLatest.epochByModelId });
+      } catch {
+      }
       cancelLiveCanvasInferRaf();
       if (neuronalUiRaf !== 0) {
         cancelAnimationFrame(neuronalUiRaf);
@@ -1104,6 +1064,7 @@ export function createNeuronalAppRuntime(
       stopAnimCleanup = null;
       disposeSceneBound = null;
       renderSceneBound = () => {};
+      renderDisplayBound = () => {};
     },
     onTrain,
     onPause,

@@ -4,10 +4,9 @@ import {
   EXPECTED_LAYER_HIDDEN,
   INPUT_DIM,
   OUTPUT_DIM,
-} from "./model.types";
+} from './model.types';
 
-const MODEL_STORAGE_KEY_V1 = "neuronal3d:model:v1";
-const MODEL_STORAGE_KEY_V2 = "neuronal3d:models:v2";
+const MODEL_STORAGE_KEY_V2 = 'neuronal3d:models:v3';
 
 function modelMatchesExpectedLayout(data: StoredModel): boolean {
   return (
@@ -19,14 +18,17 @@ function modelMatchesExpectedLayout(data: StoredModel): boolean {
   );
 }
 
-export function saveModelStoreToStorageSync(store: StoredModelCollection): void {
+export function saveModelStoreToStorageSync(
+  store: StoredModelCollection,
+): void {
   try {
     localStorage.setItem(MODEL_STORAGE_KEY_V2, JSON.stringify(store));
-  } catch {
-  }
+  } catch {}
 }
 
-export function saveModelStoreToStorage(store: StoredModelCollection): Promise<void> {
+export function saveModelStoreToStorage(
+  store: StoredModelCollection,
+): Promise<void> {
   saveModelStoreToStorageSync(store);
   return Promise.resolve();
 }
@@ -35,37 +37,13 @@ export function loadModelStoreFromStorage(): StoredModelCollection {
   const rawV2 = localStorage.getItem(MODEL_STORAGE_KEY_V2);
   if (rawV2) {
     const parsed = JSON.parse(rawV2) as StoredModelCollection;
-    if (parsed.version === 2 && Array.isArray(parsed.models)) return parsed;
+    if (parsed.version === 3 && Array.isArray(parsed.models)) return parsed;
   }
-  const rawV1 = localStorage.getItem(MODEL_STORAGE_KEY_V1);
-  if (rawV1) {
-    const legacy = JSON.parse(rawV1) as StoredModel;
-    if (!modelMatchesExpectedLayout(legacy)) return { version: 2, activeModelId: null, models: [] };
-    const now = new Date().toISOString();
-    const migrated: StoredModelCollection = {
-      version: 2,
-      activeModelId: "legacy-v1",
-      models: [
-        {
-          id: "legacy-v1",
-          name: "Migriertes Modell",
-          createdAt: now,
-          updatedAt: now,
-          model: legacy,
-          metrics: {
-            lastLoss: 0,
-            lastBatchAcc: 0,
-            testAcc: null,
-            errorRate: null,
-            epochsTrained: 0,
-          },
-        },
-      ],
-    };
-    saveModelStoreToStorageSync(migrated);
-    return migrated;
-  }
-  return { version: 2, activeModelId: null, models: [] };
+  return {
+    version: 3,
+    activeModelId: null,
+    models: [],
+  };
 }
 
 export { modelMatchesExpectedLayout };

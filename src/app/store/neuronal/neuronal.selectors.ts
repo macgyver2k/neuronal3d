@@ -1,6 +1,6 @@
 import { createSelector } from "@ngrx/store";
 export { selectNeuronal } from "./selectors/neuronal-root.selectors";
-export type { EpochTrackRowModel } from "./selectors/neuronal-epoch.selectors";
+export type { EpochTrackRowModel, EpochTrackView } from "./selectors/neuronal-epoch.selectors";
 export type {
   ModelBarMenuItem,
   ModelDropdownMenu,
@@ -20,6 +20,7 @@ export {
   selectEpochByModelId,
   selectEpochDisplayRows,
   selectEpochTrackListModel,
+  selectEpochTrackView,
 } from "./selectors/neuronal-epoch.selectors";
 export type { TrainingPanelModel } from "./selectors/neuronal-training.selectors";
 export {

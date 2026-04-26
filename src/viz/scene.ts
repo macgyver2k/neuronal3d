@@ -10,6 +10,7 @@ export function createScene(container: HTMLElement): {
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
   render: () => void;
+  renderDisplay: () => void;
   dispose: () => void;
 } {
   const scene = new THREE.Scene();
@@ -77,11 +78,10 @@ export function createScene(container: HTMLElement): {
   ]);
   const keysDown = new Set<string>();
   const inputClock = new THREE.Clock();
-  const vToTarget = new THREE.Vector3();
   const vRight = new THREE.Vector3();
+  const vForward = new THREE.Vector3();
   const vMove = new THREE.Vector3();
   const moveSpeed = 12;
-  const minDollyDist = 0.35;
 
   const isTypingFocus = (t: EventTarget | null) =>
     t instanceof HTMLElement &&
@@ -103,9 +103,14 @@ export function createScene(container: HTMLElement): {
   const onVisibility = () => {
     if (document.hidden) clearKeys();
   };
+  const onPageHide = () => {
+    clearKeys();
+  };
   window.addEventListener("keydown", onKeyNavDown);
   window.addEventListener("keyup", onKeyNavUp);
   window.addEventListener("blur", clearKeys);
+  window.addEventListener("focus", clearKeys);
+  window.addEventListener("pagehide", onPageHide);
   document.addEventListener("visibilitychange", onVisibility);
 
   const composer = new EffectComposer(renderer);
@@ -138,6 +143,8 @@ export function createScene(container: HTMLElement): {
     window.removeEventListener("keydown", onKeyNavDown);
     window.removeEventListener("keyup", onKeyNavUp);
     window.removeEventListener("blur", clearKeys);
+    window.removeEventListener("focus", clearKeys);
+    window.removeEventListener("pagehide", onPageHide);
     document.removeEventListener("visibilitychange", onVisibility);
     controls.dispose();
     floor.geometry.dispose();
@@ -156,21 +163,13 @@ export function createScene(container: HTMLElement): {
     const a = keysDown.has("KeyA") || keysDown.has("ArrowLeft");
     const d = keysDown.has("KeyD") || keysDown.has("ArrowRight");
     if (!w && !s && !a && !d) return;
-    const step = moveSpeed * dt;
-    vToTarget.subVectors(controls.target, camera.position);
-    const dist = vToTarget.length();
-    if (dist > 1e-6) vToTarget.multiplyScalar(1 / dist);
-    else return;
-    if (w) {
-      const dolly = Math.min(step, Math.max(0, dist - minDollyDist));
-      if (dolly > 0) camera.position.addScaledVector(vToTarget, dolly);
-    }
-    if (s) {
-      camera.position.addScaledVector(vToTarget, -step);
-    }
+    const step = moveSpeed * Math.min(dt, 0.1);
     camera.updateMatrixWorld();
     vRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    camera.getWorldDirection(vForward);
     vMove.set(0, 0, 0);
+    if (w) vMove.addScaledVector(vForward, step);
+    if (s) vMove.addScaledVector(vForward, -step);
     if (d) vMove.addScaledVector(vRight, step);
     if (a) vMove.addScaledVector(vRight, -step);
     if (vMove.lengthSq() > 1e-10) {
@@ -179,12 +178,16 @@ export function createScene(container: HTMLElement): {
     }
   };
 
-  const render = () => {
-    applyCameraRelativePan();
+  const renderDisplay = () => {
     composer.render();
   };
 
-  return { scene, camera, renderer, controls, render, dispose };
+  const render = () => {
+    applyCameraRelativePan();
+    renderDisplay();
+  };
+
+  return { scene, camera, renderer, controls, render, renderDisplay, dispose };
 }
 
 export function animateLoop(

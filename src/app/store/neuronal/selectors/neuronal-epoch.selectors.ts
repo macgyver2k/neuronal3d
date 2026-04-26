@@ -18,3 +18,17 @@ export const selectEpochTrackListModel = createSelector(
   selectEpochDisplayRows,
   (rows): EpochTrackRowModel[] => rows,
 );
+
+export type EpochTrackView = {
+  epochsTotal: number;
+  rows: PersistedEpochRow[];
+};
+
+export const selectEpochTrackView = createSelector(selectNeuronal, (s): EpochTrackView => {
+  const id = s.modelCollection.activeModelId;
+  const entry = id ? s.modelCollection.models.find((m) => m.id === id) : null;
+  const epochsTotal = entry?.metrics.epochsTrained ?? 0;
+  const all = s.epochDisplayRows;
+  const rows = all.length === 0 ? [] : [...all].slice(-200).reverse();
+  return { epochsTotal, rows };
+});

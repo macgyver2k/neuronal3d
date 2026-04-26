@@ -1,8 +1,11 @@
-import { loadEpochTrackStoreFromStorage } from "../../core/epoch-storage";
-import type { PersistedEpochRow, StoredModelCollection } from "../../core/model.types";
+import { loadEpochTrackStoreFromStorage } from '../../core/epoch-storage';
+import type {
+  PersistedEpochRow,
+  StoredModelCollection,
+} from '../../core/model.types';
 
 const emptyModelCollection = (): StoredModelCollection => ({
-  version: 2,
+  version: 3,
   activeModelId: null,
   models: [],
 });
@@ -47,7 +50,7 @@ export function createInitialNeuronalState(): NeuronalState {
       pause: false,
       shouldStop: false,
       currentRun: 0,
-      currentRunStartedAt: "",
+      currentRunStartedAt: '',
       currentRunStartedMs: 0,
     },
     lastTrainLoss: 0,

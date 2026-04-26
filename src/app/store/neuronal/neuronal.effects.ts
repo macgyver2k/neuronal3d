@@ -5,10 +5,9 @@ import { debounceTime, filter, skip, tap, withLatestFrom } from "rxjs";
 import { NeuronalAppService } from "../../core/neuronal-app.service";
 import { NeuronalAppInstance } from "../../core/neuronal-app-instance";
 import { saveEpochTrackStoreToStorageSync } from "../../core/epoch-storage";
-import { saveModelStoreToStorageSync } from "../../core/model-storage";
 import type { AppState } from "../app.state";
 import { NeuronalActions } from "./neuronal.actions";
-import { selectEpochByModelId, selectModelCollection, selectTrainingRunning } from "./neuronal.selectors";
+import { selectEpochByModelId, selectTrainingRunning } from "./neuronal.selectors";
 
 @Injectable()
 export class NeuronalEffects {
@@ -214,18 +213,6 @@ export class NeuronalEffects {
         ofType(NeuronalActions.uiDrawPointerLeave),
         tap(() => {
           this.neuronalApp.onDrawPointerLeave();
-        }),
-      ),
-    { dispatch: false },
-  );
-
-  persistModelCollection$ = createEffect(
-    () =>
-      this.store.select(selectModelCollection).pipe(
-        skip(1),
-        debounceTime(200),
-        tap((c) => {
-          saveModelStoreToStorageSync(c);
         }),
       ),
     { dispatch: false },
