@@ -92,8 +92,10 @@ export class Network3D {
   private readonly edgeFocusThresholdFirstLayer = 0.38;
   private readonly edgeRecentLastWeight: Float32Array[] = [];
   private readonly edgeRecentDelta: Float32Array[] = [];
+  private readonly edgeRecentAge: Uint16Array[] = [];
+  private readonly edgeRecentHighlightT: Float32Array[] = [];
   private readonly edgeRecentDeltaAbsMin = 0.0008;
-  private readonly trainEdgeHighlightMax = 36;
+  private readonly edgeRecentWindow = 12;
   private trainPrevActivations: number[][] | null = null;
   private readonly trainActStepEps = 1e-4;
   private readonly edgeBaseOpacity: number[] = [];
@@ -185,6 +187,10 @@ export class Network3D {
       this.edgeWeightScale.push(0);
       this.edgeRecentLastWeight.push(new Float32Array(segCount));
       this.edgeRecentDelta.push(new Float32Array(segCount));
+      const eAge = new Uint16Array(segCount);
+      eAge.fill(this.edgeRecentWindow + 1);
+      this.edgeRecentAge.push(eAge);
+      this.edgeRecentHighlightT.push(new Float32Array(segCount));
       this.root.add(lines);
     }
     const outIdx = this.layerSizes.length - 1;
@@ -219,6 +225,13 @@ export class Network3D {
     mode: "off" | "infer" | "trainRecent",
     activations: number[][] | null,
   ): void {
+    const prev = this.edgeFocusMode;
+    if (prev !== mode && (mode === "trainRecent" || prev === "trainRecent")) {
+      for (let L = 0; L < this.edgeRecentAge.length; L++) {
+        this.edgeRecentAge[L]!.fill(this.edgeRecentWindow + 1);
+        this.edgeRecentHighlightT[L]!.fill(0);
+      }
+    }
     this.edgeFocusMode = mode;
     this.edgeFocusActivations = activations
       ? activations.map((a) => [...a])
@@ -466,31 +479,25 @@ export class Network3D {
       const prevScale = this.edgeWeightScale[L];
       const nextScale = prevScale <= 0 ? mx : Math.max(mx, prevScale * 0.995);
       this.edgeWeightScale[L] = Math.max(nextScale, 1e-6);
-      let trainEdgeMask: Uint8Array | null = null;
-      if (this.edgeFocusMode === "trainRecent" && deltaMx > 1e-12) {
-        const n = map.length;
-        const pairs: { k: number; d: number }[] = [];
-        for (let k = 0; k < n; k++) {
-          const ref0 = map[k]!;
-          const idxM = ref0.to * layerW[ref0.to].length + ref0.from;
-          pairs.push({ k, d: deltaArr[idxM]! });
-        }
-        pairs.sort((a, b) => b.d - a.d);
-        const kMax = Math.min(this.trainEdgeHighlightMax, n);
-        trainEdgeMask = new Uint8Array(n);
-        let taken = 0;
-        for (const p of pairs) {
-          if (taken >= kMax) break;
-          if (p.d < this.edgeRecentDeltaAbsMin) break;
-          trainEdgeMask[p.k] = 1;
-          taken += 1;
-        }
-      }
+      const ageArr = this.edgeRecentAge[L];
+      const tMem = this.edgeRecentHighlightT[L];
       for (let k = 0; k < map.length; k++) {
         const ref = map[k];
         const wRaw = layerW[ref.to][ref.from] ?? 0;
         const w = Number.isFinite(wRaw) ? wRaw : 0;
         const idx = ref.to * layerW[ref.to].length + ref.from;
+        const d = deltaArr[idx]!;
+        if (this.edgeFocusMode === "trainRecent") {
+          if (deltaMx > 1e-12 && d >= this.edgeRecentDeltaAbsMin) {
+            ageArr[k] = 0;
+            tMem[k] = Math.min(1, Math.pow(d / deltaMx, 0.52));
+          } else {
+            ageArr[k] = Math.min(
+              this.edgeRecentWindow + 1,
+              (ageArr[k] ?? 0) + 1,
+            );
+          }
+        }
         lastWeight[idx] = w;
         let visible = true;
         let contribNorm = 1;
@@ -502,8 +509,7 @@ export class Network3D {
           visible = contribNorm >= threshold;
         }
         if (this.edgeFocusMode === "trainRecent") {
-          visible =
-            trainEdgeMask !== null && trainEdgeMask[k]! === 1;
+          visible = ageArr[k]! <= this.edgeRecentWindow;
         }
         const tBase = Math.min(
           1,
@@ -534,12 +540,12 @@ export class Network3D {
         let b = 0;
         if (visible) {
           if (this.edgeFocusMode === "trainRecent") {
-            const tDelta = deltaArr[idx]! / Math.max(1e-9, deltaMx);
-            const tI = Math.min(1, Math.pow(tDelta, 0.52));
-            const a = 0.2 + 0.8 * tI;
-            r = 0.95 * a;
-            g = 0.62 * a;
-            b = 0.18 * a;
+            const tI = 0.15 + 0.85 * tMem[k]!;
+            const tAge = 1 - ageArr[k]! / (this.edgeRecentWindow + 1);
+            const mul = Math.pow(tAge, 0.7);
+            r = 0.95 * tI * mul;
+            g = 0.62 * tI * mul;
+            b = 0.18 * tI * mul;
           } else if (w >= 0) {
             r = 0.25 + 0.75 * t;
             g = 0.14 + 0.58 * t;
