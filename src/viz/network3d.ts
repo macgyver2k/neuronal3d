@@ -534,9 +534,12 @@ export class Network3D {
         let b = 0;
         if (visible) {
           if (this.edgeFocusMode === "trainRecent") {
-            r = 0.95;
-            g = 0.62;
-            b = 0.18;
+            const tDelta = deltaArr[idx]! / Math.max(1e-9, deltaMx);
+            const tI = Math.min(1, Math.pow(tDelta, 0.52));
+            const a = 0.2 + 0.8 * tI;
+            r = 0.95 * a;
+            g = 0.62 * a;
+            b = 0.18 * a;
           } else if (w >= 0) {
             r = 0.25 + 0.75 * t;
             g = 0.14 + 0.58 * t;
