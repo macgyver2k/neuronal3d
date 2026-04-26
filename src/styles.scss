@@ -1,7 +1,8 @@
+@use "./app/neuronal-workspace/n3-workspace-global.scss" as *;
+
 * {
   box-sizing: border-box;
 }
-
 html,
 body {
   margin: 0;

@@ -68,9 +68,9 @@ const canvasLineWidthErase = 32;
 
 function bindFromHost(root: HTMLElement): ElRefs {
   const m = <T extends HTMLElement>(id: string) => {
-    const e = root.querySelector(`#${id}`);
+    const e = (root.id === id ? root : root.querySelector(`#${CSS.escape(id)}`)) as T | null;
     if (!e) throw new Error(`#${id}`);
-    return e as T;
+    return e;
   };
   return {
     app: m("app"),
@@ -125,20 +125,42 @@ let neuronalUiRaf: number = 0;
 
 let drawing = false;
 let liveCanvasInferRaf: number | null = null;
+let liveInferLastRun = 0;
+const LIVE_INFER_MIN_MS = 48;
 function canvasPos(ev: PointerEvent): { x: number; y: number } {
   const r = el.drawCanvas.getBoundingClientRect();
   const sx = el.drawCanvas.width / r.width;
   const sy = el.drawCanvas.height / r.height;
   return { x: (ev.clientX - r.left) * sx, y: (ev.clientY - r.top) * sy };
 }
+function cancelLiveCanvasInferRaf(): void {
+  if (liveCanvasInferRaf !== null) {
+    cancelAnimationFrame(liveCanvasInferRaf);
+    liveCanvasInferRaf = null;
+  }
+}
+function runLiveCanvasInferNow(): void {
+  cancelLiveCanvasInferRaf();
+  if (!net || !net3d) return;
+  liveInferLastRun = performance.now();
+  const pixels = canvasToMnistPixels();
+  inferWithPixels(pixels, undefined, undefined, { live: true });
+}
 function scheduleLiveCanvasInfer(): void {
   if (liveCanvasInferRaf !== null) return;
-  liveCanvasInferRaf = requestAnimationFrame(() => {
+  const step = (): void => {
     liveCanvasInferRaf = null;
     if (!net || !net3d) return;
+    const now = performance.now();
+    if (now - liveInferLastRun < LIVE_INFER_MIN_MS) {
+      liveCanvasInferRaf = requestAnimationFrame(step);
+      return;
+    }
+    liveInferLastRun = now;
     const pixels = canvasToMnistPixels();
     inferWithPixels(pixels, undefined, undefined, { live: true });
-  });
+  };
+  liveCanvasInferRaf = requestAnimationFrame(step);
 }
 function setStatus(t: string): void {
   el.status.textContent = t;
@@ -662,7 +684,7 @@ function inferWithPixels(
     if (VIZ_DEBUG_INFER) lastInferActsDebug = acts.map((row) => [...row]);
     net3d.setInferResult(pred, label ?? null);
     publishVizState("infer", acts);
-    renderFrame();
+    if (!live) renderFrame();
     const probs = fwd.prob.map((row, i) => ({ digit: i, p: row[0] }));
     const probStr = probs.map((x) => x.p.toFixed(4)).join(" ");
     const top = [...probs]
@@ -712,7 +734,6 @@ export type NeuronalAppRuntime = {
   onBatchSizeInput: () => void;
   onEpochPreset: (n: number) => void;
   onDocumentPointerDown: (ev: PointerEvent) => void;
-  onDocumentKeydown: (ev: KeyboardEvent) => void;
   onDrawPointerDown: (e: PointerEvent) => void;
   onDrawPointerMove: (e: PointerEvent) => void;
   onDrawPointerUp: () => void;
@@ -730,10 +751,6 @@ export function createNeuronalAppRuntime(
   const unSubN = appStore.select(selectNeuronalState).subscribe((n: NeuronalState) => {
     nLatest = n;
     el.btnPause.textContent = n.training.pause ? "Fortsetzen" : "Anhalten";
-    if (n.training.running && n.modelDropdownOpen) {
-      appStore.dispatch(NeuronalActions.modelDropdownSetOpen({ open: false }));
-      return;
-    }
     if (neuronalUiRaf !== 0) {
       cancelAnimationFrame(neuronalUiRaf);
     }
@@ -773,9 +790,7 @@ export function createNeuronalAppRuntime(
   const runActiveModelFromToolbar = (id: string): void => {
     if (nLatest.training.running) return;
     if (!id) return;
-    if (selectModelById(id, "Aktives Modell")) {
-      setModelDropdownOpen(false);
-    }
+    selectModelById(id, "Aktives Modell");
   };
   appInstance.connect({
     newModelFromToolbar: runNewModelFromToolbar,
@@ -820,20 +835,20 @@ export function createNeuronalAppRuntime(
   };
   const onDrawPointerUp = (): void => {
     drawing = false;
-    scheduleLiveCanvasInfer();
+    runLiveCanvasInferNow();
   };
   const onDrawPointerCancel = (): void => {
     drawing = false;
-    scheduleLiveCanvasInfer();
+    runLiveCanvasInferNow();
   };
   const onDrawPointerLeave = (): void => {
     drawing = false;
-    scheduleLiveCanvasInfer();
+    runLiveCanvasInferNow();
   };
   const onClearDraw = (): void => {
     ctx2d.fillStyle = "#000000";
     ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
-    scheduleLiveCanvasInfer();
+    runLiveCanvasInferNow();
   };
 
   const onInferRandom = (): void => {
@@ -870,9 +885,6 @@ export function createNeuronalAppRuntime(
       return;
     }
     setModelDropdownOpen(false);
-  };
-  const onDocumentKeydown = (ev: KeyboardEvent): void => {
-    if (ev.key === "Escape") setModelDropdownOpen(false);
   };
   const onNewModel = (): void => {
     appStore.dispatch(NeuronalActions.newModelFromToolbarRequested());
@@ -1073,6 +1085,7 @@ export function createNeuronalAppRuntime(
 
   return {
     destroy: () => {
+      cancelLiveCanvasInferRaf();
       if (neuronalUiRaf !== 0) {
         cancelAnimationFrame(neuronalUiRaf);
         neuronalUiRaf = 0;
@@ -1105,7 +1118,6 @@ export function createNeuronalAppRuntime(
     onBatchSizeInput,
     onEpochPreset,
     onDocumentPointerDown,
-    onDocumentKeydown,
     onDrawPointerDown,
     onDrawPointerMove,
     onDrawPointerUp,

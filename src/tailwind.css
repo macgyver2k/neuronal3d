@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0b0e14;
+  --color-surface: #11131a;
+  --color-surface-2: #171a23;
+  --color-surface-3: #1f2430;
+  --color-foreground: #eef1f7;
+  --color-muted: #9aa3b8;
+  --color-border: rgb(255 255 255 / 0.12);
+  --color-border-soft: rgb(255 255 255 / 0.06);
+  --color-accent: #36d3a6;
+  --color-accent-strong: #0fa77f;
+  --radius-panel: 14px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+.dark {
+  color-scheme: dark;
+}

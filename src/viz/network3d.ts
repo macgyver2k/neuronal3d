@@ -458,27 +458,46 @@ export class Network3D {
           : null;
       const threshold =
         L === 0 ? this.edgeFocusThresholdFirstLayer : this.edgeFocusThreshold;
-      for (let r = 0; r < layerW.length; r++) {
-        for (let c = 0; c < layerW[r].length; c++) {
-          const wrc = Number.isFinite(layerW[r][c]) ? layerW[r][c] : 0;
-          const a = Math.abs(wrc);
-          if (a > mx) mx = a;
-          const idx = r * layerW[r].length + c;
-          const delta = Math.abs(wrc - lastWeight[idx]);
-          deltaArr[idx] = delta;
-          if (delta > deltaMx) deltaMx = delta;
-          if (fromActs && c < fromActs.length) {
-            const fa = Number.isFinite(fromActs[c])
-              ? Math.max(0, fromActs[c])
+      const inferReuseScale =
+        this.edgeFocusMode === "infer" &&
+        fromActs !== null &&
+        this.edgeWeightScale[L] > 1e-9;
+      if (inferReuseScale) {
+        for (let k = 0; k < map.length; k++) {
+          const ref = map[k]!;
+          const wrc = layerW[ref.to]![ref.from] ?? 0;
+          const w0 = Number.isFinite(wrc) ? wrc : 0;
+          if (ref.from < fromActs!.length) {
+            const fa = Number.isFinite(fromActs![ref.from])
+              ? Math.max(0, fromActs![ref.from]!)
               : 0;
-            const contrib = Math.abs(wrc) * fa;
+            const contrib = Math.abs(w0) * fa;
             if (contrib > contribMx) contribMx = contrib;
           }
         }
+      } else {
+        for (let r = 0; r < layerW.length; r++) {
+          for (let c = 0; c < layerW[r].length; c++) {
+            const wrc = Number.isFinite(layerW[r][c]) ? layerW[r][c] : 0;
+            const a = Math.abs(wrc);
+            if (a > mx) mx = a;
+            const idx = r * layerW[r].length + c;
+            const delta = Math.abs(wrc - lastWeight[idx]);
+            deltaArr[idx] = delta;
+            if (delta > deltaMx) deltaMx = delta;
+            if (fromActs && c < fromActs.length) {
+              const fa = Number.isFinite(fromActs[c])
+                ? Math.max(0, fromActs[c])
+                : 0;
+              const contrib = Math.abs(wrc) * fa;
+              if (contrib > contribMx) contribMx = contrib;
+            }
+          }
+        }
+        const prevScale = this.edgeWeightScale[L];
+        const nextScale = prevScale <= 0 ? mx : Math.max(mx, prevScale * 0.995);
+        this.edgeWeightScale[L] = Math.max(nextScale, 1e-6);
       }
-      const prevScale = this.edgeWeightScale[L];
-      const nextScale = prevScale <= 0 ? mx : Math.max(mx, prevScale * 0.995);
-      this.edgeWeightScale[L] = Math.max(nextScale, 1e-6);
       const ageArr = this.edgeRecentAge[L];
       const tMem = this.edgeRecentHighlightT[L];
       for (let k = 0; k < map.length; k++) {

@@ -5,7 +5,7 @@ import { NeuronalWorkspaceComponent } from "./neuronal-workspace/neuronal-worksp
   selector: "app-root",
   standalone: true,
   imports: [NeuronalWorkspaceComponent],
-  templateUrl: "./app.component.html",
+  template: `<app-neuronal-workspace />`,
   styleUrl: "./app.component.scss",
 })
 export class AppComponent {}

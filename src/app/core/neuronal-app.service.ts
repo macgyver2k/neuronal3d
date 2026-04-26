@@ -1,12 +1,10 @@
 import { inject, Injectable } from "@angular/core";
 import { Store } from "@ngrx/store";
-import { take } from "rxjs";
 import { createNeuronalAppRuntime, type NeuronalAppRuntime } from "../../neuronal-app";
 import { NeuronalAppInstance } from "./neuronal-app-instance";
 import { loadModelStoreFromStorage } from "./model-storage";
 import type { AppState } from "../store/app.state";
 import { NeuronalActions } from "../store/neuronal/neuronal.actions";
-import { selectNeuronalState } from "../store/neuronal/neuronal.selectors";
 
 @Injectable({ providedIn: "root" })
 export class NeuronalAppService {
@@ -33,18 +31,6 @@ export class NeuronalAppService {
   };
   onPause = (): void => {
     this.runtime?.onPause();
-  };
-  onModelDropdownButton = (): void => {
-    this.store
-      .select(selectNeuronalState)
-      .pipe(take(1))
-      .subscribe((n) => {
-        if (n.training.running) return;
-        if (!n.modelStoreHydrated || n.modelCollection.models.length === 0) return;
-        this.store.dispatch(
-          NeuronalActions.modelDropdownSetOpen({ open: !n.modelDropdownOpen }),
-        );
-      });
   };
   onModelSelectChange = (): void => {
     this.runtime?.onModelSelectChange();
@@ -81,9 +67,6 @@ export class NeuronalAppService {
   };
   onDocumentPointerDown = (ev: PointerEvent): void => {
     this.runtime?.onDocumentPointerDown(ev);
-  };
-  onDocumentKeydown = (ev: KeyboardEvent): void => {
-    this.runtime?.onDocumentKeydown(ev);
   };
   onDrawPointerDown = (e: PointerEvent): void => {
     this.runtime?.onDrawPointerDown(e);

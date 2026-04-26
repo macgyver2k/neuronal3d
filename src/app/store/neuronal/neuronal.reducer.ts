@@ -86,6 +86,7 @@ export const neuronalReducer = createReducer<NeuronalState>(
       currentRunStartedMs: a.runStartedMs,
     },
     epochDisplayRows: [],
+    modelDropdownOpen: false,
   })),
   on(NeuronalActions.trainingEpochAppended, (s, { modelId, row }): NeuronalState => {
     const epochByModelId = appendEpoch(s.epochByModelId, modelId, row);
@@ -113,6 +114,15 @@ export const neuronalReducer = createReducer<NeuronalState>(
   on(NeuronalActions.trainingPauseToggled, (s): NeuronalState => ({
     ...s,
     training: { ...s.training, pause: !s.training.pause },
+  })),
+  on(NeuronalActions.uiModelDropdownToggleRequested, (s): NeuronalState => {
+    if (s.training.running) return s;
+    if (!s.modelStoreHydrated || s.modelCollection.models.length === 0) return s;
+    return { ...s, modelDropdownOpen: !s.modelDropdownOpen };
+  }),
+  on(NeuronalActions.activeModelFromToolbarRequested, (s): NeuronalState => ({
+    ...s,
+    modelDropdownOpen: false,
   })),
   on(NeuronalActions.modelDropdownSetOpen, (s, { open }): NeuronalState => ({
     ...s,
