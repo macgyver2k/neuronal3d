@@ -1,10 +1,11 @@
 import type { Mat } from "./matrix";
 import {
-  colVecFromMat,
-  matAdd,
+  colSliceAsVec,
   matMul,
+  matMulAddRowBias,
   matScale,
   matSubInPlace,
+  matSumBatchColsToCol,
   randnMat,
   transpose,
   zeros,
@@ -45,33 +46,36 @@ export class MLP {
     }
   }
 
-  forward(xCol: Mat): ForwardResult {
+  forward(xBatch: Mat): ForwardResult {
     const layers: LayerCache[] = [];
-    let a = xCol;
+    let a = xBatch;
     for (let L = 0; L < this.weights.length - 1; L++) {
-      const z = matAdd(matMul(this.weights[L], a), this.biases[L]);
+      const z = matMulAddRowBias(a, this.weights[L], this.biases[L]);
       const an = leakyRelu(z);
       layers.push({ z, a: an });
       a = an;
     }
     const Llast = this.weights.length - 1;
-    const logits = matAdd(matMul(this.weights[Llast], a), this.biases[Llast]);
+    const logits = matMulAddRowBias(a, this.weights[Llast], this.biases[Llast]);
     const prob = softmax(logits);
     layers.push({ z: logits, a: prob });
     return { layers, logits, prob };
   }
 
   crossEntropyLoss(prob: Mat, yOneHot: Mat): number {
+    const B = prob[0].length;
     let s = 0;
-    for (let i = 0; i < prob.length; i++) {
-      const p = Math.max(prob[i][0], 1e-12);
-      s -= yOneHot[i][0] * Math.log(p);
+    for (let j = 0; j < B; j++) {
+      for (let i = 0; i < prob.length; i++) {
+        const p = Math.max(prob[i][j], 1e-12);
+        s -= yOneHot[i][j] * Math.log(p);
+      }
     }
-    return s;
+    return s / B;
   }
 
   backward(
-    xCol: Mat,
+    xBatch: Mat,
     yOneHot: Mat,
     fwd: ForwardResult,
   ): { dW: Mat[]; db: Mat[] } {
@@ -79,28 +83,20 @@ export class MLP {
     const db: Mat[] = this.biases.map((b) => zeros(b.length, b[0].length));
     const Ln = this.weights.length - 1;
     let delta = softmaxCrossEntropyGrad(fwd.prob, yOneHot);
-    let aPrev = Ln === 0 ? xCol : fwd.layers[Ln - 1].a;
-    this.accumGradOuter(delta, aPrev, dW[Ln], db[Ln]);
+    let aPrev = Ln === 0 ? xBatch : fwd.layers[Ln - 1].a;
+    dW[Ln] = matMul(delta, transpose(aPrev));
+    db[Ln] = matSumBatchColsToCol(delta);
     for (let L = Ln - 1; L >= 0; L--) {
       delta = matMul(transpose(this.weights[L + 1]), delta);
       const rg = leakyReluGrad(fwd.layers[L].z);
       for (let i = 0; i < delta.length; i++) {
         for (let j = 0; j < delta[0].length; j++) delta[i][j] *= rg[i][j];
       }
-      aPrev = L === 0 ? xCol : fwd.layers[L - 1].a;
-      this.accumGradOuter(delta, aPrev, dW[L], db[L]);
+      aPrev = L === 0 ? xBatch : fwd.layers[L - 1].a;
+      dW[L] = matMul(delta, transpose(aPrev));
+      db[L] = matSumBatchColsToCol(delta);
     }
     return { dW, db };
-  }
-
-  accumGradOuter(deltaCol: Mat, aPrevCol: Mat, dW: Mat, db: Mat): void {
-    const rows = deltaCol.length;
-    const cols = aPrevCol.length;
-    for (let i = 0; i < rows; i++) {
-      const di = deltaCol[i][0];
-      db[i][0] += di;
-      for (let j = 0; j < cols; j++) dW[i][j] += di * aPrevCol[j][0];
-    }
   }
 
   applyGradients(dW: Mat[], db: Mat[], lr: number, batchSize: number): void {
@@ -111,21 +107,31 @@ export class MLP {
     }
   }
 
-  predictClass(prob: Mat): number {
+  predictClass(prob: Mat, col = 0): number {
     let best = 0;
-    let bestv = prob[0][0];
+    let bestv = prob[0][col];
     for (let i = 1; i < prob.length; i++) {
-      if (prob[i][0] > bestv) {
-        bestv = prob[i][0];
+      const v = prob[i][col];
+      if (v > bestv) {
+        bestv = v;
         best = i;
       }
     }
     return best;
   }
+
+  countCorrectInBatch(prob: Mat, labels: number[]): number {
+    const B = prob[0].length;
+    let c = 0;
+    for (let j = 0; j < B; j++) {
+      if (this.predictClass(prob, j) === labels[j]) c += 1;
+    }
+    return c;
+  }
 }
 
-export function activationSlices(xCol: Mat, fwd: ForwardResult): number[][] {
-  const s: number[][] = [colVecFromMat(xCol)];
-  for (const lc of fwd.layers) s.push(colVecFromMat(lc.a));
+export function activationSlices(x: Mat, fwd: ForwardResult, col = 0): number[][] {
+  const s: number[][] = [colSliceAsVec(x, col)];
+  for (const lc of fwd.layers) s.push(colSliceAsVec(lc.a, col));
   return s;
 }

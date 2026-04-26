@@ -1,6 +1,6 @@
 import type { MnistSample } from "../data/mnist";
-import { batchIndices, oneHot, shuffleInPlace } from "../data/mnist";
-import { matAccInPlace, matFromColVec, zeros } from "../nn/matrix";
+import { batchIndices, shuffleInPlace } from "../data/mnist";
+import { zeros } from "../nn/matrix";
 import { activationSlices, MLP } from "../nn/network";
 
 export type TrainSnapshot = {
@@ -46,30 +46,25 @@ export async function trainLoop(
         await sleep(50);
       }
       if (shouldStop()) return;
-      const dW = net.weights.map((w) => zeros(w.length, w[0].length));
-      const db = net.biases.map((b) => zeros(b.length, b[0].length));
-      let lossSum = 0;
-      let correct = 0;
-      let lastActs: number[][] = [];
-      for (const j of bi) {
-        const s = data[idx[j]];
-        const x = matFromColVec(s.pixels);
-        const y = matFromColVec(oneHot(s.label));
-        const fwd = net.forward(x);
-        lossSum += net.crossEntropyLoss(fwd.prob, y);
-        if (net.predictClass(fwd.prob) === s.label) correct += 1;
-        const { dW: gW, db: gb } = net.backward(x, y, fwd);
-        for (let L = 0; L < dW.length; L++) {
-          matAccInPlace(dW[L], gW[L]);
-          matAccInPlace(db[L], gb[L]);
-        }
-        lastActs = activationSlices(x, fwd);
-      }
       const bs = bi.length;
+      const X = zeros(net.inputDim, bs);
+      const Y = zeros(net.outputDim, bs);
+      const labels: number[] = new Array(bs);
+      for (let k = 0; k < bs; k++) {
+        const s = data[idx[bi[k]!]];
+        labels[k] = s.label;
+        for (let i = 0; i < net.inputDim; i++) X[i][k] = s.pixels[i];
+        Y[s.label][k] = 1;
+      }
+      const fwd = net.forward(X);
+      const meanBatchLoss = net.crossEntropyLoss(fwd.prob, Y);
+      const loss = meanBatchLoss;
+      const correct = net.countCorrectInBatch(fwd.prob, labels);
+      const { dW, db } = net.backward(X, Y, fwd);
+      const lastActs = activationSlices(X, fwd, bs - 1);
       net.applyGradients(dW, db, cfg.lr, bs);
-      const loss = lossSum / bs;
       const trainAccBatch = correct / bs;
-      epochLossSum += lossSum;
+      epochLossSum += meanBatchLoss * bs;
       epochCorrect += correct;
       epochSeen += bs;
       if (batchCounter % cfg.vizEveryNBatches === 0) {

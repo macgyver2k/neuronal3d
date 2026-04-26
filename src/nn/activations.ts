@@ -18,35 +18,31 @@ export function leakyReluGrad(z: Mat, alpha = 0.01): Mat {
 }
 
 export function softmax(z: Mat): Mat {
-  let max = -Infinity;
-  for (let i = 0; i < z.length; i++) {
-    for (let j = 0; j < z[0].length; j++) {
+  const zr = z.length;
+  const zc = z[0].length;
+  const r = zeros(zr, zc);
+  for (let j = 0; j < zc; j++) {
+    let max = -Infinity;
+    for (let i = 0; i < zr; i++) {
       const zij = Number.isFinite(z[i][j]) ? z[i][j] : 0;
       if (zij > max) max = zij;
     }
-  }
-  if (!Number.isFinite(max)) max = 0;
-  const exps = zeros(z.length, z[0].length);
-  let sum = 0;
-  for (let i = 0; i < z.length; i++) {
-    for (let j = 0; j < z[0].length; j++) {
+    if (!Number.isFinite(max)) max = 0;
+    const exps: number[] = new Array(zr);
+    let sum = 0;
+    for (let i = 0; i < zr; i++) {
       const zij = Number.isFinite(z[i][j]) ? z[i][j] : 0;
       const shifted = Math.max(-60, Math.min(60, zij - max));
       const e = Math.exp(shifted);
-      exps[i][j] = e;
+      exps[i] = e;
       sum += e;
     }
-  }
-  const r = zeros(z.length, z[0].length);
-  if (!Number.isFinite(sum) || sum <= 0) {
-    const uniform = 1 / Math.max(1, z.length);
-    for (let i = 0; i < z.length; i++) {
-      for (let j = 0; j < z[0].length; j++) r[i][j] = uniform;
+    if (!Number.isFinite(sum) || sum <= 0) {
+      const uniform = 1 / Math.max(1, zr);
+      for (let i = 0; i < zr; i++) r[i][j] = uniform;
+    } else {
+      for (let i = 0; i < zr; i++) r[i][j] = exps[i]! / sum;
     }
-    return r;
-  }
-  for (let i = 0; i < z.length; i++) {
-    for (let j = 0; j < z[0].length; j++) r[i][j] = exps[i][j] / sum;
   }
   return r;
 }

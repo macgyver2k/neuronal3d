@@ -17,59 +17,35 @@ const MODEL_STORAGE_KEY_V1 = "neuronal3d:model:v1";
 const MODEL_STORAGE_KEY_V2 = "neuronal3d:models:v2";
 const EPOCH_TRACK_STORAGE_KEY = "neuronal3d:epochTrack:v1";
 const EPOCH_TRACK_MAX_ROWS_PER_MODEL = 500;
-const ACTIVE_DATASET_STORAGE_KEY = "neuronal3d:activeDataset:v1";
-const APP_MODE_STORAGE_KEY = "neuronal3d:appMode:v1";
 const VIZ_DEBUG_INFER =
   typeof globalThis.location !== "undefined" &&
   new URLSearchParams(globalThis.location.search).has("vizdebug");
 
-type DatasetConfig = {
-  key: "mnist" | "usps" | "emnistDigits";
-  label: string;
-  trainPath: string;
-  testPath: string;
-  bundledTrainUrl?: string;
-  bundledTestUrl?: string;
-};
-
-const DATASETS: DatasetConfig[] = [
-  {
-    key: "mnist",
-    label: "MNIST",
-    trainPath: "/data/csv/mnist_train.csv",
-    testPath: "/data/csv/mnist_test.csv",
-  },
-  {
-    key: "usps",
-    label: "USPS",
-    trainPath: "/data/csv/usps_train.csv",
-    testPath: "/data/csv/usps_test.csv",
-  },
-  {
-    key: "emnistDigits",
-    label: "EMNIST Digits",
-    trainPath: "/data/csv/emnist_digits_train.csv",
-    testPath: "/data/csv/emnist_digits_test.csv",
-  },
-];
+const MNIST_TRAIN_CSV = "/data/csv/mnist_train.csv";
+const MNIST_TEST_CSV = "/data/csv/mnist_test.csv";
+const MNIST_LABEL = "MNIST";
 
 type ElRefs = {
   app: HTMLElement;
-  modeTabTrain: HTMLButtonElement;
-  modeTabInfer: HTMLButtonElement;
   dockTrain: HTMLElement;
   dockInfer: HTMLElement;
+  btnNewModel: HTMLButtonElement;
   btnTrain: HTMLButtonElement;
   btnPause: HTMLButtonElement;
   modelSelect: HTMLSelectElement;
+  modelDropdownButton: HTMLButtonElement;
+  modelDropdownLabel: HTMLSpanElement;
+  modelDropdownLabelName: HTMLSpanElement;
+  modelDropdownLabelMeta: HTMLSpanElement;
+  modelDropdownMenu: HTMLDivElement;
   modelLibraryList: HTMLDivElement;
   activeModelTitle: HTMLParagraphElement;
   activeModelDetail: HTMLParagraphElement;
+  inferModelContext: HTMLParagraphElement;
   datasetRibbon: HTMLParagraphElement;
   epochStepHint: HTMLParagraphElement;
   btnSaveModelAs: HTMLButtonElement;
   btnResetModel: HTMLButtonElement;
-  datasetSelect: HTMLSelectElement;
   epochsInput: HTMLInputElement;
   lrInput: HTMLInputElement;
   batchSizeInput: HTMLInputElement;
@@ -96,21 +72,25 @@ function bindEl(): ElRefs {
   };
   return {
     app: m("app"),
-    modeTabTrain: m("modeTabTrain"),
-    modeTabInfer: m("modeTabInfer"),
     dockTrain: m("dockTrain"),
     dockInfer: m("dockInfer"),
+    btnNewModel: m("btnNewModel"),
     btnTrain: m("btnTrain"),
     btnPause: m("btnPause"),
     modelSelect: m("modelSelect"),
+    modelDropdownButton: m("modelDropdownButton"),
+    modelDropdownLabel: m("modelDropdownLabel"),
+    modelDropdownLabelName: m("modelDropdownLabelName"),
+    modelDropdownLabelMeta: m("modelDropdownLabelMeta"),
+    modelDropdownMenu: m("modelDropdownMenu"),
     modelLibraryList: m("modelLibraryList"),
     activeModelTitle: m("activeModelTitle"),
     activeModelDetail: m("activeModelDetail"),
+    inferModelContext: m("inferModelContext"),
     datasetRibbon: m("datasetRibbon"),
     epochStepHint: m("epochStepHint"),
     btnSaveModelAs: m("btnSaveModelAs"),
     btnResetModel: m("btnResetModel"),
-    datasetSelect: m("datasetSelect"),
     epochsInput: m("epochsInput"),
     lrInput: m("lrInput"),
     batchSizeInput: m("batchSizeInput"),
@@ -191,8 +171,7 @@ let epochTrackRows: PersistedEpochRow[] = [];
 let currentEpochRun = 0;
 let currentEpochRunStartedAt = "";
 let currentEpochRunStartedMs = 0;
-let activeDatasetKey: DatasetConfig["key"] = "mnist";
-
+let modelDropdownOpen = false;
 let drawing = false;
 let liveCanvasInferRaf: number | null = null;
 function canvasPos(ev: PointerEvent): { x: number; y: number } {
@@ -214,32 +193,81 @@ function setStatus(t: string): void {
   el.status.textContent = t;
 }
 
-function readStoredAppMode(): "train" | "infer" {
-  try {
-    const raw = localStorage.getItem(APP_MODE_STORAGE_KEY);
-    if (raw === "infer" || raw === "train") return raw;
-  } catch {
-  }
-  return "train";
+function setModelDropdownOpen(open: boolean): void {
+  modelDropdownOpen = open;
+  el.modelDropdownButton.setAttribute("aria-expanded", open ? "true" : "false");
+  el.modelDropdownMenu.hidden = !open;
 }
 
-function setAppMode(mode: "train" | "infer"): void {
-  el.app.dataset["appMode"] = mode;
-  el.modeTabTrain.setAttribute("aria-selected", mode === "train" ? "true" : "false");
-  el.modeTabInfer.setAttribute("aria-selected", mode === "infer" ? "true" : "false");
-  el.modeTabTrain.tabIndex = mode === "train" ? 0 : -1;
-  el.modeTabInfer.tabIndex = mode === "infer" ? 0 : -1;
-  el.dockTrain.toggleAttribute("hidden", mode !== "train");
-  el.dockInfer.toggleAttribute("hidden", mode !== "infer");
-  el.dockTrain.inert = mode !== "train";
-  el.dockInfer.inert = mode !== "infer";
-  try {
-    localStorage.setItem(APP_MODE_STORAGE_KEY, mode);
-  } catch {
+function syncModelDropdownLabel(): void {
+  if (modelStore.models.length === 0) {
+    el.modelDropdownLabelName.textContent = "Kein Modell";
+    el.modelDropdownLabelMeta.textContent = "Lege ein neues Modell an";
+    return;
   }
-  queueMicrotask(() => {
-    window.dispatchEvent(new Event("resize"));
-  });
+  const id = activeModelId ?? el.modelSelect.value;
+  const entry = id ? modelStore.models.find((m) => m.id === id) : null;
+  if (!entry) {
+    el.modelDropdownLabelName.textContent = "Modell wählen";
+    el.modelDropdownLabelMeta.textContent = "";
+    return;
+  }
+  el.modelDropdownLabelName.textContent = entry.name;
+  el.modelDropdownLabelMeta.textContent =
+    `${entry.metrics.epochsTrained} Ep · Acc ${fmtPct(entry.metrics.testAcc)} · Err ${fmtPct(entry.metrics.errorRate)}`;
+}
+
+function renderModelDropdownMenu(): void {
+  el.modelDropdownMenu.replaceChildren();
+  if (modelStore.models.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "n3-modelbar-empty";
+    empty.textContent = "Keine Modelle vorhanden";
+    el.modelDropdownMenu.append(empty);
+    return;
+  }
+  const activeId = activeModelId ?? el.modelSelect.value;
+  for (const entry of modelStore.models) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "n3-modelbar-option" + (entry.id === activeId ? " n3-modelbar-option--active" : "");
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", entry.id === activeId ? "true" : "false");
+    const name = document.createElement("span");
+    name.className = "n3-modelbar-option-name";
+    name.textContent = entry.name;
+    const meta = document.createElement("span");
+    meta.className = "n3-modelbar-option-meta";
+    const chipEp = document.createElement("span");
+    chipEp.className = "n3-modelbar-chip";
+    chipEp.textContent = `${entry.metrics.epochsTrained} Ep`;
+    const chipAcc = document.createElement("span");
+    chipAcc.className = "n3-modelbar-chip";
+    chipAcc.textContent = `Acc ${fmtPct(entry.metrics.testAcc)}`;
+    const chipErr = document.createElement("span");
+    chipErr.className = "n3-modelbar-chip";
+    chipErr.textContent = `Err ${fmtPct(entry.metrics.errorRate)}`;
+    meta.append(chipEp, chipAcc, chipErr);
+    item.append(name, meta);
+    item.disabled = trainingRunning;
+    item.addEventListener("click", () => {
+      if (selectModelById(entry.id, "Aktives Modell")) {
+        setModelDropdownOpen(false);
+      }
+    });
+    el.modelDropdownMenu.append(item);
+  }
+}
+
+function selectModelById(id: string, statusPrefix = "Aktiv"): boolean {
+  if (!id) return false;
+  if (!loadSelectedModelIntoNet(id)) {
+    setStatus("Modell konnte nicht geladen werden.");
+    return false;
+  }
+  const entry = modelStore.models.find((m) => m.id === id);
+  setStatus(`${statusPrefix}: ${entry?.name ?? id}`);
+  return true;
 }
 
 function renderEpochTracking(): void {
@@ -402,11 +430,14 @@ function updateButtons(): void {
   const hasTest = testData.length > 0;
   el.btnTrain.disabled = !hasTrain || trainingRunning;
   el.btnPause.disabled = !trainingRunning;
+  el.modelSelect.disabled = trainingRunning;
+  el.modelDropdownButton.disabled = trainingRunning || modelStore.models.length === 0;
+  if (trainingRunning) setModelDropdownOpen(false);
   el.btnSaveModelAs.disabled = !net || trainingRunning;
   el.btnResetModel.disabled = !net || trainingRunning;
   el.btnInferRandom.disabled = !net || !hasTest;
   el.btnInferDraw.disabled = !net;
-  el.datasetSelect.disabled = trainingRunning;
+  el.btnNewModel.disabled = trainingRunning;
   el.epochsInput.disabled = trainingRunning;
   el.lrInput.disabled = trainingRunning;
   el.batchSizeInput.disabled = trainingRunning;
@@ -417,21 +448,8 @@ function updateButtons(): void {
   syncEpochPresetHighlight();
   updateRunHint();
   updateActiveModelPanel();
-}
-
-function datasetByKey(key: string): DatasetConfig | null {
-  return DATASETS.find((d) => d.key === key) ?? null;
-}
-
-function applyDatasetSelectionToUi(): void {
-  el.datasetSelect.innerHTML = "";
-  for (const d of DATASETS) {
-    const option = document.createElement("option");
-    option.value = d.key;
-    option.textContent = d.label;
-    el.datasetSelect.append(option);
-  }
-  el.datasetSelect.value = activeDatasetKey;
+  renderModelDropdownMenu();
+  syncModelDropdownLabel();
 }
 
 function parseIntInRange(raw: string, fallback: number, min: number, max: number): number {
@@ -502,6 +520,22 @@ function saveModelStoreToStorage(store: StoredModelCollection): void {
 function refreshModelSelect(): void {
   const selected = activeModelId ?? el.modelSelect.value;
   el.modelSelect.innerHTML = "";
+  if (modelStore.models.length === 0) {
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Kein Modell";
+    empty.selected = true;
+    el.modelSelect.append(empty);
+    applyEpochHistoryToUi(null);
+    syncModelDropdownLabel();
+    renderModelDropdownMenu();
+    setModelDropdownOpen(false);
+    renderModelLibrary();
+    updateActiveModelPanel();
+    updateRunHint();
+    syncEpochPresetHighlight();
+    return;
+  }
   for (const entry of modelStore.models) {
     const option = document.createElement("option");
     option.value = entry.id;
@@ -510,8 +544,12 @@ function refreshModelSelect(): void {
   }
   if (selected && modelStore.models.some((m) => m.id === selected)) {
     el.modelSelect.value = selected;
+  } else if (modelStore.models.length > 0) {
+    el.modelSelect.value = modelStore.models[0].id;
   }
   applyEpochHistoryToUi(el.modelSelect.value || null);
+  syncModelDropdownLabel();
+  renderModelDropdownMenu();
   renderModelLibrary();
   updateActiveModelPanel();
   updateRunHint();
@@ -524,7 +562,7 @@ function renderModelLibrary(): void {
     const p = document.createElement("p");
     p.className = "modelLibEmpty";
     p.textContent =
-      "Noch keine Stände. Training starten legt den ersten an; „Als neuen Stand speichern“ kopiert das aktuelle Netz unter einem weiteren Namen. Nur in diesem Browser.";
+      "Noch keine Modelle. „Neues Modell“ legt einen frischen Stand an, oder Training starten erzeugt beim ersten Lauf automatisch einen Eintrag. Nur in diesem Browser.";
     el.modelLibraryList.append(p);
     return;
   }
@@ -565,6 +603,7 @@ function updateActiveModelPanel(): void {
     el.activeModelTitle.textContent = "Noch kein Netz geladen";
     el.activeModelDetail.textContent =
       "Bibliothek: Karte wählen — oder „Training starten“ ohne vorherigen Stand legt automatisch einen ersten Stand an.";
+    el.inferModelContext.textContent = "Kein aktives Modell — zuerst ein Modell wählen oder anlegen.";
     return;
   }
   const id = activeModelId ?? el.modelSelect.value;
@@ -572,28 +611,28 @@ function updateActiveModelPanel(): void {
   if (entry) {
     el.activeModelTitle.textContent = entry.name;
     el.activeModelDetail.textContent = `Test ${fmtPct(entry.metrics.testAcc)} · Fehlerquote ${fmtPct(entry.metrics.errorRate)} · ${entry.metrics.epochsTrained} trainierte Epochen (Summe) · zuletzt ${formatTimeLabel(entry.updatedAt)}`;
+    el.inferModelContext.textContent = `Inferenz nutzt: ${entry.name} · ${entry.metrics.epochsTrained} Epochen gesamt · Test ${fmtPct(entry.metrics.testAcc)}`;
   } else {
     el.activeModelTitle.textContent = "Netz im Arbeitsspeicher";
     el.activeModelDetail.textContent = "Kein passender Eintrag in der Bibliothek gefunden.";
+    el.inferModelContext.textContent = "Inferenz nutzt das Netz im Arbeitsspeicher (ohne Bibliothekseintrag).";
   }
 }
 
 function updateDatasetRibbon(): void {
-  const ds = datasetByKey(activeDatasetKey);
-  const label = ds?.label ?? activeDatasetKey;
   if (trainData.length === 0 && testData.length === 0) {
-    el.datasetRibbon.textContent = `${label}: Train 0 · Test 0 — warten auf erfolgreichen Abruf (Statuszeile).`;
+    el.datasetRibbon.textContent = `${MNIST_LABEL}: Train 0 · Test 0 — warten auf erfolgreichen Abruf (Statuszeile).`;
     return;
   }
   if (trainData.length === 0) {
-    el.datasetRibbon.textContent = `${label}: Trainingsdaten fehlen · Test ${testData.length}.`;
+    el.datasetRibbon.textContent = `${MNIST_LABEL}: Trainingsdaten fehlen · Test ${testData.length}.`;
     return;
   }
   if (testData.length === 0) {
-    el.datasetRibbon.textContent = `${label}: Train ${trainData.length} · Testdaten fehlen.`;
+    el.datasetRibbon.textContent = `${MNIST_LABEL}: Train ${trainData.length} · Testdaten fehlen.`;
     return;
   }
-  el.datasetRibbon.textContent = `${label}: ${trainData.length} Train-Bilder · ${testData.length} Test-Bilder bereit.`;
+  el.datasetRibbon.textContent = `${MNIST_LABEL}: ${trainData.length} Train-Bilder · ${testData.length} Test-Bilder bereit.`;
 }
 
 function updateRunHint(): void {
@@ -731,19 +770,10 @@ function zeroActivationsForLayout(): number[][] {
 }
 
 async function loadCsvData(): Promise<void> {
-  const ds = datasetByKey(activeDatasetKey);
-  if (!ds) {
-    trainData = [];
-    testData = [];
-    setStatus("Datensatz-Konfiguration ungültig");
-    updateDatasetRibbon();
-    updateButtons();
-    return;
-  }
-  const trainSources = [ds.trainPath, ds.bundledTrainUrl].filter((x): x is string => typeof x === "string" && x.length > 0);
-  const testSources = [ds.testPath, ds.bundledTestUrl].filter((x): x is string => typeof x === "string" && x.length > 0);
+  const trainSources = [MNIST_TRAIN_CSV];
+  const testSources = [MNIST_TEST_CSV];
   try {
-    setStatus(`${ds.label}: Train-CSV wird geladen …`);
+    setStatus(`${MNIST_LABEL}: Train-CSV wird geladen …`);
     let trainErr = "";
     let loadedTrain: MnistSample[] = [];
     for (const src of trainSources) {
@@ -767,13 +797,13 @@ async function loadCsvData(): Promise<void> {
     }
     if (loadedTrain.length === 0) throw new Error(trainErr || "Train-CSV konnte nicht geladen werden");
     trainData = loadedTrain;
-    setStatus(`${ds.label}: Train geladen (${trainData.length} Zeilen)`);
+    setStatus(`${MNIST_LABEL}: Train geladen (${trainData.length} Zeilen)`);
   } catch (e) {
-    setStatus(`${ds.label}: Fehler Train-CSV: ${e}`);
+    setStatus(`${MNIST_LABEL}: Fehler Train-CSV: ${e}`);
     trainData = [];
   }
   try {
-    setStatus(`${ds.label}: Test-CSV wird geladen …`);
+    setStatus(`${MNIST_LABEL}: Test-CSV wird geladen …`);
     let testErr = "";
     let loadedTest: MnistSample[] = [];
     for (const src of testSources) {
@@ -797,17 +827,10 @@ async function loadCsvData(): Promise<void> {
     }
     if (loadedTest.length === 0) throw new Error(testErr || "Test-CSV konnte nicht geladen werden");
     testData = loadedTest;
-    setStatus(`${ds.label}: Train ${trainData.length} | Test ${testData.length} geladen`);
+    setStatus(`${MNIST_LABEL}: Train ${trainData.length} | Test ${testData.length} geladen`);
   } catch (e) {
-    setStatus(`${ds.label}: Fehler Test-CSV: ${e}`);
+    setStatus(`${MNIST_LABEL}: Fehler Test-CSV: ${e}`);
     testData = [];
-  }
-  if (trainData.length === 0 && activeDatasetKey !== "mnist") {
-    activeDatasetKey = "mnist";
-    localStorage.setItem(ACTIVE_DATASET_STORAGE_KEY, activeDatasetKey);
-    applyDatasetSelectionToUi();
-    await loadCsvData();
-    return;
   }
   lastInferSampleIndex = -1;
   updateDatasetRibbon();
@@ -970,6 +993,7 @@ function inferWithPixels(
 
 export function bootstrapNeuronalApp(): () => void {
   el = bindEl();
+  setModelDropdownOpen(false);
   const ctxDraw = el.drawCanvas.getContext("2d");
   if (!ctxDraw) throw new Error("canvas");
   ctx2d = ctxDraw;
@@ -1019,25 +1043,6 @@ export function bootstrapNeuronalApp(): () => void {
     scheduleLiveCanvasInfer();
   });
 
-  el.modeTabTrain.addEventListener("click", () => {
-    setAppMode("train");
-  });
-
-  el.modeTabInfer.addEventListener("click", () => {
-    setAppMode("infer");
-  });
-
-  const onKeydown = (e: KeyboardEvent) => {
-    if (!e.altKey || e.ctrlKey || e.metaKey) return;
-    if (e.code !== "Digit1" && e.code !== "Digit2") return;
-    const t = e.target;
-    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
-    if (t instanceof HTMLElement && t.isContentEditable) return;
-    e.preventDefault();
-    setAppMode(e.code === "Digit1" ? "train" : "infer");
-  };
-  window.addEventListener("keydown", onKeydown);
-
   const { scene, controls, render, dispose } = createScene(el.viz);
   renderSceneBound = render;
   disposeSceneBound = dispose;
@@ -1065,15 +1070,66 @@ export function bootstrapNeuronalApp(): () => void {
 
   el.btnPause.addEventListener("click", () => {
     pauseTraining = !pauseTraining;
-    el.btnPause.textContent = pauseTraining ? "Training fortsetzen" : "Training anhalten";
+    el.btnPause.textContent = pauseTraining ? "Fortsetzen" : "Anhalten";
   });
 
-  el.datasetSelect.addEventListener("change", () => {
-    const selected = datasetByKey(el.datasetSelect.value);
-    if (!selected) return;
-    activeDatasetKey = selected.key;
-    localStorage.setItem(ACTIVE_DATASET_STORAGE_KEY, activeDatasetKey);
-    void loadCsvData();
+  el.modelDropdownButton.addEventListener("click", () => {
+    if (el.modelDropdownButton.disabled) return;
+    setModelDropdownOpen(!modelDropdownOpen);
+  });
+
+  el.modelSelect.addEventListener("change", () => {
+    if (trainingRunning) return;
+    const id = el.modelSelect.value;
+    if (!id) return;
+    selectModelById(id, "Aktives Modell");
+  });
+
+  const onDocPointerDown = (ev: PointerEvent) => {
+    const t = ev.target;
+    if (!(t instanceof Node)) return;
+    if (
+      t === el.modelDropdownButton ||
+      el.modelDropdownButton.contains(t) ||
+      el.modelDropdownMenu.contains(t)
+    ) {
+      return;
+    }
+    setModelDropdownOpen(false);
+  };
+  document.addEventListener("pointerdown", onDocPointerDown);
+
+  const onDocKeydown = (ev: KeyboardEvent) => {
+    if (ev.key === "Escape") setModelDropdownOpen(false);
+  };
+  document.addEventListener("keydown", onDocKeydown);
+
+  el.btnNewModel.addEventListener("click", () => {
+    if (trainingRunning) return;
+    const fresh = new MLP(784, HIDDEN, 10);
+    net = fresh;
+    lastTrainLoss = 0;
+    lastTrainBatchAcc = 0;
+    lastInferActsDebug = null;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    upsertModelEntry({
+      id,
+      name: defaultModelName(),
+      createdAt: now,
+      updatedAt: now,
+      model: cloneStoredModel(fresh),
+      metrics: {
+        lastLoss: 0,
+        lastBatchAcc: 0,
+        testAcc: null,
+        errorRate: null,
+        epochsTrained: 0,
+      },
+    });
+    applyEpochHistoryToUi(id);
+    publishVizState("idle", zeroActivationsForLayout());
+    setStatus(`Neues Modell: ${modelStore.models.find((m) => m.id === id)?.name ?? id}`);
   });
 
   el.btnSaveModelAs.addEventListener("click", () => {
@@ -1135,7 +1191,7 @@ export function bootstrapNeuronalApp(): () => void {
       trainingRunning = true;
       stopTraining = false;
       pauseTraining = false;
-      el.btnPause.textContent = "Training anhalten";
+      el.btnPause.textContent = "Anhalten";
       updateButtons();
       if (!net) {
         net = new MLP(784, HIDDEN, 10);
@@ -1252,15 +1308,7 @@ export function bootstrapNeuronalApp(): () => void {
   };
   window.addEventListener("beforeunload", onBeforeUnload);
 
-  try {
-    const savedDataset = localStorage.getItem(ACTIVE_DATASET_STORAGE_KEY);
-    const ds = savedDataset ? datasetByKey(savedDataset) : null;
-    if (ds) activeDatasetKey = ds.key;
-  } catch {
-  }
-  applyDatasetSelectionToUi();
-  setAppMode(readStoredAppMode());
-  setStatus("Datensatz wird automatisch geladen …");
+  setStatus("MNIST wird geladen …");
   updateButtons();
   void loadCsvData();
   try {
@@ -1278,14 +1326,15 @@ export function bootstrapNeuronalApp(): () => void {
       applyEpochHistoryToUi(null);
     }
   } catch {
-    setStatus("Datensatz wird automatisch geladen …");
+    setStatus("MNIST wird geladen …");
     applyEpochHistoryToUi(null);
   }
 
   return () => {
     stopTraining = true;
+    document.removeEventListener("pointerdown", onDocPointerDown);
+    document.removeEventListener("keydown", onDocKeydown);
     window.removeEventListener("beforeunload", onBeforeUnload);
-    window.removeEventListener("keydown", onKeydown);
     stopAnimCleanup?.();
     net3d?.dispose();
     disposeSceneBound?.();

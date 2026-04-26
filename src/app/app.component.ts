@@ -1,21 +1,11 @@
-import { AfterViewInit, Component, OnDestroy } from "@angular/core";
-import { bootstrapNeuronalApp } from "../neuronal-app";
+import { Component } from "@angular/core";
+import { NeuronalWorkspaceComponent } from "./neuronal-workspace/neuronal-workspace.component";
 
 @Component({
   selector: "app-root",
-  imports: [],
+  standalone: true,
+  imports: [NeuronalWorkspaceComponent],
   templateUrl: "./app.component.html",
   styleUrl: "./app.component.scss",
 })
-export class AppComponent implements AfterViewInit, OnDestroy {
-  private teardown: (() => void) | null = null;
-
-  ngAfterViewInit(): void {
-    this.teardown = bootstrapNeuronalApp();
-  }
-
-  ngOnDestroy(): void {
-    this.teardown?.();
-    this.teardown = null;
-  }
-}
+export class AppComponent {}

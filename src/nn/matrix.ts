@@ -77,6 +77,31 @@ export function matAccInPlace(target: Mat, delta: Mat): void {
   }
 }
 
+export function matMulAddRowBias(a: Mat, w: Mat, bCol: Mat): Mat {
+  const z = matMul(w, a);
+  for (let i = 0; i < z.length; i++) {
+    const bi = bCol[i][0];
+    for (let j = 0; j < z[0].length; j++) z[i][j] += bi;
+  }
+  return z;
+}
+
+export function matSumBatchColsToCol(a: Mat): Mat {
+  const r = zeros(a.length, 1);
+  for (let i = 0; i < a.length; i++) {
+    let s = 0;
+    for (let j = 0; j < a[0].length; j++) s += a[i][j];
+    r[i][0] = s;
+  }
+  return r;
+}
+
+export function colSliceAsVec(m: Mat, col: number): number[] {
+  const v: number[] = new Array(m.length);
+  for (let i = 0; i < m.length; i++) v[i] = m[i][col];
+  return v;
+}
+
 export function matSubInPlace(target: Mat, grad: Mat, lr: number): void {
   for (let i = 0; i < target.length; i++) {
     for (let j = 0; j < target[0].length; j++) {
