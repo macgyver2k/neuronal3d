@@ -1,16 +1,16 @@
-import * as THREE from "three";
+import * as THREE from 'three';
 
 function createDigitTexture(digit: number): THREE.CanvasTexture {
-  const c = document.createElement("canvas");
+  const c = document.createElement('canvas');
   c.width = 128;
   c.height = 128;
-  const g = c.getContext("2d");
-  if (!g) throw new Error("canvas2d");
+  const g = c.getContext('2d');
+  if (!g) throw new Error('canvas2d');
   g.clearRect(0, 0, 128, 128);
-  g.fillStyle = "#ffffff";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.font = "bold 92px system-ui, sans-serif";
+  g.fillStyle = '#ffffff';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.font = 'bold 92px system-ui, sans-serif';
   g.fillText(String(digit), 64, 68);
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
@@ -30,7 +30,84 @@ const OUTPUT_NEURON_Y_BELOW_LABEL = 0.92;
 const digitSpriteColA = new THREE.Color();
 const digitSpriteColB = new THREE.Color();
 
-function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
+export const HIDDEN_LAYER_VIZ_LAYOUTS = [
+  'ring',
+  'grid',
+  'line',
+  'arc',
+  'arcAlt',
+] as const;
+export type HiddenLayerVizLayout = (typeof HIDDEN_LAYER_VIZ_LAYOUTS)[number];
+
+export const HIDDEN_LAYER_VIZ_SCALE_MIN = 0.25;
+export const HIDDEN_LAYER_VIZ_SCALE_MAX = 2.5;
+export const HIDDEN_LAYER_VIZ_SCALE_STEP = 0.05;
+export const HIDDEN_LAYER_VIZ_SCALE_DEFAULT = 1;
+
+export function clampHiddenLayerVizScale(v: number): number {
+  return Math.min(
+    HIDDEN_LAYER_VIZ_SCALE_MAX,
+    Math.max(HIDDEN_LAYER_VIZ_SCALE_MIN, v),
+  );
+}
+
+function placeHiddenLayerPoints(
+  n: number,
+  x: number,
+  mode: HiddenLayerVizLayout,
+  pts: THREE.Vector3[],
+  scale: number,
+): void {
+  const ringR = 0.35 + Math.min(1.4, n * 0.018);
+  if (mode === 'ring') {
+    for (let i = 0; i < n; i++) {
+      const t = (i / Math.max(1, n)) * Math.PI * 2;
+      pts[i]!.set(x, Math.sin(t) * ringR, Math.cos(t) * ringR);
+    }
+  } else if (mode === 'grid') {
+    const side = Math.ceil(Math.sqrt(n));
+    let k = 0;
+    for (let a = 0; a < side && k < n; a++) {
+      for (let b = 0; b < side && k < n; b++) {
+        const fy = (a / Math.max(1, side - 1) - 0.5) * 2.2;
+        const fz = (b / Math.max(1, side - 1) - 0.5) * 2.2;
+        pts[k]!.set(x, fy, fz);
+        k++;
+      }
+    }
+  } else if (mode === 'line') {
+    const minStep = 0.34;
+    const span = Math.max(
+      ringR * 3.5,
+      1.4,
+      minStep * Math.max(0, n - 1),
+    );
+    const step = n > 1 ? span / (n - 1) : 0;
+    const z0 = -((n - 1) * 0.5) * step;
+    for (let i = 0; i < n; i++) {
+      pts[i]!.set(x, 0, z0 + i * step);
+    }
+  } else {
+    const t0 = mode === 'arc' ? 0 : Math.PI;
+    for (let i = 0; i < n; i++) {
+      const t =
+        n <= 1 ? t0 + Math.PI * 0.5 : t0 + (i / (n - 1)) * Math.PI;
+      pts[i]!.set(x, Math.sin(t) * ringR, Math.cos(t) * ringR);
+    }
+  }
+  if (scale !== 1) {
+    for (let i = 0; i < n; i++) {
+      const p = pts[i]!;
+      p.set(p.x, p.y * scale, p.z * scale);
+    }
+  }
+}
+
+function layoutPositions(
+  layerSizes: number[],
+  hiddenLayouts: HiddenLayerVizLayout[],
+  hiddenScales: number[],
+): THREE.Vector3[][] {
   const out: THREE.Vector3[][] = [];
   const outIdx = layerSizes.length - 1;
   for (let L = 0; L < layerSizes.length; L++) {
@@ -50,29 +127,38 @@ function layoutPositions(layerSizes: number[]): THREE.Vector3[][] {
         const z = (i - (n - 1) * 0.5) * outputDigitRowStep;
         pts.push(new THREE.Vector3(labelX, ny, z));
       }
-    } else if (n <= 128) {
-      const ringR = 0.35 + Math.min(1.4, n * 0.018);
-      for (let i = 0; i < n; i++) {
-        const t = (i / Math.max(1, n)) * Math.PI * 2;
-        pts.push(
-          new THREE.Vector3(x, Math.sin(t) * ringR, Math.cos(t) * ringR),
-        );
-      }
     } else {
-      const side = Math.ceil(Math.sqrt(n));
-      let k = 0;
-      for (let a = 0; a < side && k < n; a++) {
-        for (let b = 0; b < side && k < n; b++) {
-          const fy = (a / Math.max(1, side - 1) - 0.5) * 2.2;
-          const fz = (b / Math.max(1, side - 1) - 0.5) * 2.2;
-          pts.push(new THREE.Vector3(x, fy, fz));
-          k++;
-        }
+      for (let i = 0; i < n; i++) {
+        pts.push(new THREE.Vector3());
       }
+      const h = L - 1;
+      const mode = hiddenLayouts[h] ?? 'ring';
+      const sc = hiddenScales[h] ?? HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
+      placeHiddenLayerPoints(
+        n,
+        x,
+        mode,
+        pts,
+        sc,
+      );
     }
     out.push(pts);
   }
   return out;
+}
+
+function defaultHiddenLayouts(
+  layerSizes: number[],
+): HiddenLayerVizLayout[] {
+  return new Array<HiddenLayerVizLayout>(
+    Math.max(0, layerSizes.length - 2),
+  ).fill('ring');
+}
+
+function defaultHiddenScales(layerSizes: number[]): number[] {
+  return new Array(Math.max(0, layerSizes.length - 2)).fill(
+    HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
+  ) as number[];
 }
 
 export class Network3D {
@@ -86,7 +172,7 @@ export class Network3D {
   private readonly layerSizes: number[];
   private readonly positions: THREE.Vector3[][];
   private readonly outputDigitSprites: THREE.Sprite[] = [];
-  private edgeFocusMode: "off" | "infer" | "trainRecent" = "off";
+  private edgeFocusMode: 'off' | 'infer' | 'trainRecent' = 'off';
   private edgeFocusActivations: number[][] | null = null;
   private readonly edgeFocusThreshold = 0.22;
   private readonly edgeFocusThresholdFirstLayer = 0.38;
@@ -102,10 +188,18 @@ export class Network3D {
   private idleDimmed = false;
   private inferPredictedDigit: number | null = null;
   private inferExpectedDigit: number | null = null;
+  private hiddenLayouts: HiddenLayerVizLayout[] = [];
+  private hiddenLayoutScales: number[] = [];
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
-    this.positions = layoutPositions(this.layerSizes);
+    this.hiddenLayouts = defaultHiddenLayouts(this.layerSizes);
+    this.hiddenLayoutScales = defaultHiddenScales(this.layerSizes);
+    this.positions = layoutPositions(
+      this.layerSizes,
+      this.hiddenLayouts,
+      this.hiddenLayoutScales,
+    );
     const geom = new THREE.SphereGeometry(0.09, 10, 8);
     for (let L = 0; L < this.layerSizes.length; L++) {
       const n = this.layerSizes[L];
@@ -170,10 +264,10 @@ export class Network3D {
         }
       }
       const geom = new THREE.BufferGeometry();
-      geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       const edgeColors = new THREE.BufferAttribute(colors, 3);
       edgeColors.setUsage(THREE.DynamicDrawUsage);
-      geom.setAttribute("color", edgeColors);
+      geom.setAttribute('color', edgeColors);
       const baseOpacity = L === 0 ? 0.25 : 0.55;
       const mat = new THREE.LineBasicMaterial({
         vertexColors: true,
@@ -216,17 +310,43 @@ export class Network3D {
     this.setIdleDim(true);
   }
 
+  setHiddenLayerLayout(
+    index: number,
+    layout: HiddenLayerVizLayout,
+  ): void {
+    if (index < 0 || index >= this.hiddenLayouts.length) return;
+    if (this.hiddenLayouts[index] === layout) return;
+    this.hiddenLayouts[index] = layout;
+    const L = index + 1;
+    const n = this.layerSizes[L]!;
+    const x = L * LAYER_SPACING;
+    const sc = this.hiddenLayoutScales[index] ?? HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
+    placeHiddenLayerPoints(n, x, layout, this.positions[L]!, sc);
+  }
+
+  setHiddenLayerLayoutScale(index: number, scale: number): void {
+    if (index < 0 || index >= this.hiddenLayoutScales.length) return;
+    const s = clampHiddenLayerVizScale(scale);
+    if (this.hiddenLayoutScales[index] === s) return;
+    this.hiddenLayoutScales[index] = s;
+    const L = index + 1;
+    const n = this.layerSizes[L]!;
+    const x = L * LAYER_SPACING;
+    const mode = this.hiddenLayouts[index]!;
+    placeHiddenLayerPoints(n, x, mode, this.positions[L]!, s);
+  }
+
   resetActivationScaling(): void {
     for (let i = 0; i < this.activationScale.length; i++)
       this.activationScale[i] = 1;
   }
 
   setEdgeFocus(
-    mode: "off" | "infer" | "trainRecent",
+    mode: 'off' | 'infer' | 'trainRecent',
     activations: number[][] | null,
   ): void {
     const prev = this.edgeFocusMode;
-    if (prev !== mode && (mode === "trainRecent" || prev === "trainRecent")) {
+    if (prev !== mode && (mode === 'trainRecent' || prev === 'trainRecent')) {
       for (let L = 0; L < this.edgeRecentAge.length; L++) {
         this.edgeRecentAge[L]!.fill(this.edgeRecentWindow + 1);
         this.edgeRecentHighlightT[L]!.fill(0);
@@ -275,7 +395,7 @@ export class Network3D {
   }
 
   setActivations(activations: number[][]): void {
-    const trainFilter = this.edgeFocusMode === "trainRecent";
+    const trainFilter = this.edgeFocusMode === 'trainRecent';
     if (!trainFilter) {
       this.trainPrevActivations = null;
     }
@@ -358,7 +478,7 @@ export class Network3D {
               lum *
               0.95;
           if (
-            this.edgeFocusMode === "infer" &&
+            this.edgeFocusMode === 'infer' &&
             inferWrong &&
             i === inferExpected
           ) {
@@ -367,7 +487,7 @@ export class Network3D {
               .copy(digitSpriteColA.setHex(0x4a4f58))
               .lerp(digitSpriteColB.setHex(0xff3b30), 0.2 + 0.8 * lum);
             spr.scale.setScalar(scWrong);
-          } else if (this.edgeFocusMode === "infer" && i === inferPred) {
+          } else if (this.edgeFocusMode === 'infer' && i === inferPred) {
             mat.opacity = op;
             mat.color
               .copy(digitSpriteColA.setHex(0x5f6770))
@@ -437,11 +557,11 @@ export class Network3D {
       if (!layerW || layerW.length === 0) continue;
       const lines = this.edgeLines[L];
       const colorAttr = lines.geometry.getAttribute(
-        "color",
+        'color',
       ) as THREE.BufferAttribute;
       const arr = colorAttr.array as Float32Array;
       const posAttr = lines.geometry.getAttribute(
-        "position",
+        'position',
       ) as THREE.BufferAttribute;
       const posArr = posAttr.array as Float32Array;
       const map = this.edgeFromTo[L];
@@ -451,7 +571,7 @@ export class Network3D {
       let contribMx = 1e-12;
       let deltaMx = 1e-12;
       const fromActs =
-        this.edgeFocusMode === "infer" &&
+        this.edgeFocusMode === 'infer' &&
         this.edgeFocusActivations &&
         this.edgeFocusActivations[L]
           ? this.edgeFocusActivations[L]
@@ -459,7 +579,7 @@ export class Network3D {
       const threshold =
         L === 0 ? this.edgeFocusThresholdFirstLayer : this.edgeFocusThreshold;
       const inferReuseScale =
-        this.edgeFocusMode === "infer" &&
+        this.edgeFocusMode === 'infer' &&
         fromActs !== null &&
         this.edgeWeightScale[L] > 1e-9;
       if (inferReuseScale) {
@@ -506,7 +626,7 @@ export class Network3D {
         const w = Number.isFinite(wRaw) ? wRaw : 0;
         const idx = ref.to * layerW[ref.to].length + ref.from;
         const d = deltaArr[idx]!;
-        if (this.edgeFocusMode === "trainRecent") {
+        if (this.edgeFocusMode === 'trainRecent') {
           if (deltaMx > 1e-12 && d >= this.edgeRecentDeltaAbsMin) {
             ageArr[k] = 0;
             tMem[k] = Math.min(1, Math.pow(d / deltaMx, 0.52));
@@ -527,7 +647,7 @@ export class Network3D {
           contribNorm = (Math.abs(w) * fa) / Math.max(1e-9, contribMx);
           visible = contribNorm >= threshold;
         }
-        if (this.edgeFocusMode === "trainRecent") {
+        if (this.edgeFocusMode === 'trainRecent') {
           visible = ageArr[k]! <= this.edgeRecentWindow;
         }
         const tBase = Math.min(
@@ -545,7 +665,7 @@ export class Network3D {
               )
             : 0;
         const t =
-          this.edgeFocusMode === "trainRecent"
+          this.edgeFocusMode === 'trainRecent'
             ? visible
               ? 1
               : 0
@@ -558,7 +678,7 @@ export class Network3D {
         let g = 0;
         let b = 0;
         if (visible) {
-          if (this.edgeFocusMode === "trainRecent") {
+          if (this.edgeFocusMode === 'trainRecent') {
             const tI = 0.15 + 0.85 * tMem[k]!;
             const tAge = 1 - ageArr[k]! / (this.edgeRecentWindow + 1);
             const mul = Math.pow(tAge, 0.7);
@@ -574,7 +694,7 @@ export class Network3D {
             g = 0.22 + 0.48 * t;
             b = 0.32 + 0.68 * t;
           }
-        } else if (this.edgeFocusMode === "infer") {
+        } else if (this.edgeFocusMode === 'infer') {
           r = 0.05;
           g = 0.07;
           b = 0.09;
@@ -583,8 +703,8 @@ export class Network3D {
         const pFrom = this.positions[L][ref.from];
         const pTo = this.positions[L + 1][ref.to];
         if (
-          (this.edgeFocusMode === "infer" ||
-            this.edgeFocusMode === "trainRecent") &&
+          (this.edgeFocusMode === 'infer' ||
+            this.edgeFocusMode === 'trainRecent') &&
           !visible
         ) {
           posArr[i + 0] = pFrom.x;

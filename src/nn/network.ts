@@ -1,4 +1,10 @@
-import type { Mat } from "./matrix";
+import {
+  leakyRelu,
+  leakyReluGrad,
+  softmax,
+  softmaxCrossEntropyGrad,
+} from './activations';
+import type { Mat } from './matrix';
 import {
   colSliceAsVec,
   matMul,
@@ -9,8 +15,7 @@ import {
   randnMat,
   transpose,
   zeros,
-} from "./matrix";
-import { leakyRelu, leakyReluGrad, softmax, softmaxCrossEntropyGrad } from "./activations";
+} from './matrix';
 
 export type LayerCache = {
   z: Mat;
@@ -130,7 +135,11 @@ export class MLP {
   }
 }
 
-export function activationSlices(x: Mat, fwd: ForwardResult, col = 0): number[][] {
+export function activationSlices(
+  x: Mat,
+  fwd: ForwardResult,
+  col = 0,
+): number[][] {
   const s: number[][] = [colSliceAsVec(x, col)];
   for (const lc of fwd.layers) s.push(colSliceAsVec(lc.a, col));
   return s;

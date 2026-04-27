@@ -104,4 +104,10 @@ export class NeuronalAppService {
   onDrawPointerLeave = (): void => {
     this.runtime?.onDrawPointerLeave();
   };
+  onHiddenLayerLayoutChange = (index: number, raw: string): void => {
+    this.runtime?.onHiddenLayerLayoutChange(index, raw);
+  };
+  onHiddenLayerLayoutScaleChange = (index: number, scale: number): void => {
+    this.runtime?.onHiddenLayerLayoutScaleChange(index, scale);
+  };
 }

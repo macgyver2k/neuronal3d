@@ -2,6 +2,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 export function createScene(container: HTMLElement): {
@@ -120,11 +123,22 @@ export function createScene(container: HTMLElement): {
       Math.max(1, container.clientWidth),
       Math.max(1, container.clientHeight),
     ),
-    1.05,
-    0.65,
-    0.12,
+    0.55,
+    0.45,
+    0.22,
   );
   composer.addPass(bloom);
+  const fxaaPass = new ShaderPass(FXAAShader);
+  const outputPass = new OutputPass();
+  const updateFxaaResolution = () => {
+    const w = Math.max(1, container.clientWidth);
+    const h = Math.max(1, container.clientHeight);
+    const pr = renderer.getPixelRatio();
+    fxaaPass.material.uniforms["resolution"].value.set(1 / (w * pr), 1 / (h * pr));
+  };
+  updateFxaaResolution();
+  composer.addPass(fxaaPass);
+  composer.addPass(outputPass);
 
   container.appendChild(renderer.domElement);
 
@@ -135,6 +149,7 @@ export function createScene(container: HTMLElement): {
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     composer.setSize(w, h);
+    updateFxaaResolution();
   };
   window.addEventListener("resize", onResize);
 
@@ -149,6 +164,8 @@ export function createScene(container: HTMLElement): {
     controls.dispose();
     floor.geometry.dispose();
     (floor.material as THREE.Material).dispose();
+    fxaaPass.dispose();
+    outputPass.dispose();
     renderer.dispose();
     if (renderer.domElement.parentElement === container) {
       container.removeChild(renderer.domElement);
