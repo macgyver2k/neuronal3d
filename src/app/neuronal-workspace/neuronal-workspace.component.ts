@@ -8,7 +8,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Store } from '@ngrx/store';
 import { distinctUntilChanged, filter, map, take, withLatestFrom, Subscription } from 'rxjs';
 import { NeuronalAppInstance } from '../core/neuronal-app-instance';
@@ -20,21 +20,12 @@ import { selectActiveModelId } from '../store/neuronal/neuronal.selectors';
 import { EpochTrackListComponent } from '../workspace-ui/epoch-track-list.component';
 import { InferPanelComponent } from '../workspace-ui/infer-panel.component';
 import { NetworkViz3dShellComponent } from '../workspace-ui/network-viz3d-shell.component';
-import { NeuronalModelBarComponent } from '../workspace-ui/neuronal-model-bar.component';
-import { ThemeSwitcherComponent } from '../workspace-ui/theme-switcher.component';
 import { TrainingPanelComponent } from '../workspace-ui/training-panel.component';
-import { WorkspaceBrandComponent } from '../workspace-ui/workspace-brand.component';
-import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.component';
 
 @Component({
   selector: 'app-neuronal-workspace',
   standalone: true,
   imports: [
-    RouterLink,
-    WorkspaceBrandComponent,
-    NeuronalModelBarComponent,
-    WorkspaceStatusComponent,
-    ThemeSwitcherComponent,
     NetworkViz3dShellComponent,
     TrainingPanelComponent,
     EpochTrackListComponent,
@@ -45,28 +36,8 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
     <div
       #appRoot
       id="app"
-      class="bg-base-100 text-base-content flex h-full min-h-0 flex-col"
+      class="bg-base-100 text-base-content flex min-h-0 flex-1 flex-col"
     >
-      <header
-        class="border-base-300 bg-base-200/80 flex shrink-0 flex-col gap-3 border-b px-4 py-3 backdrop-blur-md sm:flex-row sm:items-start sm:justify-between"
-      >
-        <div class="flex min-w-0 flex-wrap items-center gap-3">
-          <a routerLink="/" class="link link-hover shrink-0 text-sm font-medium"
-            >Modelle</a
-          >
-          <app-workspace-brand />
-        </div>
-        <div
-          class="flex w-full min-w-0 max-w-5xl flex-1 flex-col gap-2 sm:ml-auto"
-        >
-          <div class="flex w-full justify-end">
-            <app-theme-switcher />
-          </div>
-          <app-neuronal-model-bar />
-          <app-workspace-status />
-        </div>
-      </header>
-
       <div
         class="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]"
       >

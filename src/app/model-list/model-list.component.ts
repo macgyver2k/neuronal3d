@@ -12,30 +12,18 @@ import {
   selectModelCollection,
   selectModelStoreHydrated,
 } from "../store/neuronal/neuronal.selectors";
-import { ThemeSwitcherComponent } from "../workspace-ui/theme-switcher.component";
-import { WorkspaceBrandComponent } from "../workspace-ui/workspace-brand.component";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { map } from "rxjs";
 
 @Component({
   selector: "app-model-list",
   standalone: true,
-  imports: [RouterLink, WorkspaceBrandComponent, ThemeSwitcherComponent],
+  imports: [RouterLink],
+  host: {
+    class: "flex min-h-0 flex-1 flex-col",
+  },
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div
-      class="bg-base-100 text-base-content flex min-h-full flex-col"
-    >
-      <header
-        class="border-base-300 bg-base-200/80 flex shrink-0 flex-col gap-3 border-b px-4 py-3 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between"
-      >
-        <app-workspace-brand
-          [subtitle]="'Modelle verwalten und öffnen'"
-        />
-        <div class="flex items-center gap-2">
-          <app-theme-switcher />
-        </div>
-      </header>
       <main class="flex min-h-0 flex-1 flex-col gap-4 p-4">
         @if (!ready()) {
           <div
@@ -90,7 +78,6 @@ import { map } from "rxjs";
                     <div
                       class="text-base-content/65 flex flex-wrap gap-x-4 gap-y-1 text-xs"
                     >
-                      <span>{{ m.metrics.epochsTrained }} Epochen</span>
                       <span
                         >Test:
                         {{ fmtPct(m.metrics.testAcc) }}</span
@@ -100,6 +87,33 @@ import { map } from "rxjs";
                         {{ fmtPct(m.metrics.errorRate) }}</span
                       >
                     </div>
+                    <div class="mt-2.5 flex flex-col gap-1.5">
+                      <div
+                        class="text-base-content/50 flex items-baseline justify-between gap-2 text-[0.65rem] font-medium uppercase tracking-wider"
+                        aria-hidden="true"
+                      >
+                        <span>Trainierte Epochen</span>
+                        <span class="text-base-content/70 tabular-nums normal-case">{{
+                          m.metrics.epochsTrained
+                        }}</span>
+                      </div>
+                      <div
+                        class="bg-base-300/40 h-2.5 w-full overflow-hidden rounded-full"
+                        role="img"
+                        [attr.aria-label]="
+                          'Epochen ' +
+                          m.metrics.epochsTrained +
+                          ' im Vergleich zur Liste'
+                        "
+                      >
+                        <div
+                          class="from-primary to-secondary bg-gradient-to-r h-full min-h-full min-w-0 rounded-full shadow-sm shadow-primary/25 transition-[width] duration-500 ease-out"
+                          [style.width.%]="
+                            epochBarRelativePct(m.metrics.epochsTrained)
+                          "
+                        ></div>
+                      </div>
+                    </div>
                   </div>
                 </a>
               </li>
@@ -107,7 +121,6 @@ import { map } from "rxjs";
           </ul>
         }
       </main>
-    </div>
   `,
 })
 export class ModelListComponent {
@@ -132,6 +145,18 @@ export class ModelListComponent {
   fmtPct(v: number | null): string {
     if (v === null || !Number.isFinite(v)) return "—";
     return `${(v * 100).toFixed(2)} %`;
+  }
+
+  epochBarRelativePct(epochsTrained: number): number {
+    const list = this.models();
+    let max = 0;
+    for (const e of list) {
+      const n = e.metrics.epochsTrained;
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+    const denom = Math.max(1, max);
+    const e = Number.isFinite(epochsTrained) ? Math.max(0, epochsTrained) : 0;
+    return Math.min(100, (e / denom) * 100);
   }
 
   createNew(): void {
