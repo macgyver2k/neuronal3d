@@ -16,6 +16,7 @@ import { NeuronalActions } from './app/store/neuronal/neuronal.actions';
 import { selectNeuronalState } from './app/store/neuronal/neuronal.selectors';
 import type { NeuronalState } from './app/store/neuronal/neuronal.state';
 import {
+  fetchCsvText,
   parseMnistCsvAsync,
   yieldToMain,
   type MnistSample,
@@ -43,8 +44,8 @@ const VIZ_DEBUG_INFER =
   typeof globalThis.location !== 'undefined' &&
   new URLSearchParams(globalThis.location.search).has('vizdebug');
 
-const MNIST_TRAIN_CSV = 'data/csv/mnist_train.csv';
-const MNIST_TEST_CSV = 'data/csv/mnist_test.csv';
+const MNIST_TRAIN_CSV = 'data/csv/mnist_train.csv.gz';
+const MNIST_TEST_CSV = 'data/csv/mnist_test.csv.gz';
 const MNIST_LABEL = 'MNIST';
 
 type ElRefs = {
@@ -546,12 +547,7 @@ async function loadCsvData(): Promise<void> {
     let loadedTrain: MnistSample[] = [];
     for (const src of trainSources) {
       try {
-        const resp = await fetch(src);
-        if (!resp.ok) {
-          trainErr = `Train-CSV nicht gefunden (${resp.status})`;
-          continue;
-        }
-        const text = await resp.text();
+        const text = await fetchCsvText(src);
         const parsed = await parseMnistCsvAsync(text);
         if (parsed.length === 0) {
           trainErr = 'Train-CSV enthält keine gültigen Zeilen';
@@ -577,12 +573,7 @@ async function loadCsvData(): Promise<void> {
     let loadedTest: MnistSample[] = [];
     for (const src of testSources) {
       try {
-        const resp = await fetch(src);
-        if (!resp.ok) {
-          testErr = `Test-CSV nicht gefunden (${resp.status})`;
-          continue;
-        }
-        const text = await resp.text();
+        const text = await fetchCsvText(src);
         const parsed = await parseMnistCsvAsync(text);
         if (parsed.length === 0) {
           testErr = 'Test-CSV enthält keine gültigen Zeilen';
