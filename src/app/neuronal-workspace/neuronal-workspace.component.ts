@@ -20,6 +20,7 @@ import { NetworkViz3dShellComponent } from "../workspace-ui/network-viz3d-shell.
 import { TrainingPanelComponent } from "../workspace-ui/training-panel.component";
 import { WorkspaceBrandComponent } from "../workspace-ui/workspace-brand.component";
 import { WorkspaceStatusComponent } from "../workspace-ui/workspace-status.component";
+import { ThemeSwitcherComponent } from "../workspace-ui/theme-switcher.component";
 
 @Component({
   selector: "app-neuronal-workspace",
@@ -28,6 +29,7 @@ import { WorkspaceStatusComponent } from "../workspace-ui/workspace-status.compo
     WorkspaceBrandComponent,
     NeuronalModelBarComponent,
     WorkspaceStatusComponent,
+    ThemeSwitcherComponent,
     NetworkViz3dShellComponent,
     TrainingPanelComponent,
     EpochTrackListComponent,
@@ -39,6 +41,9 @@ import { WorkspaceStatusComponent } from "../workspace-ui/workspace-status.compo
       <header class="n3-topbar">
         <app-workspace-brand />
         <div class="n3-topcontrols">
+          <div class="n3-topbar-theme">
+            <app-theme-switcher />
+          </div>
           <app-neuronal-model-bar />
           <app-workspace-status />
         </div>

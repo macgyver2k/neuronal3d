@@ -75,6 +75,12 @@
   max-width: 60rem;
 }
 
+.n3-topbar-theme {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
 .n3-modelbar {
   display: flex;
   flex-direction: column;

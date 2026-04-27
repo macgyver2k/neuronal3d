@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: all;
+}
 
 @theme {
   --color-background: #0b0e14;
@@ -14,10 +17,4 @@
   --radius-panel: 14px;
 }
 
-:root {
-  color-scheme: dark;
-}
 
-.dark {
-  color-scheme: dark;
-}
