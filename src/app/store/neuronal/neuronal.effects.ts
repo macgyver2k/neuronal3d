@@ -1,16 +1,36 @@
-import { inject, Injectable } from "@angular/core";
-import { Actions, createEffect, ofType } from "@ngrx/effects";
-import { Store } from "@ngrx/store";
-import { EMPTY, exhaustMap, from, of } from "rxjs";
-import { debounceTime, filter, skip, switchMap, tap, withLatestFrom } from "rxjs";
-import { NeuronalAppService } from "../../core/neuronal-app.service";
-import { NeuronalAppInstance } from "../../core/neuronal-app-instance";
-import { downloadJsonFile } from "../../core/download-json";
-import { saveEpochTrackStoreToStorageSync } from "../../core/epoch-storage";
-import { resetLocalStorageToPretrainedFiles } from "../../core/pretrained-bootstrap";
-import type { AppState } from "../app.state";
-import { NeuronalActions } from "./neuronal.actions";
-import { selectEpochByModelId, selectNeuronalState, selectTrainingRunning } from "./neuronal.selectors";
+import { inject, Injectable } from '@angular/core';
+import { Router } from '@angular/router';
+import { Actions, createEffect, ofType } from '@ngrx/effects';
+import { Store } from '@ngrx/store';
+import {
+  concatMap,
+  debounceTime,
+  EMPTY,
+  exhaustMap,
+  filter,
+  from,
+  of,
+  skip,
+  switchMap,
+  take,
+  tap,
+  withLatestFrom,
+} from 'rxjs';
+import { downloadJsonFile } from '../../core/download-json';
+import { saveEpochTrackStoreToStorageSync } from '../../core/epoch-storage';
+import { NeuronalAppInstance } from '../../core/neuronal-app-instance';
+import { NeuronalAppService } from '../../core/neuronal-app.service';
+import { resetLocalStorageToPretrainedFiles } from '../../core/pretrained-bootstrap';
+import type { AppState } from '../app.state';
+import { NeuronalActions } from './neuronal.actions';
+import {
+  selectActiveModelId,
+  selectEpochByModelId,
+  selectModelCollection,
+  selectModelStoreHydrated,
+  selectNeuronalState,
+  selectTrainingRunning,
+} from './neuronal.selectors';
 
 @Injectable()
 export class NeuronalEffects {
@@ -18,6 +38,7 @@ export class NeuronalEffects {
   private readonly actions$ = inject(Actions);
   private readonly app = inject(NeuronalAppInstance);
   private readonly neuronalApp = inject(NeuronalAppService);
+  private readonly router = inject(Router);
 
   newModelFromToolbar$ = createEffect(
     () =>
@@ -40,6 +61,77 @@ export class NeuronalEffects {
         filter(([a, running]) => !running && a.id.length > 0),
         tap(([a]) => {
           this.app.activeModelFromToolbar(a.id);
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  modelRouteParamReceived$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.modelRouteParamReceived),
+        concatMap(({ segment }) =>
+          this.store.select(selectModelStoreHydrated).pipe(
+            filter((h): h is true => h),
+            take(1),
+            concatMap(() => {
+              const id = segment.trim();
+              if (id === 'new') {
+                this.app.newModelFromToolbar();
+                return this.store.select(selectActiveModelId).pipe(
+                  take(1),
+                  tap((aid) => {
+                    if (aid)
+                      void this.router.navigate(['/model', aid], {
+                        replaceUrl: true,
+                      });
+                  }),
+                );
+              }
+              return this.store.select(selectModelCollection).pipe(
+                take(1),
+                tap((col) => {
+                  if (!col.models.some((m) => m.id === id)) {
+                    void this.router.navigate(['/']);
+                  } else {
+                    this.store.dispatch(
+                      NeuronalActions.activeModelIdFromRouteSet({ id }),
+                    );
+                  }
+                }),
+              );
+            }),
+          ),
+        ),
+      ),
+    { dispatch: false },
+  );
+
+  activeModelIdFromRouteLoad$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.activeModelIdFromRouteSet),
+        withLatestFrom(this.store.select(selectTrainingRunning)),
+        filter(([, running]) => !running),
+        tap(([{ id }]) => {
+          this.app.activeModelFromToolbar(id);
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  activeModelIdSetUrlSync$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.activeModelIdSet),
+        filter(({ id }) => id.length > 0),
+        tap(({ id }) => {
+          const path = this.router.url.split('?')[0].split('#')[0];
+          const segs = path.split('/').filter(Boolean);
+          if (segs[0] !== 'model') return;
+          const param = segs[1];
+          if (!param || param === 'new' || param === id) return;
+          void this.router.navigate(['/model', id], { replaceUrl: true });
         }),
       ),
     { dispatch: false },
@@ -282,8 +374,11 @@ export class NeuronalEffects {
         ofType(NeuronalActions.uiExportBundleRequested),
         withLatestFrom(this.store.select(selectNeuronalState)),
         tap(([, n]) => {
-          downloadJsonFile("neuronal3d-models.json", n.modelCollection);
-          downloadJsonFile("neuronal3d-epochs.json", { version: 1, byModelId: n.epochByModelId });
+          downloadJsonFile('neuronal3d-models.json', n.modelCollection);
+          downloadJsonFile('neuronal3d-epochs.json', {
+            version: 1,
+            byModelId: n.epochByModelId,
+          });
         }),
       ),
     { dispatch: false },
@@ -299,10 +394,16 @@ export class NeuronalEffects {
           switchMap((bundle) => {
             if (!bundle) return EMPTY;
             const pickId =
-              bundle.modelCollection.activeModelId ?? bundle.modelCollection.models[0]?.id ?? "";
+              bundle.modelCollection.activeModelId ??
+              bundle.modelCollection.models[0]?.id ??
+              '';
             const hydrated = [
-              NeuronalActions.modelStoreHydrated({ modelCollection: bundle.modelCollection }),
-              NeuronalActions.epochStoreHydrated({ byModelId: { ...bundle.epochStore.byModelId } }),
+              NeuronalActions.modelStoreHydrated({
+                modelCollection: bundle.modelCollection,
+              }),
+              NeuronalActions.epochStoreHydrated({
+                byModelId: { ...bundle.epochStore.byModelId },
+              }),
             ];
             if (pickId.length > 0) {
               return of(

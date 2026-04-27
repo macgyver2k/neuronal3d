@@ -7,7 +7,8 @@ export const modelCollectionLocalStorageMeta: MetaReducer<AppState, Action> = (r
   const next = reducer(state, action);
   if (
     action.type === NeuronalActions.modelEntryUpserted.type ||
-    action.type === NeuronalActions.activeModelIdSet.type
+    action.type === NeuronalActions.activeModelIdSet.type ||
+    action.type === NeuronalActions.activeModelIdFromRouteSet.type
   ) {
     saveModelStoreToStorageSync(next.neuronal.modelCollection);
   }

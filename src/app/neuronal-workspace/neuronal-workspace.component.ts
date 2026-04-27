@@ -3,20 +3,17 @@ import {
   Component,
   ElementRef,
   HostListener,
-  OnDestroy,
-  ViewChild,
   inject,
+  OnDestroy,
   signal,
+  ViewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { Store } from '@ngrx/store';
-import { distinctUntilChanged, filter, map, take, withLatestFrom, Subscription } from 'rxjs';
 import { NeuronalAppInstance } from '../core/neuronal-app-instance';
 import { NeuronalAppService } from '../core/neuronal-app.service';
-import type { StoredModelCollection } from '../core/model.types';
 import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
-import { selectActiveModelId } from '../store/neuronal/neuronal.selectors';
 import { EpochTrackListComponent } from '../workspace-ui/epoch-track-list.component';
 import { InferPanelComponent } from '../workspace-ui/infer-panel.component';
 import { NetworkViz3dShellComponent } from '../workspace-ui/network-viz3d-shell.component';
@@ -120,14 +117,9 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
   private readonly store = inject(Store<AppState>);
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly appInstance = inject(NeuronalAppInstance);
-  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly activeModelIdSig = this.store.selectSignal(selectActiveModelId);
   private teardown: (() => void) | null = null;
   private bindGen = 0;
-  private routeSyncEnabled = false;
-  private routeSub: Subscription | null = null;
-  private activeRouteSub: Subscription | null = null;
 
   ngAfterViewInit(): void {
     void this.bootstrapRuntime();
@@ -145,68 +137,13 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
         return;
       }
       this.teardown = td;
-      this.routeSub = this.route.paramMap
-        .pipe(
-          map((p) => p.get('modelId')),
-          distinctUntilChanged(),
-        )
-        .subscribe((id) => this.applyModelRoute(id));
-      this.activeRouteSub = this.store
-        .select(selectActiveModelId)
-        .pipe(
-          distinctUntilChanged(),
-          withLatestFrom(this.route.paramMap),
-          filter(([aid, pm]) => {
-            if (!this.routeSyncEnabled) return false;
-            const r = pm.get('modelId');
-            return !!aid && r !== 'new' && aid !== r;
-          }),
-        )
-        .subscribe(([aid]) => {
-          void this.router.navigate(['/model', aid!], { replaceUrl: true });
-        });
     } catch {
       void this.router.navigate(['/']);
     }
   }
 
-  private applyModelRoute(rawId: string | null): void {
-    this.routeSyncEnabled = false;
-    const id = rawId?.trim() ?? '';
-    if (!id) {
-      void this.router.navigate(['/']);
-      return;
-    }
-    if (id === 'new') {
-      this.appInstance.newModelFromToolbar();
-      const aid = this.activeModelIdSig();
-      if (aid) {
-        void this.router.navigate(['/model', aid], { replaceUrl: true });
-      }
-      this.routeSyncEnabled = true;
-      return;
-    }
-    this.store
-      .pipe(
-        map((s) => s.neuronal.modelCollection),
-        take(1),
-      )
-      .subscribe((col: StoredModelCollection) => {
-        if (!col.models.some((m) => m.id === id)) {
-          void this.router.navigate(['/']);
-          return;
-        }
-        this.appInstance.activeModelFromToolbar(id);
-        this.routeSyncEnabled = true;
-      });
-  }
-
   ngOnDestroy(): void {
     this.bindGen++;
-    this.routeSub?.unsubscribe();
-    this.routeSub = null;
-    this.activeRouteSub?.unsubscribe();
-    this.activeRouteSub = null;
     this.teardown?.();
     this.teardown = null;
   }

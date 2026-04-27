@@ -1,11 +1,14 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { NavigationEnd, Router, RouterLink } from "@angular/router";
+import { Store } from "@ngrx/store";
 import { filter, map, startWith } from "rxjs";
+import type { AppState } from "../store/app.state";
 import { NeuronalModelBarComponent } from "../workspace-ui/neuronal-model-bar.component";
 import { ThemeSwitcherComponent } from "../workspace-ui/theme-switcher.component";
 import { WorkspaceBrandComponent } from "../workspace-ui/workspace-brand.component";
 import { WorkspaceStatusComponent } from "../workspace-ui/workspace-status.component";
+import { selectShellHeaderActiveModel } from "../store/neuronal/neuronal.selectors";
 
 function urlIsModelWorkspace(url: string): boolean {
   const path = url.split("?")[0].split("#")[0];
@@ -34,7 +37,11 @@ function urlIsModelWorkspace(url: string): boolean {
             class="link link-hover shrink-0 text-sm font-medium"
             >Modelle</a
           >
-          <app-workspace-brand />
+          @if (headerModel(); as hm) {
+            <app-workspace-brand [title]="hm.title" [subtitle]="hm.subtitle" />
+          } @else {
+            <app-workspace-brand />
+          }
         </div>
         <div
           class="flex w-full min-w-0 max-w-5xl flex-1 flex-col gap-2 sm:ml-auto"
@@ -63,6 +70,10 @@ function urlIsModelWorkspace(url: string): boolean {
 })
 export class AppShellHeaderComponent {
   private readonly router = inject(Router);
+  private readonly store = inject(Store<AppState>);
+  readonly headerModel = toSignal(this.store.select(selectShellHeaderActiveModel), {
+    initialValue: null,
+  });
   readonly modelWorkspace = toSignal(
     this.router.events.pipe(
       filter((e) => e instanceof NavigationEnd),

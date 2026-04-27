@@ -68,11 +68,15 @@ export const neuronalReducer = createReducer<NeuronalState>(
     epochByModelId: { ...byModelId },
     epochDisplayRows: initialEpochDisplay(byModelId, s.modelCollection),
   })),
-  on(NeuronalActions.activeModelIdSet, (s, { id }): NeuronalState => ({
-    ...s,
-    modelCollection: { ...s.modelCollection, activeModelId: id },
-    epochDisplayRows: epochRowsForId(s, id),
-  })),
+  on(
+    NeuronalActions.activeModelIdSet,
+    NeuronalActions.activeModelIdFromRouteSet,
+    (s, { id }): NeuronalState => ({
+      ...s,
+      modelCollection: { ...s.modelCollection, activeModelId: id },
+      epochDisplayRows: epochRowsForId(s, id),
+    }),
+  ),
   on(NeuronalActions.modelEntryUpserted, (s, { entry }): NeuronalState => {
     const existed = s.modelCollection.models.some((m) => m.id === entry.id);
     const nextCol = upsertEntryInCollection(s.modelCollection, entry);

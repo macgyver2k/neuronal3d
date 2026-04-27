@@ -15,6 +15,7 @@ export {
   selectModelDropdownOpen,
   selectModelStoreHydrated,
   selectNeuronalModelBar,
+  selectShellHeaderActiveModel,
 } from "./selectors/neuronal-model.selectors";
 export {
   selectEpochByModelId,

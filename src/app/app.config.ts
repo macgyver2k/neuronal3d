@@ -2,6 +2,7 @@ import { ApplicationConfig, isDevMode, provideZoneChangeDetection } from "@angul
 import { provideRouter } from "@angular/router";
 import { routes } from "./app.routes";
 import { provideEffects } from "@ngrx/effects";
+import { provideRouterStore, routerReducer } from "@ngrx/router-store";
 import { provideState, provideStore } from "@ngrx/store";
 import { provideStoreDevtools } from "@ngrx/store-devtools";
 import { modelCollectionLocalStorageMeta } from "./store/model-collection-localstorage.meta";
@@ -12,11 +13,13 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideStore(undefined, { metaReducers: [modelCollectionLocalStorageMeta] }),
     provideState("neuronal", neuronalReducer),
+    provideState("router", routerReducer),
     provideEffects([NeuronalEffects]),
     ...(isDevMode()
       ? [provideStoreDevtools({ maxAge: 30, trace: false })]
       : []),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
+    provideRouterStore(),
   ],
 };

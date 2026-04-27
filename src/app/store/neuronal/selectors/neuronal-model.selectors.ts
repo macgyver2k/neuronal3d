@@ -78,6 +78,20 @@ export const selectActiveModelId = createSelector(
   (s) => s.modelCollection.activeModelId,
 );
 
+export const selectShellHeaderActiveModel = createSelector(
+  selectModelCollection,
+  (c) => {
+    const id = c.activeModelId;
+    if (!id) return null;
+    const m = c.models.find((x) => x.id === id);
+    if (!m) return null;
+    return {
+      title: m.name,
+      subtitle: `MNIST · MLP · Test ${fmtPct(m.metrics.testAcc)} · Epoche ${m.metrics.epochsTrained}`,
+    };
+  },
+);
+
 export const selectModelDropdownOpen = createSelector(
   selectNeuronal,
   (s) => s.modelDropdownOpen,
