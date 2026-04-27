@@ -45,6 +45,7 @@
           },
           "configurations": {
             "production": {
+              "baseHref": "/neuronal3d/",
               "budgets": [
                 {
                   "type": "initial",

@@ -7,8 +7,8 @@ import type {
 import { loadModelStoreFromStorage, modelMatchesExpectedLayout, saveModelStoreToStorageSync } from "./model-storage";
 import { normalizeEpochTrackStore, saveEpochTrackStoreToStorageSync } from "./epoch-storage";
 
-const PRETRAINED_MODELS_URL = "/pretrained/models.json";
-const PRETRAINED_EPOCHS_URL = "/pretrained/epochs.json";
+const PRETRAINED_MODELS_URL = "pretrained/models.json";
+const PRETRAINED_EPOCHS_URL = "pretrained/epochs.json";
 
 function isLocalModelStoreWithoutModels(): boolean {
   return loadModelStoreFromStorage().models.length === 0;

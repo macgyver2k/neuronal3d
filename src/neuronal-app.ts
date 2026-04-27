@@ -43,8 +43,8 @@ const VIZ_DEBUG_INFER =
   typeof globalThis.location !== 'undefined' &&
   new URLSearchParams(globalThis.location.search).has('vizdebug');
 
-const MNIST_TRAIN_CSV = '/data/csv/mnist_train.csv';
-const MNIST_TEST_CSV = '/data/csv/mnist_test.csv';
+const MNIST_TRAIN_CSV = 'data/csv/mnist_train.csv';
+const MNIST_TEST_CSV = 'data/csv/mnist_test.csv';
 const MNIST_LABEL = 'MNIST';
 
 type ElRefs = {
