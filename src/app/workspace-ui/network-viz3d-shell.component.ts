@@ -6,6 +6,7 @@ import {
   signal,
 } from "@angular/core";
 import { NeuronalAppService } from "../core/neuronal-app.service";
+import { VizSettingsBlockComponent } from "./viz-settings-block.component";
 import {
   ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
   ACTIVE_NEURON_MAX_SCALE_MUL_MAX,
@@ -22,25 +23,25 @@ import {
 @Component({
   selector: "app-network-viz3d-shell",
   standalone: true,
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, VizSettingsBlockComponent],
   template: `
     <div
       class="n3-vizshell relative flex h-full min-h-0 w-full min-w-0 flex-row bg-background bg-[radial-gradient(100%_80%_at_50%_0%,rgba(54,211,166,0.09),transparent_58%)]"
     >
       <aside
-        class="flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto overflow-x-hidden border-r border-border bg-background/85 px-2 py-2 text-foreground shadow-sm backdrop-blur-sm"
+        class="n3-vizpanel flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-border bg-background/90 px-3 py-3 text-foreground shadow-sm backdrop-blur-md"
         aria-label="3D-Netz Darstellung"
       >
-        <div class="flex min-w-0 flex-col gap-1">
-          <div class="flex flex-wrap items-center gap-2">
+        <app-viz-settings-block heading="Eingabelayer">
+          <div class="min-w-0">
             <label
               for="inputLayerVizLayout"
-              class="w-8 shrink-0 text-[0.7rem] font-medium text-muted"
-              >Ein</label
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              >Darstellung</label
             >
             <select
               id="inputLayerVizLayout"
-              class="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+              class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
               [value]="inputLayout()"
               (change)="onInputLayout($event)"
             >
@@ -52,37 +53,39 @@ import {
               <option value="arcAlt">Bogen, Richtung 2</option>
             </select>
           </div>
-          <div class="flex min-w-0 items-center gap-1.5 pl-8">
+          <div class="min-w-0">
             <label
               for="inputLayerVizScale"
-              class="shrink-0 text-[0.65rem] text-muted"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
               >Skala</label
             >
-            <input
-              id="inputLayerVizScale"
-              type="range"
-              [min]="scaleMin"
-              [max]="scaleMax"
-              [step]="scaleStep"
-              [value]="inputScale()"
-              (input)="onInputScale($event)"
-              class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
-            />
-            <span class="w-7 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-              >{{ inputScale() | number : "1.0-2" }}</span
-            >
+            <div class="flex min-w-0 items-center gap-2">
+              <input
+                id="inputLayerVizScale"
+                type="range"
+                [min]="scaleMin"
+                [max]="scaleMax"
+                [step]="scaleStep"
+                [value]="inputScale()"
+                (input)="onInputScale($event)"
+                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+              />
+              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+                >{{ inputScale() | number : "1.0-2" }}</span
+              >
+            </div>
           </div>
-        </div>
-        <div class="flex min-w-0 flex-col gap-1">
-          <div class="flex flex-wrap items-center gap-2">
+        </app-viz-settings-block>
+        <app-viz-settings-block heading="Zwischenlage 1">
+          <div class="min-w-0">
             <label
               for="hiddenLayerVizLayout0"
-              class="w-8 shrink-0 text-[0.7rem] font-medium text-muted"
-              >H1</label
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              >Darstellung</label
             >
             <select
               id="hiddenLayerVizLayout0"
-              class="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+              class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
               (change)="onHiddenLayout(0, $event)"
             >
               <option value="ring" selected>Ring</option>
@@ -92,37 +95,39 @@ import {
               <option value="arcAlt">Bogen, Richtung 2</option>
             </select>
           </div>
-          <div class="flex min-w-0 items-center gap-1.5 pl-8">
+          <div class="min-w-0">
             <label
               for="hiddenLayerVizScale0"
-              class="shrink-0 text-[0.65rem] text-muted"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
               >Skala</label
             >
-            <input
-              id="hiddenLayerVizScale0"
-              type="range"
-              [min]="scaleMin"
-              [max]="scaleMax"
-              [step]="scaleStep"
-              [value]="scale0()"
-              (input)="onScale(0, $event)"
-              class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
-            />
-            <span class="w-7 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-              >{{ scale0() | number : "1.0-2" }}</span
-            >
+            <div class="flex min-w-0 items-center gap-2">
+              <input
+                id="hiddenLayerVizScale0"
+                type="range"
+                [min]="scaleMin"
+                [max]="scaleMax"
+                [step]="scaleStep"
+                [value]="scale0()"
+                (input)="onScale(0, $event)"
+                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+              />
+              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+                >{{ scale0() | number : "1.0-2" }}</span
+              >
+            </div>
           </div>
-        </div>
-        <div class="flex min-w-0 flex-col gap-1">
-          <div class="flex flex-wrap items-center gap-2">
+        </app-viz-settings-block>
+        <app-viz-settings-block heading="Zwischenlage 2">
+          <div class="min-w-0">
             <label
               for="hiddenLayerVizLayout1"
-              class="w-8 shrink-0 text-[0.7rem] font-medium text-muted"
-              >H2</label
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              >Darstellung</label
             >
             <select
               id="hiddenLayerVizLayout1"
-              class="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+              class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
               (change)="onHiddenLayout(1, $event)"
             >
               <option value="ring" selected>Ring</option>
@@ -132,51 +137,53 @@ import {
               <option value="arcAlt">Bogen, Richtung 2</option>
             </select>
           </div>
-          <div class="flex min-w-0 items-center gap-1.5 pl-8">
+          <div class="min-w-0">
             <label
               for="hiddenLayerVizScale1"
-              class="shrink-0 text-[0.65rem] text-muted"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
               >Skala</label
             >
-            <input
-              id="hiddenLayerVizScale1"
-              type="range"
-              [min]="scaleMin"
-              [max]="scaleMax"
-              [step]="scaleStep"
-              [value]="scale1()"
-              (input)="onScale(1, $event)"
-              class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
-            />
-            <span class="w-7 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-              >{{ scale1() | number : "1.0-2" }}</span
-            >
+            <div class="flex min-w-0 items-center gap-2">
+              <input
+                id="hiddenLayerVizScale1"
+                type="range"
+                [min]="scaleMin"
+                [max]="scaleMax"
+                [step]="scaleStep"
+                [value]="scale1()"
+                (input)="onScale(1, $event)"
+                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+              />
+              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+                >{{ scale1() | number : "1.0-2" }}</span
+              >
+            </div>
           </div>
-        </div>
-        <div
-          class="mt-1 flex min-w-0 flex-col gap-1 border-t border-border pt-2"
-        >
-          <div class="flex min-w-0 items-center gap-1.5">
+        </app-viz-settings-block>
+        <app-viz-settings-block heading="Aktivität">
+          <div class="min-w-0">
             <label
               for="activeNeuronMaxMul"
-              class="max-w-[5.5rem] shrink-0 text-[0.65rem] leading-tight text-muted"
-              >Max. Größe aktiv</label
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              >Max. Größe aktiver Neuronen</label
             >
-            <input
-              id="activeNeuronMaxMul"
-              type="range"
-              [min]="neuronMulMin"
-              [max]="neuronMulMax"
-              [step]="neuronMulStep"
-              [value]="activeNeuronMaxMul()"
-              (input)="onActiveNeuronMaxMul($event)"
-              class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
-            />
-            <span class="w-7 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-              >{{ activeNeuronMaxMul() | number : "1.0-2" }}</span
-            >
+            <div class="flex min-w-0 items-center gap-2">
+              <input
+                id="activeNeuronMaxMul"
+                type="range"
+                [min]="neuronMulMin"
+                [max]="neuronMulMax"
+                [step]="neuronMulStep"
+                [value]="activeNeuronMaxMul()"
+                (input)="onActiveNeuronMaxMul($event)"
+                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+              />
+              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+                >{{ activeNeuronMaxMul() | number : "1.0-2" }}</span
+              >
+            </div>
           </div>
-        </div>
+        </app-viz-settings-block>
       </aside>
       <div id="viz" class="relative min-h-0 min-w-0 flex-1"></div>
     </div>
