@@ -53,13 +53,13 @@ export function parseMnistCsv(text: string): MnistSample[] {
 export async function fetchCsvText(url: string): Promise<string> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  if (url.endsWith(".gz")) {
-    const b = resp.body;
-    if (!b) return resp.text();
+  const buf = await resp.arrayBuffer();
+  const u8 = new Uint8Array(buf);
+  if (u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b) {
     const ds = new DecompressionStream("gzip");
-    return await new Response(b.pipeThrough(ds)).text();
+    return await new Response(new Blob([buf]).stream().pipeThrough(ds)).text();
   }
-  return resp.text();
+  return new TextDecoder().decode(buf);
 }
 
 export async function parseMnistCsvAsync(text: string): Promise<MnistSample[]> {

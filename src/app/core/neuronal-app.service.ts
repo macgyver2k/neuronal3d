@@ -110,6 +110,12 @@ export class NeuronalAppService {
   onHiddenLayerLayoutScaleChange = (index: number, scale: number): void => {
     this.runtime?.onHiddenLayerLayoutScaleChange(index, scale);
   };
+  onInputLayerLayoutChange = (raw: string): void => {
+    this.runtime?.onInputLayerLayoutChange(raw);
+  };
+  onInputLayerLayoutScaleChange = (scale: number): void => {
+    this.runtime?.onInputLayerLayoutScaleChange(scale);
+  };
   onActiveNeuronMaxScaleMulChange = (mul: number): void => {
     this.runtime?.onActiveNeuronMaxScaleMulChange(mul);
   };

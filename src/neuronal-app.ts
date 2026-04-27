@@ -26,7 +26,9 @@ import { activationSlices, MLP } from './nn/network';
 import { trainLoop } from './train/trainer';
 import {
   HIDDEN_LAYER_VIZ_LAYOUTS,
+  INPUT_LAYER_VIZ_LAYOUTS,
   type HiddenLayerVizLayout,
+  type InputLayerVizLayout,
   Network3D,
 } from './viz/network3d';
 import { animateLoop, createScene } from './viz/scene';
@@ -648,6 +650,12 @@ function parseHiddenLayerVizLayout(s: string): HiddenLayerVizLayout | null {
     : null;
 }
 
+function parseInputLayerVizLayout(s: string): InputLayerVizLayout | null {
+  return (INPUT_LAYER_VIZ_LAYOUTS as readonly string[]).includes(s)
+    ? (s as InputLayerVizLayout)
+    : null;
+}
+
 function reapplyViz3dAfterLayoutChange(): void {
   if (!net3d) return;
   if (pendingVizState) {
@@ -806,6 +814,8 @@ export type NeuronalAppRuntime = {
   onDrawPointerLeave: () => void;
   onHiddenLayerLayoutChange: (index: number, raw: string) => void;
   onHiddenLayerLayoutScaleChange: (index: number, scale: number) => void;
+  onInputLayerLayoutChange: (raw: string) => void;
+  onInputLayerLayoutScaleChange: (scale: number) => void;
   onActiveNeuronMaxScaleMulChange: (mul: number) => void;
 };
 
@@ -932,6 +942,17 @@ export function createNeuronalAppRuntime(
   ): void => {
     if (!net3d || !Number.isFinite(scale)) return;
     net3d.setHiddenLayerLayoutScale(index, scale);
+    reapplyViz3dAfterLayoutChange();
+  };
+  const onInputLayerLayoutChange = (raw: string): void => {
+    const layout = parseInputLayerVizLayout(raw);
+    if (!layout || !net3d) return;
+    net3d.setInputLayerLayout(layout);
+    reapplyViz3dAfterLayoutChange();
+  };
+  const onInputLayerLayoutScaleChange = (scale: number): void => {
+    if (!net3d || !Number.isFinite(scale)) return;
+    net3d.setInputLayerLayoutScale(scale);
     reapplyViz3dAfterLayoutChange();
   };
   const onActiveNeuronMaxScaleMulChange = (mul: number): void => {
@@ -1257,6 +1278,8 @@ export function createNeuronalAppRuntime(
     onDrawPointerLeave,
     onHiddenLayerLayoutChange,
     onHiddenLayerLayoutScaleChange,
+    onInputLayerLayoutChange,
+    onInputLayerLayoutScaleChange,
     onActiveNeuronMaxScaleMulChange,
   };
 }

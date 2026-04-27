@@ -15,6 +15,8 @@ import {
   HIDDEN_LAYER_VIZ_SCALE_MAX,
   HIDDEN_LAYER_VIZ_SCALE_MIN,
   HIDDEN_LAYER_VIZ_SCALE_STEP,
+  INPUT_LAYER_PIXELS_LAYOUT,
+  type InputLayerVizLayout,
 } from "../../viz/network3d";
 
 @Component({
@@ -23,12 +25,54 @@ import {
   imports: [DecimalPipe],
   template: `
     <div
-      class="n3-vizshell relative h-full min-h-0 w-full bg-background bg-[radial-gradient(100%_80%_at_50%_0%,rgba(54,211,166,0.09),transparent_58%)]"
+      class="n3-vizshell relative flex h-full min-h-0 w-full min-w-0 flex-row bg-background bg-[radial-gradient(100%_80%_at_50%_0%,rgba(54,211,166,0.09),transparent_58%)]"
     >
-      <div
-        class="absolute left-2 top-2 z-10 flex max-w-[min(100%,22rem)] flex-col gap-2 rounded-md border border-border bg-background/85 px-2 py-1.5 text-foreground shadow-sm backdrop-blur-sm"
+      <aside
+        class="flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-2 overflow-y-auto overflow-x-hidden border-r border-border bg-background/85 px-2 py-2 text-foreground shadow-sm backdrop-blur-sm"
         aria-label="3D-Netz Darstellung"
       >
+        <div class="flex min-w-0 flex-col gap-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <label
+              for="inputLayerVizLayout"
+              class="w-8 shrink-0 text-[0.7rem] font-medium text-muted"
+              >Ein</label
+            >
+            <select
+              id="inputLayerVizLayout"
+              class="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-sm text-foreground"
+              [value]="inputLayout()"
+              (change)="onInputLayout($event)"
+            >
+              <option value="pixels">28×28 Pixel</option>
+              <option value="ring">Ring</option>
+              <option value="grid">Raster</option>
+              <option value="line">Linie</option>
+              <option value="arc">Bogen, Richtung 1</option>
+              <option value="arcAlt">Bogen, Richtung 2</option>
+            </select>
+          </div>
+          <div class="flex min-w-0 items-center gap-1.5 pl-8">
+            <label
+              for="inputLayerVizScale"
+              class="shrink-0 text-[0.65rem] text-muted"
+              >Skala</label
+            >
+            <input
+              id="inputLayerVizScale"
+              type="range"
+              [min]="scaleMin"
+              [max]="scaleMax"
+              [step]="scaleStep"
+              [value]="inputScale()"
+              (input)="onInputScale($event)"
+              class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
+            />
+            <span class="w-7 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+              >{{ inputScale() | number : "1.0-2" }}</span
+            >
+          </div>
+        </div>
         <div class="flex min-w-0 flex-col gap-1">
           <div class="flex flex-wrap items-center gap-2">
             <label
@@ -133,8 +177,8 @@ import {
             >
           </div>
         </div>
-      </div>
-      <div id="viz" class="absolute inset-0 min-h-0"></div>
+      </aside>
+      <div id="viz" class="relative min-h-0 min-w-0 flex-1"></div>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -144,12 +188,31 @@ export class NetworkViz3dShellComponent {
   protected readonly scaleMin = HIDDEN_LAYER_VIZ_SCALE_MIN;
   protected readonly scaleMax = HIDDEN_LAYER_VIZ_SCALE_MAX;
   protected readonly scaleStep = HIDDEN_LAYER_VIZ_SCALE_STEP;
+  readonly inputLayout = signal<InputLayerVizLayout>(INPUT_LAYER_PIXELS_LAYOUT);
+  readonly inputScale = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
   readonly scale0 = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
   readonly scale1 = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
   protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
   protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
   protected readonly neuronMulStep = ACTIVE_NEURON_MAX_SCALE_MUL_STEP;
   readonly activeNeuronMaxMul = signal(ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT);
+
+  onInputLayout(ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLSelectElement)) return;
+    const v = t.value as InputLayerVizLayout;
+    this.inputLayout.set(v);
+    this.app.onInputLayerLayoutChange(t.value);
+  }
+
+  onInputScale(ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
+    const v = parseFloat(t.value);
+    if (!Number.isFinite(v)) return;
+    this.inputScale.set(v);
+    this.app.onInputLayerLayoutScaleChange(v);
+  }
 
   onHiddenLayout(index: 0 | 1, ev: Event): void {
     const t = ev.target;

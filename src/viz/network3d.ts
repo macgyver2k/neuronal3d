@@ -39,6 +39,13 @@ export const HIDDEN_LAYER_VIZ_LAYOUTS = [
 ] as const;
 export type HiddenLayerVizLayout = (typeof HIDDEN_LAYER_VIZ_LAYOUTS)[number];
 
+export const INPUT_LAYER_PIXELS_LAYOUT = 'pixels' as const;
+export const INPUT_LAYER_VIZ_LAYOUTS = [
+  INPUT_LAYER_PIXELS_LAYOUT,
+  ...HIDDEN_LAYER_VIZ_LAYOUTS,
+] as const;
+export type InputLayerVizLayout = (typeof INPUT_LAYER_VIZ_LAYOUTS)[number];
+
 export const HIDDEN_LAYER_VIZ_SCALE_MIN = 0.25;
 export const HIDDEN_LAYER_VIZ_SCALE_MAX = 2.5;
 export const HIDDEN_LAYER_VIZ_SCALE_STEP = 0.05;
@@ -122,10 +129,36 @@ function placeHiddenLayerPoints(
   }
 }
 
+function placeInputLayer784(
+  pts: THREE.Vector3[],
+  x: number,
+  layout: InputLayerVizLayout,
+  scale: number,
+): void {
+  const n = 784;
+  if (layout === 'pixels') {
+    for (let i = 0; i < n; i++) {
+      const u = i % 28;
+      const v = 27 - Math.floor(i / 28);
+      pts[i]!.set(x, (v - 13.5) * 0.12, (u - 13.5) * 0.12);
+    }
+    if (scale !== 1) {
+      for (let i = 0; i < n; i++) {
+        const p = pts[i]!;
+        p.set(p.x, p.y * scale, p.z * scale);
+      }
+    }
+  } else {
+    placeHiddenLayerPoints(n, x, layout, pts, scale);
+  }
+}
+
 function layoutPositions(
   layerSizes: number[],
   hiddenLayouts: HiddenLayerVizLayout[],
   hiddenScales: number[],
+  inputLayout: InputLayerVizLayout,
+  inputScale: number,
 ): THREE.Vector3[][] {
   const out: THREE.Vector3[][] = [];
   const outIdx = layerSizes.length - 1;
@@ -135,10 +168,9 @@ function layoutPositions(
     const pts: THREE.Vector3[] = [];
     if (L === 0 && n === 784) {
       for (let i = 0; i < 784; i++) {
-        const u = i % 28;
-        const v = 27 - Math.floor(i / 28);
-        pts.push(new THREE.Vector3(x, (v - 13.5) * 0.12, (u - 13.5) * 0.12));
+        pts.push(new THREE.Vector3());
       }
+      placeInputLayer784(pts, x, inputLayout, inputScale);
     } else if (L === outIdx && L > 0) {
       const labelX = outIdx * LAYER_SPACING + OUTPUT_LABEL_X_OFFSET;
       const ny = OUTPUT_LABEL_Y - OUTPUT_NEURON_Y_BELOW_LABEL;
@@ -209,6 +241,8 @@ export class Network3D {
   private inferExpectedDigit: number | null = null;
   private hiddenLayouts: HiddenLayerVizLayout[] = [];
   private hiddenLayoutScales: number[] = [];
+  private inputLayerLayout: InputLayerVizLayout = INPUT_LAYER_PIXELS_LAYOUT;
+  private inputLayerScale = HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
   private activeNeuronMaxScaleMul = ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT;
 
   constructor(layerSizes: number[]) {
@@ -219,6 +253,8 @@ export class Network3D {
       this.layerSizes,
       this.hiddenLayouts,
       this.hiddenLayoutScales,
+      this.inputLayerLayout,
+      this.inputLayerScale,
     );
     const geom = new THREE.SphereGeometry(0.09, 10, 8);
     for (let L = 0; L < this.layerSizes.length; L++) {
@@ -342,6 +378,33 @@ export class Network3D {
     const x = L * LAYER_SPACING;
     const sc = this.hiddenLayoutScales[index] ?? HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
     placeHiddenLayerPoints(n, x, layout, this.positions[L]!, sc);
+  }
+
+  setInputLayerLayout(layout: InputLayerVizLayout): void {
+    if (this.layerSizes[0] !== 784) return;
+    if (this.inputLayerLayout === layout) return;
+    this.inputLayerLayout = layout;
+    const x = 0;
+    placeInputLayer784(
+      this.positions[0]!,
+      x,
+      layout,
+      this.inputLayerScale,
+    );
+  }
+
+  setInputLayerLayoutScale(scale: number): void {
+    if (this.layerSizes[0] !== 784) return;
+    const s = clampHiddenLayerVizScale(scale);
+    if (this.inputLayerScale === s) return;
+    this.inputLayerScale = s;
+    const x = 0;
+    placeInputLayer784(
+      this.positions[0]!,
+      x,
+      this.inputLayerLayout,
+      s,
+    );
   }
 
   setHiddenLayerLayoutScale(index: number, scale: number): void {
