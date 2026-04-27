@@ -5,7 +5,6 @@ import { Store } from '@ngrx/store';
 import {
   concatMap,
   debounceTime,
-  EMPTY,
   exhaustMap,
   filter,
   from,
@@ -17,21 +16,17 @@ import {
   withLatestFrom,
 } from 'rxjs';
 import { downloadJsonFile } from '../../core/download-json';
-import {
-  loadEpochTrackStoreFromStorage,
-  saveEpochTrackStoreToStorageSync,
-} from '../../core/epoch-storage';
+import { clearEpochTrackLocalStorageSync } from '../../core/epoch-storage';
+import { clearModelStoreLocalStorageSync } from '../../core/model-storage';
+import { createFreshStoredModelEntry } from '../../core/create-fresh-model-entry';
+import { ensureNeuronalDataLayout } from '../../core/neuronal-indexed-db';
 import { NeuronalAppInstance } from '../../core/neuronal-app-instance';
 import { NeuronalAppService } from '../../core/neuronal-app.service';
+import { NeuronalEpochsIdbService } from '../../core/neuronal-epochs-idb.service';
 import { NeuronalModelsIdbService } from '../../core/neuronal-models-idb.service';
-import {
-  ensurePretrainedInLocalStorage,
-  resetLocalStorageToPretrainedFiles,
-} from '../../core/pretrained-bootstrap';
 import type { AppState } from '../app.state';
 import { NeuronalActions } from './neuronal.actions';
 import {
-  selectActiveModelId,
   selectEpochByModelId,
   selectModelCollection,
   selectModelStoreHydrated,
@@ -47,6 +42,7 @@ export class NeuronalEffects {
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly router = inject(Router);
   private readonly modelsIdb = inject(NeuronalModelsIdbService);
+  private readonly epochsIdb = inject(NeuronalEpochsIdbService);
 
   modelStoreFromIdbLoad$ = createEffect(() =>
     this.actions$.pipe(
@@ -54,17 +50,20 @@ export class NeuronalEffects {
       exhaustMap(() =>
         from(
           (async () => {
-            await ensurePretrainedInLocalStorage();
-            const { byModelId } = loadEpochTrackStoreFromStorage();
-            const modelCollection =
-              await this.modelsIdb.loadCollectionWithLocalStorageFallback();
-            return { byModelId, modelCollection };
+            clearModelStoreLocalStorageSync();
+            clearEpochTrackLocalStorageSync();
+            await ensureNeuronalDataLayout();
+            const [modelCollection, epochStore] = await Promise.all([
+              this.modelsIdb.loadCollection(),
+              this.epochsIdb.loadEpochStore(),
+            ]);
+            return { modelCollection, epochStore };
           })(),
         ).pipe(
-          switchMap(({ byModelId, modelCollection }) =>
+          switchMap(({ modelCollection, epochStore }) =>
             of(
               NeuronalActions.epochStoreHydrated({
-                byModelId: { ...byModelId },
+                byModelId: { ...epochStore.byModelId },
               }),
               NeuronalActions.modelStoreHydrated({ modelCollection }),
             ),
@@ -85,6 +84,22 @@ export class NeuronalEffects {
         }),
       ),
     { dispatch: false },
+  );
+
+  newModelFromListRequested$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(NeuronalActions.newModelFromListRequested),
+      withLatestFrom(this.store.select(selectTrainingRunning)),
+      filter(([, running]) => !running),
+      concatMap(() => {
+        const entry = createFreshStoredModelEntry();
+        return from([
+          NeuronalActions.lastTrainMetricsReset(),
+          NeuronalActions.modelEntryUpserted({ entry }),
+          NeuronalActions.epochViewSyncFromModel({ modelId: entry.id }),
+        ]);
+      }),
+    ),
   );
 
   activeModelFromToolbar$ = createEffect(
@@ -110,17 +125,8 @@ export class NeuronalEffects {
             take(1),
             concatMap(() => {
               const id = segment.trim();
-              if (id === 'new') {
-                this.app.newModelFromToolbar();
-                return this.store.select(selectActiveModelId).pipe(
-                  take(1),
-                  tap((aid) => {
-                    if (aid)
-                      void this.router.navigate(['/model', aid], {
-                        replaceUrl: true,
-                      });
-                  }),
-                );
+              if (!id) {
+                return of(void 0);
               }
               return this.store.select(selectModelCollection).pipe(
                 take(1),
@@ -418,47 +424,13 @@ export class NeuronalEffects {
     { dispatch: false },
   );
 
-  uiResetToPretrainedFiles$ = createEffect(() =>
-    this.actions$.pipe(
-      ofType(NeuronalActions.uiResetToPretrainedFilesRequested),
-      withLatestFrom(this.store.select(selectTrainingRunning)),
-      filter(([, running]) => !running),
-      exhaustMap(() =>
-        from(resetLocalStorageToPretrainedFiles()).pipe(
-          switchMap((bundle) => {
-            if (!bundle) return EMPTY;
-            const pickId =
-              bundle.modelCollection.activeModelId ??
-              bundle.modelCollection.models[0]?.id ??
-              '';
-            const hydrated = [
-              NeuronalActions.modelStoreHydrated({
-                modelCollection: bundle.modelCollection,
-              }),
-              NeuronalActions.epochStoreHydrated({
-                byModelId: { ...bundle.epochStore.byModelId },
-              }),
-            ];
-            if (pickId.length > 0) {
-              return of(
-                ...hydrated,
-                NeuronalActions.activeModelFromToolbarRequested({ id: pickId }),
-              );
-            }
-            return of(...hydrated);
-          }),
-        ),
-      ),
-    ),
-  );
-
   persistEpoch$ = createEffect(
     () =>
       this.store.select(selectEpochByModelId).pipe(
         skip(1),
         debounceTime(200),
         tap((by) => {
-          saveEpochTrackStoreToStorageSync({ version: 1, byModelId: by });
+          void this.epochsIdb.saveEpochStore({ version: 1, byModelId: by });
         }),
       ),
     { dispatch: false },

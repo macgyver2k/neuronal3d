@@ -8,7 +8,6 @@ import {
   idbRequest,
   idbTransactionDone,
 } from './neuronal-indexed-db';
-import { loadModelStoreFromStorage } from './model-storage';
 
 type MetaActiveModelRecord = {
   key: string;
@@ -85,15 +84,6 @@ export class NeuronalModelsIdbService {
       activeModelId,
       models,
     };
-  }
-
-  async loadCollectionWithLocalStorageFallback(): Promise<StoredModelCollection> {
-    const fromIdb = await this.loadCollection();
-    if (fromIdb.models.length > 0) return fromIdb;
-    const fromLs = loadModelStoreFromStorage();
-    if (fromLs.models.length === 0) return fromIdb;
-    await this.saveCollection(fromLs);
-    return fromLs;
   }
 
   async saveCollection(collection: StoredModelCollection): Promise<void> {

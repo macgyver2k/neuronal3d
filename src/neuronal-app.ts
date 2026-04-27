@@ -1,15 +1,16 @@
 import { Store } from '@ngrx/store';
-import { saveEpochTrackStoreToStorageSync } from './app/core/epoch-storage';
 import {
   modelMatchesExpectedLayout,
-  saveModelStoreToStorageSync,
 } from './app/core/model-storage';
+import { NeuronalEpochsIdbService } from './app/core/neuronal-epochs-idb.service';
+import { NeuronalModelsIdbService } from './app/core/neuronal-models-idb.service';
 import {
   EXPECTED_LAYER_HIDDEN,
   type PersistedEpochRow,
   type StoredModel,
   type StoredModelEntry,
 } from './app/core/model.types';
+import { createFreshStoredModelEntry } from './app/core/create-fresh-model-entry';
 import { NeuronalAppInstance } from './app/core/neuronal-app-instance';
 import type { AppState } from './app/store/app.state';
 import { NeuronalActions } from './app/store/neuronal/neuronal.actions';
@@ -844,31 +845,14 @@ export function createNeuronalAppRuntime(
     });
   const runNewModelFromToolbar = (): void => {
     if (nLatest.training.running) return;
-    const fresh = new MLP(784, HIDDEN, 10);
-    net = fresh;
+    const entry = createFreshStoredModelEntry();
+    net = applyStoredModelToNet(entry.model);
     lastInferActsDebug = null;
     appStore.dispatch(NeuronalActions.lastTrainMetricsReset());
-    const now = new Date().toISOString();
-    const id = crypto.randomUUID();
-    upsertModelEntry({
-      id,
-      name: defaultModelName(),
-      createdAt: now,
-      updatedAt: now,
-      model: cloneStoredModel(fresh),
-      metrics: {
-        lastLoss: 0,
-        lastBatchAcc: 0,
-        testAcc: null,
-        errorRate: null,
-        epochsTrained: 0,
-      },
-    });
-    applyEpochHistoryToUi(id);
+    upsertModelEntry(entry);
+    applyEpochHistoryToUi(entry.id);
     publishVizState('idle', zeroActivationsForLayout());
-    setStatus(
-      `Neues Modell: ${nLatest.modelCollection.models.find((m) => m.id === id)?.name ?? id}`,
-    );
+    setStatus(`Neues Modell: ${entry.name}`);
   };
   const runActiveModelFromToolbar = (id: string): void => {
     if (nLatest.training.running) return;
@@ -1195,8 +1179,8 @@ export function createNeuronalAppRuntime(
   };
 
   const onBeforeUnload = () => {
-    saveModelStoreToStorageSync(nLatest.modelCollection);
-    saveEpochTrackStoreToStorageSync({
+    void new NeuronalModelsIdbService().saveCollection(nLatest.modelCollection);
+    void new NeuronalEpochsIdbService().saveEpochStore({
       version: 1,
       byModelId: nLatest.epochByModelId,
     });
@@ -1233,8 +1217,8 @@ export function createNeuronalAppRuntime(
   return {
     destroy: () => {
       try {
-        saveModelStoreToStorageSync(nLatest.modelCollection);
-        saveEpochTrackStoreToStorageSync({
+        void new NeuronalModelsIdbService().saveCollection(nLatest.modelCollection);
+        void new NeuronalEpochsIdbService().saveEpochStore({
           version: 1,
           byModelId: nLatest.epochByModelId,
         });
@@ -1245,10 +1229,7 @@ export function createNeuronalAppRuntime(
         neuronalUiRaf = 0;
       }
       appStore.dispatch(NeuronalActions.trainingStopRequested());
-      appInstance.connect({
-        newModelFromToolbar: () => undefined,
-        activeModelFromToolbar: (_id: string) => undefined,
-      });
+      appInstance.disconnect();
       unSubN.unsubscribe();
       window.removeEventListener('beforeunload', onBeforeUnload);
       stopAnimCleanup?.();

@@ -154,15 +154,6 @@ import {
         >
           JSON exportieren
         </button>
-        <button
-          id="btnResetToPretrained"
-          type="button"
-          class="btn btn-ghost shrink-0"
-          [disabled]="trainingRunning()"
-          (click)="resetToPretrained()"
-        >
-          Auf Vorgaben zurücksetzen
-        </button>
       </div>
       <select
         id="modelSelect"
@@ -204,9 +195,5 @@ export class NeuronalModelBarComponent {
 
   exportJson(): void {
     this.store.dispatch(NeuronalActions.uiExportBundleRequested());
-  }
-
-  resetToPretrained(): void {
-    this.store.dispatch(NeuronalActions.uiResetToPretrainedFilesRequested());
   }
 }

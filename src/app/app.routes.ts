@@ -19,6 +19,7 @@ export const routes: Routes = [
     ],
     children: [
       { path: '', pathMatch: 'full', component: ModelListComponent },
+      { path: 'model/new', pathMatch: 'full', redirectTo: '' },
       {
         path: 'model/:modelId',
         canActivate: [

@@ -37,6 +37,12 @@ export function normalizeEpochTrackStore(data: unknown): EpochTrackStore | null 
   return { version: 1, byModelId };
 }
 
+export function clearEpochTrackLocalStorageSync(): void {
+  try {
+    localStorage.removeItem(EPOCH_TRACK_STORAGE_KEY);
+  } catch {}
+}
+
 export function loadEpochTrackStoreFromStorage(): EpochTrackStore {
   try {
     const raw = localStorage.getItem(EPOCH_TRACK_STORAGE_KEY);

@@ -33,6 +33,12 @@ export function saveModelStoreToStorage(
   return Promise.resolve();
 }
 
+export function clearModelStoreLocalStorageSync(): void {
+  try {
+    localStorage.removeItem(MODEL_STORAGE_KEY_V2);
+  } catch {}
+}
+
 export function loadModelStoreFromStorage(): StoredModelCollection {
   const rawV2 = localStorage.getItem(MODEL_STORAGE_KEY_V2);
   if (rawV2) {

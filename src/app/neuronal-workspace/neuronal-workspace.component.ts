@@ -8,7 +8,8 @@ import {
   signal,
   ViewChild,
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
+import { filter, firstValueFrom, take } from 'rxjs';
 import { Store } from '@ngrx/store';
 import { NeuronalAppInstance } from '../core/neuronal-app-instance';
 import { NeuronalAppService } from '../core/neuronal-app.service';
@@ -125,9 +126,43 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
     void this.bootstrapRuntime();
   }
 
+  private modelWorkspacePathMatches(): boolean {
+    const path = this.router.url.split('?')[0].split('#')[0];
+    const segs = path.split('/').filter(Boolean);
+    return segs[0] === 'model' && segs.length >= 2;
+  }
+
+  private async waitForModelWorkspaceRouterPath(gen: number): Promise<void> {
+    if (gen !== this.bindGen) return;
+    if (this.modelWorkspacePathMatches()) return;
+    await firstValueFrom(
+      this.router.events.pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        filter(() => gen === this.bindGen && this.modelWorkspacePathMatches()),
+        take(1),
+      ),
+    );
+  }
+
+  private async waitForModelBarDom(gen: number): Promise<void> {
+    const deadline = performance.now() + 3000;
+    while (gen === this.bindGen && performance.now() < deadline) {
+      if (document.getElementById('btnNewModel')) return;
+      await new Promise<void>((r) =>
+        requestAnimationFrame(() => {
+          r();
+        }),
+      );
+    }
+  }
+
   private async bootstrapRuntime(): Promise<void> {
     const gen = ++this.bindGen;
     try {
+      await this.waitForModelWorkspaceRouterPath(gen);
+      if (gen !== this.bindGen) return;
+      await this.waitForModelBarDom(gen);
+      if (gen !== this.bindGen) return;
       const td = await this.neuronalApp.bindRuntime(
         this.appRoot.nativeElement,
         this.appInstance,

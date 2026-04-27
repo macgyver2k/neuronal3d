@@ -1,4 +1,3 @@
-import { loadEpochTrackStoreFromStorage } from '../../core/epoch-storage';
 import type {
   PersistedEpochRow,
   StoredModelCollection,
@@ -65,7 +64,7 @@ export function initialEpochDisplay(
 
 export function createInitialNeuronalState(): NeuronalState {
   const modelCollection = emptyModelCollection();
-  const epochByModelId = { ...loadEpochTrackStoreFromStorage().byModelId };
+  const epochByModelId: Record<string, PersistedEpochRow[]> = {};
   return {
     modelCollection,
     modelStoreHydrated: false,

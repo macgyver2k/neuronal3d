@@ -4,10 +4,11 @@ import {
   inject,
   signal,
 } from "@angular/core";
-import { Router, RouterLink } from "@angular/router";
+import { RouterLink } from "@angular/router";
 import { Store } from "@ngrx/store";
 import type { AppState } from "../store/app.state";
 import { NeuronalAppService } from "../core/neuronal-app.service";
+import { NeuronalActions } from "../store/neuronal/neuronal.actions";
 import {
   selectModelCollection,
   selectModelStoreHydrated,
@@ -42,8 +43,8 @@ import { map } from "rxjs";
             class="flex flex-col gap-4 rounded-box border border-dashed border-base-300/60 bg-base-200/40 p-6"
           >
             <p class="text-base-content/80 text-sm">
-              Noch keine gespeicherten Modelle. Lege ein neues Netz an —
-              danach öffnet sich die Arbeitsfläche mit 3D-Ansicht und Training.
+              Noch keine gespeicherten Modelle. Lege ein neues Netz an — es
+              erscheint in der Liste; öffne es dort für die Arbeitsfläche.
             </p>
             <button
               type="button"
@@ -125,7 +126,6 @@ import { map } from "rxjs";
 })
 export class ModelListComponent {
   private readonly neuronalApp = inject(NeuronalAppService);
-  private readonly router = inject(Router);
   private readonly store = inject(Store<AppState>);
   readonly ready = signal(false);
   readonly hydrated = toSignal(this.store.select(selectModelStoreHydrated), {
@@ -160,6 +160,6 @@ export class ModelListComponent {
   }
 
   createNew(): void {
-    void this.router.navigate(["/model", "new"]);
+    this.store.dispatch(NeuronalActions.newModelFromListRequested());
   }
 }
