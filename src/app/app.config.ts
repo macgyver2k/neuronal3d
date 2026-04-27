@@ -1,4 +1,6 @@
 import { ApplicationConfig, isDevMode, provideZoneChangeDetection } from "@angular/core";
+import { provideRouter } from "@angular/router";
+import { routes } from "./app.routes";
 import { provideEffects } from "@ngrx/effects";
 import { provideState, provideStore } from "@ngrx/store";
 import { provideStoreDevtools } from "@ngrx/store-devtools";
@@ -15,5 +17,6 @@ export const appConfig: ApplicationConfig = {
       ? [provideStoreDevtools({ maxAge: 30, trace: false })]
       : []),
     provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes),
   ],
 };

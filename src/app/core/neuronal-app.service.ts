@@ -12,33 +12,32 @@ import { NeuronalActions } from "../store/neuronal/neuronal.actions";
 export class NeuronalAppService {
   readonly store = inject(Store<AppState>);
   private runtime: NeuronalAppRuntime | null = null;
+  private hydrateOnce: Promise<void> | null = null;
 
-  start(root: HTMLElement, appInstance: NeuronalAppInstance): () => void {
-    let cancelled = false;
-    let teardownRuntime: (() => void) | null = null;
-    void (async () => {
-      await ensurePretrainedInLocalStorage();
-      if (cancelled) return;
-      const modelCollection = loadModelStoreFromStorage();
-      const { byModelId } = loadEpochTrackStoreFromStorage();
-      if (cancelled) return;
-      this.store.dispatch(NeuronalActions.modelStoreHydrated({ modelCollection }));
-      this.store.dispatch(NeuronalActions.epochStoreHydrated({ byModelId: { ...byModelId } }));
-      if (cancelled) return;
-      this.runtime = createNeuronalAppRuntime(this.store, root, appInstance);
-      teardownRuntime = () => {
-        this.runtime?.destroy();
-        this.runtime = null;
-      };
-    })();
+  async ensureStoreHydrated(): Promise<void> {
+    if (!this.hydrateOnce) {
+      this.hydrateOnce = (async () => {
+        await ensurePretrainedInLocalStorage();
+        const modelCollection = loadModelStoreFromStorage();
+        const { byModelId } = loadEpochTrackStoreFromStorage();
+        this.store.dispatch(NeuronalActions.modelStoreHydrated({ modelCollection }));
+        this.store.dispatch(NeuronalActions.epochStoreHydrated({ byModelId: { ...byModelId } }));
+      })();
+    }
+    await this.hydrateOnce;
+  }
+
+  async bindRuntime(root: HTMLElement, appInstance: NeuronalAppInstance): Promise<() => void> {
+    await this.ensureStoreHydrated();
+    this.runtime?.destroy();
+    const next = createNeuronalAppRuntime(this.store, root, appInstance);
+    this.runtime = next;
     return () => {
-      cancelled = true;
-      if (teardownRuntime) {
-        teardownRuntime();
-        teardownRuntime = null;
-      } else {
-        this.runtime?.destroy();
+      if (this.runtime === next) {
+        next.destroy();
         this.runtime = null;
+      } else {
+        next.destroy();
       }
     };
   }

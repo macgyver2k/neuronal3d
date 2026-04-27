@@ -1,11 +1,11 @@
 import { Component } from "@angular/core";
-import { NeuronalWorkspaceComponent } from "./neuronal-workspace/neuronal-workspace.component";
+import { RouterOutlet } from "@angular/router";
 
 @Component({
   selector: "app-root",
   standalone: true,
-  imports: [NeuronalWorkspaceComponent],
-  template: `<app-neuronal-workspace />`,
+  imports: [RouterOutlet],
+  template: `<router-outlet />`,
   styleUrl: "./app.component.scss",
 })
 export class AppComponent {}
