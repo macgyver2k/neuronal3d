@@ -51,6 +51,25 @@ export function clampHiddenLayerVizScale(v: number): number {
   );
 }
 
+export const ACTIVE_NEURON_MAX_SCALE_MUL_MIN = 0.05;
+export const ACTIVE_NEURON_MAX_SCALE_MUL_MAX = 2.5;
+export const ACTIVE_NEURON_MAX_SCALE_MUL_STEP = 0.05;
+export const ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT = 1;
+
+const NEURON_BASE_DISPLAY_SCALE = 0.17;
+
+const ACTIVE_NEURON_HIDDEN_MIN = 0.06;
+const ACTIVE_NEURON_HIDDEN_RANGE = 0.98;
+const ACTIVE_NEURON_OUTPUT_MIN = 0.07;
+const ACTIVE_NEURON_OUTPUT_RANGE = 1.28;
+
+export function clampActiveNeuronMaxScaleMul(v: number): number {
+  return Math.min(
+    ACTIVE_NEURON_MAX_SCALE_MUL_MAX,
+    Math.max(ACTIVE_NEURON_MAX_SCALE_MUL_MIN, v),
+  );
+}
+
 function placeHiddenLayerPoints(
   n: number,
   x: number,
@@ -190,6 +209,7 @@ export class Network3D {
   private inferExpectedDigit: number | null = null;
   private hiddenLayouts: HiddenLayerVizLayout[] = [];
   private hiddenLayoutScales: number[] = [];
+  private activeNeuronMaxScaleMul = ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT;
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -220,7 +240,7 @@ export class Network3D {
       const pos = this.positions[L];
       for (let i = 0; i < n; i++) {
         this.dummy.position.copy(pos[i]);
-        const s = 0.35;
+        const s = NEURON_BASE_DISPLAY_SCALE;
         this.dummy.scale.setScalar(s);
         this.dummy.updateMatrix();
         mesh.setMatrixAt(i, this.dummy.matrix);
@@ -336,6 +356,12 @@ export class Network3D {
     placeHiddenLayerPoints(n, x, mode, this.positions[L]!, s);
   }
 
+  setActiveNeuronMaxScaleMul(mul: number): void {
+    const m = clampActiveNeuronMaxScaleMul(mul);
+    if (this.activeNeuronMaxScaleMul === m) return;
+    this.activeNeuronMaxScaleMul = m;
+  }
+
   resetActivationScaling(): void {
     for (let i = 0; i < this.activationScale.length; i++)
       this.activationScale[i] = 1;
@@ -432,7 +458,11 @@ export class Network3D {
           const raw = (vi - mean) / denom;
           const t = Math.min(1, Math.max(0, Math.pow(raw, 0.65)));
           this.dummy.position.copy(pos[i]);
-          const s = 0.18 + 1.28 * t;
+          const s =
+            t <= 1e-10
+              ? NEURON_BASE_DISPLAY_SCALE
+              : ACTIVE_NEURON_OUTPUT_MIN +
+                ACTIVE_NEURON_OUTPUT_RANGE * t * this.activeNeuronMaxScaleMul;
           this.dummy.scale.setScalar(s);
           this.dummy.updateMatrix();
           mesh.setMatrixAt(i, this.dummy.matrix);
@@ -524,7 +554,11 @@ export class Network3D {
           const raw = Math.max(0, vi / scale);
           const t = Math.min(1, Math.pow(raw, 0.7));
           this.dummy.position.copy(pos[i]);
-          const s = 0.16 + 0.98 * t;
+          const s =
+            vi <= 1e-12
+              ? NEURON_BASE_DISPLAY_SCALE
+              : ACTIVE_NEURON_HIDDEN_MIN +
+                ACTIVE_NEURON_HIDDEN_RANGE * t * this.activeNeuronMaxScaleMul;
           this.dummy.scale.setScalar(s);
           this.dummy.updateMatrix();
           mesh.setMatrixAt(i, this.dummy.matrix);

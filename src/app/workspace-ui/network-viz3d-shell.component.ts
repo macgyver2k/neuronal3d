@@ -7,6 +7,10 @@ import {
 } from "@angular/core";
 import { NeuronalAppService } from "../core/neuronal-app.service";
 import {
+  ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
+  ACTIVE_NEURON_MAX_SCALE_MUL_MAX,
+  ACTIVE_NEURON_MAX_SCALE_MUL_MIN,
+  ACTIVE_NEURON_MAX_SCALE_MUL_STEP,
   HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
   HIDDEN_LAYER_VIZ_SCALE_MAX,
   HIDDEN_LAYER_VIZ_SCALE_MIN,
@@ -22,8 +26,8 @@ import {
       class="n3-vizshell relative h-full min-h-0 w-full bg-background bg-[radial-gradient(100%_80%_at_50%_0%,rgba(54,211,166,0.09),transparent_58%)]"
     >
       <div
-        class="absolute left-2 top-2 z-10 flex max-w-[min(100%,20rem)] flex-col gap-2 rounded-md border border-border bg-background/85 px-2 py-1.5 text-foreground shadow-sm backdrop-blur-sm"
-        aria-label="Anordnung der Hidden-Layer"
+        class="absolute left-2 top-2 z-10 flex max-w-[min(100%,22rem)] flex-col gap-2 rounded-md border border-border bg-background/85 px-2 py-1.5 text-foreground shadow-sm backdrop-blur-sm"
+        aria-label="3D-Netz Darstellung"
       >
         <div class="flex min-w-0 flex-col gap-1">
           <div class="flex flex-wrap items-center gap-2">
@@ -105,6 +109,30 @@ import {
             >
           </div>
         </div>
+        <div
+          class="mt-1 flex min-w-0 flex-col gap-1 border-t border-border pt-2"
+        >
+          <div class="flex min-w-0 items-center gap-1.5">
+            <label
+              for="activeNeuronMaxMul"
+              class="max-w-[5.5rem] shrink-0 text-[0.65rem] leading-tight text-muted"
+              >Max. Größe aktiv</label
+            >
+            <input
+              id="activeNeuronMaxMul"
+              type="range"
+              [min]="neuronMulMin"
+              [max]="neuronMulMax"
+              [step]="neuronMulStep"
+              [value]="activeNeuronMaxMul()"
+              (input)="onActiveNeuronMaxMul($event)"
+              class="h-1.5 min-w-0 flex-1 cursor-pointer accent-primary"
+            />
+            <span class="w-7 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+              >{{ activeNeuronMaxMul() | number : "1.0-2" }}</span
+            >
+          </div>
+        </div>
       </div>
       <div id="viz" class="absolute inset-0 min-h-0"></div>
     </div>
@@ -118,6 +146,10 @@ export class NetworkViz3dShellComponent {
   protected readonly scaleStep = HIDDEN_LAYER_VIZ_SCALE_STEP;
   readonly scale0 = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
   readonly scale1 = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
+  protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
+  protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
+  protected readonly neuronMulStep = ACTIVE_NEURON_MAX_SCALE_MUL_STEP;
+  readonly activeNeuronMaxMul = signal(ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT);
 
   onHiddenLayout(index: 0 | 1, ev: Event): void {
     const t = ev.target;
@@ -133,5 +165,14 @@ export class NetworkViz3dShellComponent {
     if (index === 0) this.scale0.set(v);
     else this.scale1.set(v);
     this.app.onHiddenLayerLayoutScaleChange(index, v);
+  }
+
+  onActiveNeuronMaxMul(ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
+    const v = parseFloat(t.value);
+    if (!Number.isFinite(v)) return;
+    this.activeNeuronMaxMul.set(v);
+    this.app.onActiveNeuronMaxScaleMulChange(v);
   }
 }

@@ -815,6 +815,7 @@ export type NeuronalAppRuntime = {
   onDrawPointerLeave: () => void;
   onHiddenLayerLayoutChange: (index: number, raw: string) => void;
   onHiddenLayerLayoutScaleChange: (index: number, scale: number) => void;
+  onActiveNeuronMaxScaleMulChange: (mul: number) => void;
 };
 
 export function createNeuronalAppRuntime(
@@ -940,6 +941,11 @@ export function createNeuronalAppRuntime(
   ): void => {
     if (!net3d || !Number.isFinite(scale)) return;
     net3d.setHiddenLayerLayoutScale(index, scale);
+    reapplyViz3dAfterLayoutChange();
+  };
+  const onActiveNeuronMaxScaleMulChange = (mul: number): void => {
+    if (!net3d || !Number.isFinite(mul)) return;
+    net3d.setActiveNeuronMaxScaleMul(mul);
     reapplyViz3dAfterLayoutChange();
   };
   const onClearDraw = (): void => {
@@ -1260,5 +1266,6 @@ export function createNeuronalAppRuntime(
     onDrawPointerLeave,
     onHiddenLayerLayoutChange,
     onHiddenLayerLayoutScaleChange,
+    onActiveNeuronMaxScaleMulChange,
   };
 }
