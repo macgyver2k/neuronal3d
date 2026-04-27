@@ -17,10 +17,17 @@ import {
   withLatestFrom,
 } from 'rxjs';
 import { downloadJsonFile } from '../../core/download-json';
-import { saveEpochTrackStoreToStorageSync } from '../../core/epoch-storage';
+import {
+  loadEpochTrackStoreFromStorage,
+  saveEpochTrackStoreToStorageSync,
+} from '../../core/epoch-storage';
 import { NeuronalAppInstance } from '../../core/neuronal-app-instance';
 import { NeuronalAppService } from '../../core/neuronal-app.service';
-import { resetLocalStorageToPretrainedFiles } from '../../core/pretrained-bootstrap';
+import { NeuronalModelsIdbService } from '../../core/neuronal-models-idb.service';
+import {
+  ensurePretrainedInLocalStorage,
+  resetLocalStorageToPretrainedFiles,
+} from '../../core/pretrained-bootstrap';
 import type { AppState } from '../app.state';
 import { NeuronalActions } from './neuronal.actions';
 import {
@@ -39,6 +46,33 @@ export class NeuronalEffects {
   private readonly app = inject(NeuronalAppInstance);
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly router = inject(Router);
+  private readonly modelsIdb = inject(NeuronalModelsIdbService);
+
+  modelStoreFromIdbLoad$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(NeuronalActions.modelStoreLoadRequested),
+      exhaustMap(() =>
+        from(
+          (async () => {
+            await ensurePretrainedInLocalStorage();
+            const { byModelId } = loadEpochTrackStoreFromStorage();
+            const modelCollection =
+              await this.modelsIdb.loadCollectionWithLocalStorageFallback();
+            return { byModelId, modelCollection };
+          })(),
+        ).pipe(
+          switchMap(({ byModelId, modelCollection }) =>
+            of(
+              NeuronalActions.epochStoreHydrated({
+                byModelId: { ...byModelId },
+              }),
+              NeuronalActions.modelStoreHydrated({ modelCollection }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   newModelFromToolbar$ = createEffect(
     () =>

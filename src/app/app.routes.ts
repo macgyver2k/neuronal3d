@@ -11,6 +11,12 @@ export const routes: Routes = [
   {
     path: '',
     component: AppShellComponent,
+    canActivate: [
+      () => {
+        inject(Store<AppState>).dispatch(NeuronalActions.modelStoreLoadRequested());
+        return true;
+      },
+    ],
     children: [
       { path: '', pathMatch: 'full', component: ModelListComponent },
       {

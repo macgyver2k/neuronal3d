@@ -1,12 +1,11 @@
 import { inject, Injectable } from "@angular/core";
 import { Store } from "@ngrx/store";
+import { filter, firstValueFrom, take } from "rxjs";
 import { createNeuronalAppRuntime, type NeuronalAppRuntime } from "../../neuronal-app";
 import { NeuronalAppInstance } from "./neuronal-app-instance";
-import { loadEpochTrackStoreFromStorage } from "./epoch-storage";
-import { loadModelStoreFromStorage } from "./model-storage";
-import { ensurePretrainedInLocalStorage } from "./pretrained-bootstrap";
 import type { AppState } from "../store/app.state";
 import { NeuronalActions } from "../store/neuronal/neuronal.actions";
+import { selectModelStoreHydrated } from "../store/neuronal/neuronal.selectors";
 
 @Injectable({ providedIn: "root" })
 export class NeuronalAppService {
@@ -16,13 +15,12 @@ export class NeuronalAppService {
 
   async ensureStoreHydrated(): Promise<void> {
     if (!this.hydrateOnce) {
-      this.hydrateOnce = (async () => {
-        await ensurePretrainedInLocalStorage();
-        const modelCollection = loadModelStoreFromStorage();
-        const { byModelId } = loadEpochTrackStoreFromStorage();
-        this.store.dispatch(NeuronalActions.modelStoreHydrated({ modelCollection }));
-        this.store.dispatch(NeuronalActions.epochStoreHydrated({ byModelId: { ...byModelId } }));
-      })();
+      this.hydrateOnce = firstValueFrom(
+        this.store.select(selectModelStoreHydrated).pipe(
+          filter((h): h is true => h),
+          take(1),
+        ),
+      ).then(() => {});
     }
     await this.hydrateOnce;
   }

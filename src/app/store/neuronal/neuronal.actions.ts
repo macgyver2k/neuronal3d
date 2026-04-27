@@ -8,6 +8,7 @@ import type {
 export const NeuronalActions = createActionGroup({
   source: 'Neuronal',
   events: {
+    'Model Store Load Requested': emptyProps(),
     'Model Store Hydrated': props<{ modelCollection: StoredModelCollection }>(),
     'Epoch Store Hydrated': props<{
       byModelId: Record<string, PersistedEpochRow[]>;
