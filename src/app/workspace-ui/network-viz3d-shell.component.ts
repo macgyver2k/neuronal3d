@@ -25,22 +25,22 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
   imports: [DecimalPipe, VizSettingsBlockComponent],
   template: `
     <div
-      class="n3-vizshell relative flex h-full min-h-0 w-full min-w-0 flex-row bg-background bg-[radial-gradient(100%_80%_at_50%_0%,rgba(54,211,166,0.09),transparent_58%)]"
+      class="relative flex h-full min-h-0 w-full min-w-0 flex-row bg-base-300/25"
     >
       <aside
-        class="n3-vizpanel flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-border bg-background/90 px-3 py-3 text-foreground shadow-sm backdrop-blur-md"
+        class="flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-base-300 bg-base-200/90 px-3 py-3 text-base-content shadow-md backdrop-blur-md"
         aria-label="3D-Netz Darstellung"
       >
         <app-viz-settings-block heading="Eingabelayer">
           <div class="min-w-0">
             <label
               for="inputLayerVizLayout"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
               >Darstellung</label
             >
             <select
               id="inputLayerVizLayout"
-              class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
+              class="select select-bordered select-sm w-full"
               [value]="model().inputLayerLayout"
               (change)="onInputLayout($event)"
             >
@@ -55,7 +55,7 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
           <div class="min-w-0">
             <label
               for="inputLayerVizScale"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
               >Skala</label
             >
             <div class="flex min-w-0 items-center gap-2">
@@ -67,9 +67,9 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 [step]="scaleStep"
                 [value]="model().inputLayerScale"
                 (input)="onInputScale($event)"
-                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+                class="range range-primary flex-1 min-w-0"
               />
-              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
                 >{{ model().inputLayerScale | number : "1.0-2" }}</span
               >
             </div>
@@ -79,12 +79,12 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
           <div class="min-w-0">
             <label
               for="hiddenLayerVizLayout0"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
               >Darstellung</label
             >
             <select
               id="hiddenLayerVizLayout0"
-              class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
+              class="select select-bordered select-sm w-full"
               [value]="model().hiddenLayerLayouts[0]"
               (change)="onHiddenLayout(0, $event)"
             >
@@ -98,7 +98,7 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
           <div class="min-w-0">
             <label
               for="hiddenLayerVizScale0"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
               >Skala</label
             >
             <div class="flex min-w-0 items-center gap-2">
@@ -110,9 +110,9 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 [step]="scaleStep"
                 [value]="model().hiddenLayerScales[0]"
                 (input)="onScale(0, $event)"
-                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+                class="range range-primary flex-1 min-w-0"
               />
-              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
                 >{{ model().hiddenLayerScales[0] | number : "1.0-2" }}</span
               >
             </div>
@@ -122,12 +122,12 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
           <div class="min-w-0">
             <label
               for="hiddenLayerVizLayout1"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
               >Darstellung</label
             >
             <select
               id="hiddenLayerVizLayout1"
-              class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
+              class="select select-bordered select-sm w-full"
               [value]="model().hiddenLayerLayouts[1]"
               (change)="onHiddenLayout(1, $event)"
             >
@@ -141,7 +141,7 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
           <div class="min-w-0">
             <label
               for="hiddenLayerVizScale1"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
               >Skala</label
             >
             <div class="flex min-w-0 items-center gap-2">
@@ -153,9 +153,9 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 [step]="scaleStep"
                 [value]="model().hiddenLayerScales[1]"
                 (input)="onScale(1, $event)"
-                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+                class="range range-primary flex-1 min-w-0"
               />
-              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
                 >{{ model().hiddenLayerScales[1] | number : "1.0-2" }}</span
               >
             </div>
@@ -165,7 +165,7 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
           <div class="min-w-0">
             <label
               for="activeNeuronMaxMul"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-foreground"
+              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
               >Max. Größe aktiver Neuronen</label
             >
             <div class="flex min-w-0 items-center gap-2">
@@ -177,9 +177,9 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 [step]="neuronMulStep"
                 [value]="model().activeNeuronMaxScaleMul"
                 (input)="onActiveNeuronMaxMul($event)"
-                class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
+                class="range range-primary flex-1 min-w-0"
               />
-              <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
+              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
                 >{{ model().activeNeuronMaxScaleMul | number : "1.0-2" }}</span
               >
             </div>

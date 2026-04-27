@@ -8,100 +8,139 @@ import { NeuronalActions } from "../store/neuronal/neuronal.actions";
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <article id="dockTrain" class="n3-panel n3-panel--train">
-      <div class="n3-panelhead shrink-0">
-        <h2 class="n3-paneltitle text-foreground">Training</h2>
-        <p class="n3-panelsub text-muted">Weiterlernen mit dem aktuell gewählten Modell</p>
-      </div>
-      <p id="datasetRibbon" class="n3-ribbon text-muted" aria-live="polite"></p>
-      <div class="n3-active flex flex-col gap-1">
-        <p id="activeModelTitle" class="n3-active-title text-foreground"></p>
-        <p id="activeModelDetail" class="n3-active-detail text-muted"></p>
-        <div class="n3-row flex flex-wrap items-center gap-2">
-          <button
-            id="btnSaveModelAs"
-            type="button"
-            class="n3-btn border-border"
-            disabled
-            (click)="saveAs()"
-          >
-            Als neuen Stand speichern
-          </button>
-          <button
-            id="btnResetModel"
-            type="button"
-            class="n3-btn n3-btn--ghost"
-            disabled
-            (click)="reset()"
-          >
-            Gewichte zurücksetzen
-          </button>
+    <article id="dockTrain" class="card border-base-300 bg-base-200 rounded-box flex shrink-0 flex-col gap-3 border shadow-xl">
+      <div class="card-body gap-3 p-5">
+        <div class="shrink-0">
+          <h2 class="card-title text-base">Training</h2>
+          <p class="text-base-content/60 text-xs">
+            Weiterlernen mit dem aktuell gewählten Modell
+          </p>
         </div>
-      </div>
-      <div class="n3-field flex flex-col gap-1.5">
-        <span
-          class="n3-label font-semibold uppercase tracking-widest text-muted text-[0.65rem]"
-          >Epochen</span
-        >
-        <div class="n3-chips flex flex-wrap gap-1.5" id="epochPresetRow">
-          <button type="button" class="epochPresetBtn" [attr.data-epochs]="1" (click)="epochPreset(1)">
-            1
-          </button>
-          <button type="button" class="epochPresetBtn" [attr.data-epochs]="3" (click)="epochPreset(3)">
-            3
-          </button>
-          <button type="button" class="epochPresetBtn" [attr.data-epochs]="10" (click)="epochPreset(10)">
-            10
-          </button>
-          <button type="button" class="epochPresetBtn" [attr.data-epochs]="30" (click)="epochPreset(30)">
-            30
-          </button>
+        <p
+          id="datasetRibbon"
+          class="text-base-content/70 rounded-btn border-base-300/60 bg-base-300/30 border p-2 text-xs leading-snug"
+          aria-live="polite"
+        ></p>
+        <div class="flex flex-col gap-2">
+          <p id="activeModelTitle" class="text-base-content font-semibold"></p>
+          <p id="activeModelDetail" class="text-base-content/60 text-xs leading-snug"></p>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              id="btnSaveModelAs"
+              type="button"
+              class="btn btn-outline btn-sm"
+              disabled
+              (click)="saveAs()"
+            >
+              Als neuen Stand speichern
+            </button>
+            <button
+              id="btnResetModel"
+              type="button"
+              class="btn btn-ghost btn-sm"
+              disabled
+              (click)="reset()"
+            >
+              Gewichte zurücksetzen
+            </button>
+          </div>
         </div>
-        <label class="n3-labelrow text-[0.72rem] text-muted" for="epochsInput">Anzahl (1–200)</label>
-        <input
-          id="epochsInput"
-          type="number"
-          min="1"
-          max="200"
-          step="1"
-          value="1"
-          (input)="epochsInput()"
-        />
-      </div>
-      <p id="epochStepHint" class="n3-hint text-muted" aria-live="polite"></p>
-      <div class="n3-row n3-row--grow flex flex-wrap items-center gap-2">
-        <button
-          id="btnTrain"
-          type="button"
-          class="n3-btn n3-btn--primary"
-          disabled
-          (click)="trainStart()"
-        >
-          Training starten
-        </button>
-        <button id="btnPause" type="button" class="n3-btn border-border" disabled (click)="pauseToggle()">
-          Anhalten
-        </button>
-      </div>
-      <details class="n3-advanced border-border-soft" id="trainAdvanced">
-        <summary class="cursor-pointer text-[0.74rem] text-muted">Erweitert</summary>
-        <div class="n3-advancedgrid mt-2 grid grid-cols-2 gap-x-3 gap-y-2">
-          <label for="lrInput" class="text-[0.68rem] text-muted">Lernrate</label>
-          <input id="lrInput" type="number" min="0.0001" max="1" step="0.0001" value="0.02" />
-          <label for="batchSizeInput" class="text-[0.68rem] text-muted">Batch</label>
+        <div class="form-control gap-2">
+          <span class="text-base-content/60 text-[0.65rem] font-semibold uppercase tracking-widest"
+            >Epochen</span
+          >
+          <div class="join join-horizontal flex-wrap" id="epochPresetRow">
+            <button
+              type="button"
+              class="epochPresetBtn btn join-item btn-outline btn-sm"
+              [attr.data-epochs]="1"
+              (click)="epochPreset(1)"
+            >
+              1
+            </button>
+            <button
+              type="button"
+              class="epochPresetBtn btn join-item btn-outline btn-sm"
+              [attr.data-epochs]="3"
+              (click)="epochPreset(3)"
+            >
+              3
+            </button>
+            <button
+              type="button"
+              class="epochPresetBtn btn join-item btn-outline btn-sm"
+              [attr.data-epochs]="10"
+              (click)="epochPreset(10)"
+            >
+              10
+            </button>
+            <button
+              type="button"
+              class="epochPresetBtn btn join-item btn-outline btn-sm"
+              [attr.data-epochs]="30"
+              (click)="epochPreset(30)"
+            >
+              30
+            </button>
+          </div>
+          <label class="label py-0" for="epochsInput">
+            <span class="label-text text-base-content/60 text-xs">Anzahl (1–200)</span>
+          </label>
           <input
-            id="batchSizeInput"
+            id="epochsInput"
             type="number"
             min="1"
-            max="512"
+            max="200"
             step="1"
-            value="32"
-            (input)="batchSizeInput()"
+            value="1"
+            class="input input-bordered w-full"
+            (input)="epochsInput()"
           />
-          <label for="vizEveryInput" class="text-[0.68rem] text-muted">3D alle N Batches</label>
-          <input id="vizEveryInput" type="number" min="1" max="1000" step="1" value="4" />
         </div>
-      </details>
+        <p id="epochStepHint" class="text-base-content/60 text-xs" aria-live="polite"></p>
+        <div class="flex flex-wrap items-center gap-2 max-sm:flex-col">
+          <button
+            id="btnTrain"
+            type="button"
+            class="btn btn-primary min-w-[8rem] flex-1 sm:flex-none"
+            disabled
+            (click)="trainStart()"
+          >
+            Training starten
+          </button>
+          <button
+            id="btnPause"
+            type="button"
+            class="btn btn-outline flex-1 sm:flex-none"
+            disabled
+            (click)="pauseToggle()"
+          >
+            Anhalten
+          </button>
+        </div>
+        <details class="rounded-box border-base-300/60 bg-base-300/30 border" id="trainAdvanced">
+          <summary class="text-base-content/70 cursor-pointer px-3 py-2.5 text-sm">Erweitert</summary>
+          <div class="grid grid-cols-2 gap-x-3 gap-y-2 border-base-300/40 border-t px-3 pb-3 pt-2 text-sm">
+            <label for="lrInput" class="text-base-content/60 self-center text-xs">Lernrate</label>
+            <input id="lrInput" type="number" min="0.0001" max="1" step="0.0001" value="0.02" class="input input-bordered input-sm w-full" />
+            <label for="batchSizeInput" class="text-base-content/60 self-center text-xs">Batch</label>
+            <input
+              id="batchSizeInput"
+              type="number"
+              min="1"
+              max="512"
+              step="1"
+              value="32"
+              class="input input-bordered input-sm w-full"
+              (input)="batchSizeInput()"
+            />
+            <label for="vizEveryInput" class="text-base-content/60 self-center text-xs"
+              >3D alle N Batches</label
+            >
+            <input id="vizEveryInput" type="number" min="1" max="1000" step="1" value="4" class="input input-bordered input-sm w-full" />
+          </div>
+        </details>
+      </div>
     </article>
   `,
 })

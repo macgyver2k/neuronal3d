@@ -35,195 +35,223 @@ type EpochChartModel = {
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <article class="n3-panel n3-panel--epochs">
-      <div
-        class="n3-sidebartabs n3-epochtabs"
-        role="tablist"
-        aria-label="Epoch-Ansicht"
-      >
-        <button
-          type="button"
-          class="n3-sidebartab"
-          role="tab"
-          id="tab-epoch-list"
-          aria-controls="panel-epoch-list"
-          [attr.aria-selected]="epochTab() === 'list'"
-          [class.n3-sidebartab--active]="epochTab() === 'list'"
-          (click)="epochTab.set('list')"
-        >
-          Liste
-        </button>
-        <button
-          type="button"
-          class="n3-sidebartab"
-          role="tab"
-          id="tab-epoch-chart"
-          aria-controls="panel-epoch-chart"
-          [attr.aria-selected]="epochTab() === 'chart'"
-          [class.n3-sidebartab--active]="epochTab() === 'chart'"
-          (click)="epochTab.set('chart')"
-        >
-          Diagramm
-        </button>
-      </div>
-      <div class="n3-epochwrap">
-        <p class="n3-epochhead">Epochs ({{ view().epochsTotal }})</p>
-        @if (epochTab() === 'list') {
-          <div
-            id="panel-epoch-list"
-            role="tabpanel"
-            aria-labelledby="tab-epoch-list"
-            class="n3-epochtabpanel"
+    <article
+      class="card border-base-300 bg-base-200 rounded-box flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border shadow-xl"
+    >
+      <div class="card-body flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-4">
+        <div role="tablist" aria-label="Epoch-Ansicht" class="tabs tabs-boxed bg-base-300/30 p-1">
+          <button
+            type="button"
+            class="tab flex-1 text-xs"
+            role="tab"
+            id="tab-epoch-list"
+            aria-controls="panel-epoch-list"
+            [attr.aria-selected]="epochTab() === 'list'"
+            [class.tab-active]="epochTab() === 'list'"
+            (click)="epochTab.set('list')"
           >
-            <ul class="n3-epochlist">
-              @if (view().rows.length === 0) {
-                <li class="epochEmpty">Noch kein Training</li>
-              } @else {
-                @for (r of view().rows; track rowKey(r)) {
-                  <li class="epochRow">
-                    <span class="epochRun">R{{ runLabel(r.run) }}</span>
-                    <span class="epochNum">Ep {{ r.epoch + 1 }}</span>
-                    <span class="epochLoss">loss {{ r.loss.toFixed(4) }}</span>
-                    <span class="epochAcc"
-                      >{{ (r.trainAcc * 100).toFixed(2) }}%</span
-                    >
-                    <span class="epochMeta"
-                      >{{ timeLabel(r.savedAt) }} | Dauer
-                      {{ durationLabel(r.runElapsedMs) }}</span
-                    >
+            Liste
+          </button>
+          <button
+            type="button"
+            class="tab flex-1 text-xs"
+            role="tab"
+            id="tab-epoch-chart"
+            aria-controls="panel-epoch-chart"
+            [attr.aria-selected]="epochTab() === 'chart'"
+            [class.tab-active]="epochTab() === 'chart'"
+            (click)="epochTab.set('chart')"
+          >
+            Diagramm
+          </button>
+        </div>
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden pt-1">
+          <p class="text-success/90 m-0 text-[0.68rem] font-bold uppercase tracking-widest">
+            Epochs ({{ view().epochsTotal }})
+          </p>
+          @if (epochTab() === 'list') {
+            <div
+              id="panel-epoch-list"
+              role="tabpanel"
+              aria-labelledby="tab-epoch-list"
+              class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            >
+              <ul class="flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto overflow-x-hidden p-0">
+                @if (view().rows.length === 0) {
+                  <li
+                    class="text-base-content/60 rounded-btn border-base-300/60 border border-dashed p-3 text-xs"
+                  >
+                    Noch kein Training
                   </li>
+                } @else {
+                  @for (r of view().rows; track rowKey(r)) {
+                    <li
+                      class="border-base-300/80 bg-base-100/40 rounded-btn grid grid-cols-[3.2rem_4rem_1fr_auto] items-center gap-2 border p-2 font-mono text-[0.68rem] tabular-nums"
+                    >
+                      <span class="text-base-content/60">R{{ runLabel(r.run) }}</span>
+                      <span>Ep {{ r.epoch + 1 }}</span>
+                      <span>loss {{ r.loss.toFixed(4) }}</span>
+                      <span>{{ (r.trainAcc * 100).toFixed(2) }}%</span>
+                      <span
+                        class="text-base-content/60 border-base-300/40 col-span-4 border-t pt-1 text-[0.64rem]"
+                        >{{ timeLabel(r.savedAt) }} | Dauer
+                        {{ durationLabel(r.runElapsedMs) }}</span
+                      >
+                    </li>
+                  }
                 }
-              }
-            </ul>
-          </div>
-        } @else {
-          <div
-            id="panel-epoch-chart"
-            role="tabpanel"
-            aria-labelledby="tab-epoch-chart"
-            class="n3-epochtabpanel n3-epochchart"
-          >
-            @if (chartModel(); as cm) {
-              <svg
-                class="n3-epochchart-svg"
-                [attr.viewBox]="'0 0 ' + cm.vbW + ' ' + cm.vbH"
-                preserveAspectRatio="xMidYMid meet"
-              >
-                <defs>
-                  <clipPath id="n3-epoch-plot-clip">
-                    <rect
-                      [attr.x]="cm.marginLeft"
-                      [attr.y]="cm.marginTop"
-                      [attr.width]="cm.plotW"
-                      [attr.height]="cm.plotH"
+              </ul>
+            </div>
+          } @else {
+            <div
+              id="panel-epoch-chart"
+              role="tabpanel"
+              aria-labelledby="tab-epoch-chart"
+              class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden"
+            >
+              @if (chartModel(); as cm) {
+                <svg
+                  class="border-base-300/60 block max-h-[14rem] min-h-[6.5rem] w-full flex-1 rounded-lg border"
+                  [attr.viewBox]="'0 0 ' + cm.vbW + ' ' + cm.vbH"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <defs>
+                    <clipPath id="n3-epoch-plot-clip">
+                      <rect
+                        [attr.x]="cm.marginLeft"
+                        [attr.y]="cm.marginTop"
+                        [attr.width]="cm.plotW"
+                        [attr.height]="cm.plotH"
+                      />
+                    </clipPath>
+                  </defs>
+                  <rect
+                    x="0"
+                    y="0"
+                    [attr.width]="cm.vbW"
+                    [attr.height]="cm.vbH"
+                    class="fill-base-300/35"
+                  />
+                  @for (gy of cm.gridYs; track gy) {
+                    <line
+                      class="stroke-base-content/10"
+                      stroke-width="1"
+                      vector-effect="non-scaling-stroke"
+                      [attr.x1]="cm.marginLeft"
+                      [attr.y1]="gy"
+                      [attr.x2]="cm.marginLeft + cm.plotW"
+                      [attr.y2]="gy"
                     />
-                  </clipPath>
-                </defs>
-                <rect
-                  x="0"
-                  y="0"
-                  [attr.width]="cm.vbW"
-                  [attr.height]="cm.vbH"
-                  class="n3-epochchart-bg"
-                />
-                @for (gy of cm.gridYs; track gy) {
+                  }
                   <line
-                    class="n3-epochchart-grid"
+                    class="stroke-base-content/45"
+                    stroke-width="1"
+                    vector-effect="non-scaling-stroke"
                     [attr.x1]="cm.marginLeft"
-                    [attr.y1]="gy"
+                    [attr.y1]="cm.marginTop"
+                    [attr.x2]="cm.marginLeft"
+                    [attr.y2]="cm.marginTop + cm.plotH"
+                  />
+                  <line
+                    class="stroke-base-content/45"
+                    stroke-width="1"
+                    vector-effect="non-scaling-stroke"
+                    [attr.x1]="cm.marginLeft + cm.plotW"
+                    [attr.y1]="cm.marginTop"
                     [attr.x2]="cm.marginLeft + cm.plotW"
-                    [attr.y2]="gy"
+                    [attr.y2]="cm.marginTop + cm.plotH"
                   />
-                }
-                <line
-                  class="n3-epochchart-axis"
-                  [attr.x1]="cm.marginLeft"
-                  [attr.y1]="cm.marginTop"
-                  [attr.x2]="cm.marginLeft"
-                  [attr.y2]="cm.marginTop + cm.plotH"
-                />
-                <line
-                  class="n3-epochchart-axis"
-                  [attr.x1]="cm.marginLeft + cm.plotW"
-                  [attr.y1]="cm.marginTop"
-                  [attr.x2]="cm.marginLeft + cm.plotW"
-                  [attr.y2]="cm.marginTop + cm.plotH"
-                />
-                <line
-                  class="n3-epochchart-axis"
-                  [attr.x1]="cm.marginLeft"
-                  [attr.y1]="cm.marginTop + cm.plotH"
-                  [attr.x2]="cm.marginLeft + cm.plotW"
-                  [attr.y2]="cm.marginTop + cm.plotH"
-                />
-                <g clip-path="url(#n3-epoch-plot-clip)">
-                  <polyline
-                    class="n3-epochchart-line n3-epochchart-line--loss"
-                    [attr.points]="cm.pointsLoss"
-                    fill="none"
+                  <line
+                    class="stroke-base-content/45"
+                    stroke-width="1"
+                    vector-effect="non-scaling-stroke"
+                    [attr.x1]="cm.marginLeft"
+                    [attr.y1]="cm.marginTop + cm.plotH"
+                    [attr.x2]="cm.marginLeft + cm.plotW"
+                    [attr.y2]="cm.marginTop + cm.plotH"
                   />
-                  <polyline
-                    class="n3-epochchart-line n3-epochchart-line--acc"
-                    [attr.points]="cm.pointsAcc"
-                    fill="none"
-                  />
-                </g>
-                @for (t of cm.leftTicks; track t.pos + t.label) {
+                  <g clip-path="url(#n3-epoch-plot-clip)">
+                    <polyline
+                      class="stroke-primary"
+                      stroke-width="1.75"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      vector-effect="non-scaling-stroke"
+                      [attr.points]="cm.pointsLoss"
+                      fill="none"
+                    />
+                    <polyline
+                      class="stroke-info"
+                      stroke-width="1.75"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      vector-effect="non-scaling-stroke"
+                      [attr.points]="cm.pointsAcc"
+                      fill="none"
+                    />
+                  </g>
+                  @for (t of cm.leftTicks; track t.pos + t.label) {
+                    <text
+                      class="fill-base-content/65 text-[6.5px] font-medium tabular-nums"
+                      [attr.x]="cm.marginLeft - 4"
+                      [attr.y]="t.pos"
+                      text-anchor="end"
+                      dominant-baseline="middle"
+                    >
+                      {{ t.label }}
+                    </text>
+                  }
+                  @for (t of cm.rightTicks; track t.pos + t.label) {
+                    <text
+                      class="fill-base-content/65 text-[6.5px] font-medium tabular-nums"
+                      [attr.x]="cm.marginLeft + cm.plotW + 4"
+                      [attr.y]="t.pos"
+                      text-anchor="start"
+                      dominant-baseline="middle"
+                    >
+                      {{ t.label }}
+                    </text>
+                  }
+                  @for (t of cm.bottomTicks; track t.pos + t.label) {
+                    <text
+                      class="fill-base-content/65 text-[6.5px] font-medium"
+                      [attr.x]="t.pos"
+                      [attr.y]="cm.marginTop + cm.plotH + 14"
+                      text-anchor="middle"
+                      dominant-baseline="middle"
+                    >
+                      {{ t.label }}
+                    </text>
+                  }
                   <text
-                    class="n3-epochchart-ticklabel n3-epochchart-ticklabel--loss"
-                    [attr.x]="cm.marginLeft - 4"
-                    [attr.y]="t.pos"
-                    text-anchor="end"
-                    dominant-baseline="middle"
-                  >
-                    {{ t.label }}
-                  </text>
-                }
-                @for (t of cm.rightTicks; track t.pos + t.label) {
-                  <text
-                    class="n3-epochchart-ticklabel n3-epochchart-ticklabel--acc"
-                    [attr.x]="cm.marginLeft + cm.plotW + 4"
-                    [attr.y]="t.pos"
-                    text-anchor="start"
-                    dominant-baseline="middle"
-                  >
-                    {{ t.label }}
-                  </text>
-                }
-                @for (t of cm.bottomTicks; track t.pos + t.label) {
-                  <text
-                    class="n3-epochchart-ticklabel n3-epochchart-ticklabel--x"
-                    [attr.x]="t.pos"
-                    [attr.y]="cm.marginTop + cm.plotH + 14"
+                    class="fill-base-content/55 text-[6px] font-semibold uppercase tracking-wide"
+                    [attr.x]="cm.marginLeft + cm.plotW / 2"
+                    [attr.y]="cm.vbH - 2"
                     text-anchor="middle"
-                    dominant-baseline="middle"
+                    dominant-baseline="auto"
                   >
-                    {{ t.label }}
+                    Schritt
                   </text>
-                }
-                <text
-                  class="n3-epochchart-axis-title"
-                  [attr.x]="cm.marginLeft + cm.plotW / 2"
-                  [attr.y]="cm.vbH - 2"
-                  text-anchor="middle"
-                  dominant-baseline="auto"
+                </svg>
+                <div
+                  class="text-base-content/60 flex flex-wrap gap-x-4 gap-y-1 text-[0.65rem]"
+                  aria-hidden="true"
                 >
-                  Schritt
-                </text>
-              </svg>
-              <div class="n3-epochchart-legend" aria-hidden="true">
-                <span class="n3-epochchart-legend-item n3-epochchart-legend-item--loss"
-                  >Loss</span
-                >
-                <span class="n3-epochchart-legend-item n3-epochchart-legend-item--acc"
-                  >Train-Acc</span
-                >
-              </div>
-            } @else {
-              <p class="epochEmpty">Noch kein Training</p>
-            }
-          </div>
-        }
+                  <span class="inline-flex items-center gap-1.5 before:h-0.5 before:w-2.5 before:rounded-sm before:bg-primary before:content-['']"
+                    >Loss</span
+                  >
+                  <span class="inline-flex items-center gap-1.5 before:h-0.5 before:w-2.5 before:rounded-sm before:bg-info before:content-['']"
+                    >Train-Acc</span
+                  >
+                </div>
+              } @else {
+                <p class="text-base-content/60 rounded-btn border-base-300/60 border border-dashed p-3 text-xs">
+                  Noch kein Training
+                </p>
+              }
+            </div>
+          }
+        </div>
       </div>
     </article>
   `,

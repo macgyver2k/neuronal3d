@@ -188,7 +188,7 @@ function statusPlainToHtml(plain: string): string {
     .replace(/>/g, '&gt;');
   return esc.replace(
     /(\d+:\d+:\d+|\d+:\d+|(?:-)?\b\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?%?)/g,
-    '<span class="n3-status-val">$1</span>',
+    '<span class="badge badge-primary badge-sm mx-0.5 font-semibold tabular-nums">$1</span>',
   );
 }
 
@@ -491,7 +491,9 @@ function syncEpochPresetHighlight(): void {
     '.epochPresetBtn',
   )) {
     const v = Number.parseInt(btn.dataset['epochs'] ?? '', 10);
-    btn.classList.toggle('epochPresetBtn--active', presets.has(ep) && v === ep);
+    const active = presets.has(ep) && v === ep;
+    btn.classList.toggle('btn-primary', active);
+    btn.classList.toggle('btn-outline', !active);
   }
 }
 
