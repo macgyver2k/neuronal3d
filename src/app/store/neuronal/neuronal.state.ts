@@ -3,6 +3,13 @@ import type {
   PersistedEpochRow,
   StoredModelCollection,
 } from '../../core/model.types';
+import {
+  ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
+  HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
+  INPUT_LAYER_PIXELS_LAYOUT,
+  type HiddenLayerVizLayout,
+  type InputLayerVizLayout,
+} from '../../../viz/network3d';
 
 const emptyModelCollection = (): StoredModelCollection => ({
   version: 3,
@@ -10,11 +17,30 @@ const emptyModelCollection = (): StoredModelCollection => ({
   models: [],
 });
 
+export type Viz3dState = {
+  inputLayerLayout: InputLayerVizLayout;
+  inputLayerScale: number;
+  hiddenLayerLayouts: readonly [HiddenLayerVizLayout, HiddenLayerVizLayout];
+  hiddenLayerScales: readonly [number, number];
+  activeNeuronMaxScaleMul: number;
+};
+
+export function createInitialViz3dState(): Viz3dState {
+  return {
+    inputLayerLayout: INPUT_LAYER_PIXELS_LAYOUT,
+    inputLayerScale: HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
+    hiddenLayerLayouts: ['ring', 'ring'],
+    hiddenLayerScales: [HIDDEN_LAYER_VIZ_SCALE_DEFAULT, HIDDEN_LAYER_VIZ_SCALE_DEFAULT],
+    activeNeuronMaxScaleMul: ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
+  };
+}
+
 export type NeuronalState = {
   modelCollection: StoredModelCollection;
   modelStoreHydrated: boolean;
   epochByModelId: Record<string, PersistedEpochRow[]>;
   epochDisplayRows: PersistedEpochRow[];
+  viz3d: Viz3dState;
   training: {
     running: boolean;
     pause: boolean;
@@ -45,6 +71,7 @@ export function createInitialNeuronalState(): NeuronalState {
     modelStoreHydrated: false,
     epochByModelId,
     epochDisplayRows: initialEpochDisplay(epochByModelId, modelCollection),
+    viz3d: createInitialViz3dState(),
     training: {
       running: false,
       pause: false,

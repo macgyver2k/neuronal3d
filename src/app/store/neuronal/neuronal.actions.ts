@@ -43,5 +43,10 @@ export const NeuronalActions = createActionGroup({
     "Ui Draw Pointer Up": emptyProps(),
     "Ui Draw Pointer Cancel": emptyProps(),
     "Ui Draw Pointer Leave": emptyProps(),
+    "Viz Input Layer Layout Changed": props<{ raw: string }>(),
+    "Viz Input Layer Scale Changed": props<{ scale: number }>(),
+    "Viz Hidden Layer Layout Changed": props<{ index: 0 | 1; raw: string }>(),
+    "Viz Hidden Layer Scale Changed": props<{ index: 0 | 1; scale: number }>(),
+    "Viz Active Neuron Max Scale Mul Changed": props<{ mul: number }>(),
   },
 });

@@ -221,6 +221,61 @@ export class NeuronalEffects {
     { dispatch: false },
   );
 
+  vizInputLayerLayout$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizInputLayerLayoutChanged),
+        tap(({ raw }) => {
+          this.neuronalApp.onInputLayerLayoutChange(raw);
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizInputLayerScale$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizInputLayerScaleChanged),
+        tap(({ scale }) => {
+          this.neuronalApp.onInputLayerLayoutScaleChange(scale);
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizHiddenLayerLayout$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizHiddenLayerLayoutChanged),
+        tap(({ index, raw }) => {
+          this.neuronalApp.onHiddenLayerLayoutChange(index, raw);
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizHiddenLayerScale$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizHiddenLayerScaleChanged),
+        tap(({ index, scale }) => {
+          this.neuronalApp.onHiddenLayerLayoutScaleChange(index, scale);
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizActiveNeuronMaxScaleMul$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizActiveNeuronMaxScaleMulChanged),
+        tap(({ mul }) => {
+          this.neuronalApp.onActiveNeuronMaxScaleMulChange(mul);
+        }),
+      ),
+    { dispatch: false },
+  );
+
   uiExportBundle$ = createEffect(
     () =>
       this.actions$.pipe(

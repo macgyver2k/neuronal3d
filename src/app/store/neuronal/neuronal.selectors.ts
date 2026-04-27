@@ -34,6 +34,7 @@ export {
 } from "./selectors/neuronal-training.selectors";
 export type { InferPanelModel } from "./selectors/neuronal-ui.selectors";
 export { selectInferPanelModel } from "./selectors/neuronal-ui.selectors";
+export { model } from "./selectors/neuronal-viz.selectors";
 import { selectNeuronal } from "./selectors/neuronal-root.selectors";
 
 export const selectNeuronalState = createSelector(

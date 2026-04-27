@@ -1,8 +1,28 @@
 import { createReducer, on } from "@ngrx/store";
 import { EPOCH_TRACK_MAX_ROWS_PER_MODEL } from "../../core/epoch-storage";
 import type { PersistedEpochRow, StoredModelEntry } from "../../core/model.types";
+import {
+  clampActiveNeuronMaxScaleMul,
+  clampHiddenLayerVizScale,
+  HIDDEN_LAYER_VIZ_LAYOUTS,
+  INPUT_LAYER_VIZ_LAYOUTS,
+  type HiddenLayerVizLayout,
+  type InputLayerVizLayout,
+} from "../../../viz/network3d";
 import { NeuronalActions } from "./neuronal.actions";
 import { createInitialNeuronalState, initialEpochDisplay, type NeuronalState } from "./neuronal.state";
+
+function parseInputLayerVizLayout(raw: string): InputLayerVizLayout | null {
+  return (INPUT_LAYER_VIZ_LAYOUTS as readonly string[]).includes(raw)
+    ? (raw as InputLayerVizLayout)
+    : null;
+}
+
+function parseHiddenLayerVizLayout(raw: string): HiddenLayerVizLayout | null {
+  return (HIDDEN_LAYER_VIZ_LAYOUTS as readonly string[]).includes(raw)
+    ? (raw as HiddenLayerVizLayout)
+    : null;
+}
 
 function appendEpoch(
   by: Record<string, PersistedEpochRow[]>,
@@ -138,4 +158,55 @@ export const neuronalReducer = createReducer<NeuronalState>(
     lastTrainLoss: 0,
     lastTrainBatchAcc: 0,
   })),
+  on(NeuronalActions.vizInputLayerLayoutChanged, (s, { raw }): NeuronalState => {
+    const layout = parseInputLayerVizLayout(raw);
+    if (!layout) return s;
+    return {
+      ...s,
+      viz3d: { ...s.viz3d, inputLayerLayout: layout },
+    };
+  }),
+  on(NeuronalActions.vizInputLayerScaleChanged, (s, { scale }): NeuronalState => {
+    if (!Number.isFinite(scale)) return s;
+    return {
+      ...s,
+      viz3d: {
+        ...s.viz3d,
+        inputLayerScale: clampHiddenLayerVizScale(scale),
+      },
+    };
+  }),
+  on(NeuronalActions.vizHiddenLayerLayoutChanged, (s, { index, raw }): NeuronalState => {
+    const layout = parseHiddenLayerVizLayout(raw);
+    if (!layout) return s;
+    const nextLayouts: [HiddenLayerVizLayout, HiddenLayerVizLayout] = [
+      s.viz3d.hiddenLayerLayouts[0],
+      s.viz3d.hiddenLayerLayouts[1],
+    ];
+    nextLayouts[index] = layout;
+    return {
+      ...s,
+      viz3d: { ...s.viz3d, hiddenLayerLayouts: nextLayouts },
+    };
+  }),
+  on(NeuronalActions.vizHiddenLayerScaleChanged, (s, { index, scale }): NeuronalState => {
+    if (!Number.isFinite(scale)) return s;
+    const clamped = clampHiddenLayerVizScale(scale);
+    const nextScales: [number, number] = [s.viz3d.hiddenLayerScales[0], s.viz3d.hiddenLayerScales[1]];
+    nextScales[index] = clamped;
+    return {
+      ...s,
+      viz3d: { ...s.viz3d, hiddenLayerScales: nextScales },
+    };
+  }),
+  on(NeuronalActions.vizActiveNeuronMaxScaleMulChanged, (s, { mul }): NeuronalState => {
+    if (!Number.isFinite(mul)) return s;
+    return {
+      ...s,
+      viz3d: {
+        ...s.viz3d,
+        activeNeuronMaxScaleMul: clampActiveNeuronMaxScaleMul(mul),
+      },
+    };
+  }),
 );

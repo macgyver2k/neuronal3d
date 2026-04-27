@@ -3,22 +3,21 @@ import {
   ChangeDetectionStrategy,
   Component,
   inject,
-  signal,
 } from "@angular/core";
-import { NeuronalAppService } from "../core/neuronal-app.service";
+import { toSignal } from "@angular/core/rxjs-interop";
+import { Store } from "@ngrx/store";
 import { VizSettingsBlockComponent } from "./viz-settings-block.component";
 import {
-  ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
   ACTIVE_NEURON_MAX_SCALE_MUL_MAX,
   ACTIVE_NEURON_MAX_SCALE_MUL_MIN,
   ACTIVE_NEURON_MAX_SCALE_MUL_STEP,
-  HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
   HIDDEN_LAYER_VIZ_SCALE_MAX,
   HIDDEN_LAYER_VIZ_SCALE_MIN,
   HIDDEN_LAYER_VIZ_SCALE_STEP,
-  INPUT_LAYER_PIXELS_LAYOUT,
-  type InputLayerVizLayout,
 } from "../../viz/network3d";
+import type { AppState } from "../store/app.state";
+import { NeuronalActions } from "../store/neuronal/neuronal.actions";
+import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
 
 @Component({
   selector: "app-network-viz3d-shell",
@@ -42,7 +41,7 @@ import {
             <select
               id="inputLayerVizLayout"
               class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
-              [value]="inputLayout()"
+              [value]="model().inputLayerLayout"
               (change)="onInputLayout($event)"
             >
               <option value="pixels">28×28 Pixel</option>
@@ -66,12 +65,12 @@ import {
                 [min]="scaleMin"
                 [max]="scaleMax"
                 [step]="scaleStep"
-                [value]="inputScale()"
+                [value]="model().inputLayerScale"
                 (input)="onInputScale($event)"
                 class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
               />
               <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-                >{{ inputScale() | number : "1.0-2" }}</span
+                >{{ model().inputLayerScale | number : "1.0-2" }}</span
               >
             </div>
           </div>
@@ -86,9 +85,10 @@ import {
             <select
               id="hiddenLayerVizLayout0"
               class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
+              [value]="model().hiddenLayerLayouts[0]"
               (change)="onHiddenLayout(0, $event)"
             >
-              <option value="ring" selected>Ring</option>
+              <option value="ring">Ring</option>
               <option value="grid">Raster</option>
               <option value="line">Linie</option>
               <option value="arc">Bogen, Richtung 1</option>
@@ -108,12 +108,12 @@ import {
                 [min]="scaleMin"
                 [max]="scaleMax"
                 [step]="scaleStep"
-                [value]="scale0()"
+                [value]="model().hiddenLayerScales[0]"
                 (input)="onScale(0, $event)"
                 class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
               />
               <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-                >{{ scale0() | number : "1.0-2" }}</span
+                >{{ model().hiddenLayerScales[0] | number : "1.0-2" }}</span
               >
             </div>
           </div>
@@ -128,9 +128,10 @@ import {
             <select
               id="hiddenLayerVizLayout1"
               class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground shadow-sm outline-none ring-primary/25 focus-visible:ring-2"
+              [value]="model().hiddenLayerLayouts[1]"
               (change)="onHiddenLayout(1, $event)"
             >
-              <option value="ring" selected>Ring</option>
+              <option value="ring">Ring</option>
               <option value="grid">Raster</option>
               <option value="line">Linie</option>
               <option value="arc">Bogen, Richtung 1</option>
@@ -150,12 +151,12 @@ import {
                 [min]="scaleMin"
                 [max]="scaleMax"
                 [step]="scaleStep"
-                [value]="scale1()"
+                [value]="model().hiddenLayerScales[1]"
                 (input)="onScale(1, $event)"
                 class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
               />
               <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-                >{{ scale1() | number : "1.0-2" }}</span
+                >{{ model().hiddenLayerScales[1] | number : "1.0-2" }}</span
               >
             </div>
           </div>
@@ -174,12 +175,12 @@ import {
                 [min]="neuronMulMin"
                 [max]="neuronMulMax"
                 [step]="neuronMulStep"
-                [value]="activeNeuronMaxMul()"
+                [value]="model().activeNeuronMaxScaleMul"
                 (input)="onActiveNeuronMaxMul($event)"
                 class="h-2 min-w-0 flex-1 cursor-pointer accent-primary"
               />
               <span class="w-8 shrink-0 text-right text-[0.65rem] tabular-nums text-muted"
-                >{{ activeNeuronMaxMul() | number : "1.0-2" }}</span
+                >{{ model().activeNeuronMaxScaleMul | number : "1.0-2" }}</span
               >
             </div>
           </div>
@@ -191,25 +192,19 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NetworkViz3dShellComponent {
-  private readonly app = inject(NeuronalAppService);
+  private readonly store = inject(Store<AppState>);
   protected readonly scaleMin = HIDDEN_LAYER_VIZ_SCALE_MIN;
   protected readonly scaleMax = HIDDEN_LAYER_VIZ_SCALE_MAX;
   protected readonly scaleStep = HIDDEN_LAYER_VIZ_SCALE_STEP;
-  readonly inputLayout = signal<InputLayerVizLayout>(INPUT_LAYER_PIXELS_LAYOUT);
-  readonly inputScale = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
-  readonly scale0 = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
-  readonly scale1 = signal(HIDDEN_LAYER_VIZ_SCALE_DEFAULT);
+  readonly model = toSignal(this.store.select(selectVizModel), { requireSync: true });
   protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
   protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
   protected readonly neuronMulStep = ACTIVE_NEURON_MAX_SCALE_MUL_STEP;
-  readonly activeNeuronMaxMul = signal(ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT);
 
   onInputLayout(ev: Event): void {
     const t = ev.target;
     if (!(t instanceof HTMLSelectElement)) return;
-    const v = t.value as InputLayerVizLayout;
-    this.inputLayout.set(v);
-    this.app.onInputLayerLayoutChange(t.value);
+    this.store.dispatch(NeuronalActions.vizInputLayerLayoutChanged({ raw: t.value }));
   }
 
   onInputScale(ev: Event): void {
@@ -217,14 +212,13 @@ export class NetworkViz3dShellComponent {
     if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
     const v = parseFloat(t.value);
     if (!Number.isFinite(v)) return;
-    this.inputScale.set(v);
-    this.app.onInputLayerLayoutScaleChange(v);
+    this.store.dispatch(NeuronalActions.vizInputLayerScaleChanged({ scale: v }));
   }
 
   onHiddenLayout(index: 0 | 1, ev: Event): void {
     const t = ev.target;
     if (!(t instanceof HTMLSelectElement)) return;
-    this.app.onHiddenLayerLayoutChange(index, t.value);
+    this.store.dispatch(NeuronalActions.vizHiddenLayerLayoutChanged({ index, raw: t.value }));
   }
 
   onScale(index: 0 | 1, ev: Event): void {
@@ -232,9 +226,7 @@ export class NetworkViz3dShellComponent {
     if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
     const v = parseFloat(t.value);
     if (!Number.isFinite(v)) return;
-    if (index === 0) this.scale0.set(v);
-    else this.scale1.set(v);
-    this.app.onHiddenLayerLayoutScaleChange(index, v);
+    this.store.dispatch(NeuronalActions.vizHiddenLayerScaleChanged({ index, scale: v }));
   }
 
   onActiveNeuronMaxMul(ev: Event): void {
@@ -242,7 +234,6 @@ export class NetworkViz3dShellComponent {
     if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
     const v = parseFloat(t.value);
     if (!Number.isFinite(v)) return;
-    this.activeNeuronMaxMul.set(v);
-    this.app.onActiveNeuronMaxScaleMulChange(v);
+    this.store.dispatch(NeuronalActions.vizActiveNeuronMaxScaleMulChanged({ mul: v }));
   }
 }
