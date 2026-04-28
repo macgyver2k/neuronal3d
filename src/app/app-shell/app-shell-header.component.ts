@@ -8,13 +8,8 @@ import { NeuronalModelBarComponent } from "../workspace-ui/neuronal-model-bar.co
 import { ThemeSwitcherComponent } from "../workspace-ui/theme-switcher.component";
 import { WorkspaceBrandComponent } from "../workspace-ui/workspace-brand.component";
 import { WorkspaceStatusComponent } from "../workspace-ui/workspace-status.component";
+import { routerUrlIsModelWorkspace } from "../core/router-model-url";
 import { selectShellHeaderActiveModel } from "../store/neuronal/neuronal.selectors";
-
-function urlIsModelWorkspace(url: string): boolean {
-  const path = url.split("?")[0].split("#")[0];
-  const segs = path.split("/").filter(Boolean);
-  return segs[0] === "model" && segs.length >= 2;
-}
 
 @Component({
   selector: "app-shell-header",
@@ -78,8 +73,8 @@ export class AppShellHeaderComponent {
     this.router.events.pipe(
       filter((e) => e instanceof NavigationEnd),
       startWith(null),
-      map(() => urlIsModelWorkspace(this.router.url)),
+      map(() => routerUrlIsModelWorkspace(this.router.url)),
     ),
-    { initialValue: urlIsModelWorkspace(this.router.url) },
+    { initialValue: routerUrlIsModelWorkspace(this.router.url) },
   );
 }

@@ -87,9 +87,11 @@ const canvasLineWidthErase = 32;
 
 function bindFromHost(root: HTMLElement): ElRefs {
   const m = <T extends HTMLElement>(id: string) => {
-    const e = (
-      root.id === id ? root : root.querySelector(`#${CSS.escape(id)}`)
-    ) as T | null;
+    let e: T | null =
+      root.id === id
+        ? (root as T)
+        : (root.querySelector(`#${CSS.escape(id)}`) as T | null);
+    if (!e) e = document.getElementById(id) as T | null;
     if (!e) throw new Error(`#${id}`);
     return e;
   };
@@ -126,6 +128,14 @@ function bindFromHost(root: HTMLElement): ElRefs {
 let trainData: MnistSample[] = [];
 let testData: MnistSample[] = [];
 let appStore!: Store<AppState>;
+
+export type ReconcileWorkspaceUrlForModelSelection = (
+  selectedModelId: string,
+) => string | null;
+
+let reconcileWorkspaceUrlForModelSelection:
+  | ReconcileWorkspaceUrlForModelSelection
+  | undefined;
 let nLatest!: NeuronalState;
 let net: MLP | null = null;
 let net3d: Network3D | null = null;
@@ -534,7 +544,14 @@ function loadSelectedModelIntoNet(id: string): boolean {
     return false;
   net = applyStoredModelToNet(entry.model);
   lastInferActsDebug = null;
-  appStore.dispatch(NeuronalActions.activeModelIdSet({ id: entry.id }));
+  const routeSegment =
+    reconcileWorkspaceUrlForModelSelection?.(entry.id) ?? null;
+  appStore.dispatch(
+    NeuronalActions.activeModelIdSet({
+      id: entry.id,
+      routeModelSegmentFromUrl: routeSegment,
+    }),
+  );
   publishVizState('idle', zeroActivationsForLayout());
   return true;
 }
@@ -826,8 +843,10 @@ export function createNeuronalAppRuntime(
   store: Store<AppState>,
   host: HTMLElement,
   appInstance: NeuronalAppInstance,
+  reconcileWorkspaceUrl?: ReconcileWorkspaceUrlForModelSelection,
 ): NeuronalAppRuntime {
   appStore = store;
+  reconcileWorkspaceUrlForModelSelection = reconcileWorkspaceUrl;
   el = bindFromHost(host);
   const unSubN = appStore
     .select(selectNeuronalState)
@@ -1238,6 +1257,7 @@ export function createNeuronalAppRuntime(
       net3d = null;
       stopAnimCleanup = null;
       disposeSceneBound = null;
+      reconcileWorkspaceUrlForModelSelection = undefined;
       renderSceneBound = () => {};
       renderDisplayBound = () => {};
     },

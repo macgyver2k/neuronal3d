@@ -1,17 +1,35 @@
 import { inject, Injectable } from "@angular/core";
+import { Router } from "@angular/router";
+import { Actions, createEffect, ofType } from "@ngrx/effects";
 import { Store } from "@ngrx/store";
-import { filter, firstValueFrom, take } from "rxjs";
+import { filter, firstValueFrom, take, withLatestFrom } from "rxjs";
 import { createNeuronalAppRuntime, type NeuronalAppRuntime } from "../../neuronal-app";
+import { routerUrlModelIdFromPath } from "./router-model-url";
 import { NeuronalAppInstance } from "./neuronal-app-instance";
 import type { AppState } from "../store/app.state";
 import { NeuronalActions } from "../store/neuronal/neuronal.actions";
-import { selectModelStoreHydrated } from "../store/neuronal/neuronal.selectors";
+import { selectModelStoreHydrated, selectTrainingRunning } from "../store/neuronal/neuronal.selectors";
 
 @Injectable({ providedIn: "root" })
 export class NeuronalAppService {
   readonly store = inject(Store<AppState>);
+  private readonly router = inject(Router);
+  private readonly appInstance = inject(NeuronalAppInstance);
+  private readonly actions$ = inject(Actions);
   private runtime: NeuronalAppRuntime | null = null;
   private hydrateOnce: Promise<void> | null = null;
+
+  constructor() {
+    this.actions$
+      .pipe(
+        ofType(NeuronalActions.activeModelIdFromRouteSet),
+        withLatestFrom(this.store.select(selectTrainingRunning)),
+        filter(([, running]) => !running),
+      )
+      .subscribe(([{ id }]) => {
+        this.appInstance.activeModelFromToolbar(id);
+      });
+  }
 
   async ensureStoreHydrated(): Promise<void> {
     if (!this.hydrateOnce) {
@@ -28,7 +46,20 @@ export class NeuronalAppService {
   async bindRuntime(root: HTMLElement, appInstance: NeuronalAppInstance): Promise<() => void> {
     await this.ensureStoreHydrated();
     this.runtime?.destroy();
-    const next = createNeuronalAppRuntime(this.store, root, appInstance);
+    const next = createNeuronalAppRuntime(
+      this.store,
+      root,
+      appInstance,
+      (selectedModelId) => {
+        const before = routerUrlModelIdFromPath(this.router.url);
+        if (before != null && before !== selectedModelId) {
+          void this.router.navigate(["/model", selectedModelId], {
+            replaceUrl: true,
+          });
+        }
+        return before;
+      },
+    );
     this.runtime = next;
     return () => {
       if (this.runtime === next) {

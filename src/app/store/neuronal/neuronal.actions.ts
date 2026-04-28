@@ -13,9 +13,11 @@ export const NeuronalActions = createActionGroup({
     'Epoch Store Hydrated': props<{
       byModelId: Record<string, PersistedEpochRow[]>;
     }>(),
-    'Model Route Param Received': props<{ segment: string }>(),
     'Active Model Id From Route Set': props<{ id: string }>(),
-    'Active Model Id Set': props<{ id: string }>(),
+    'Active Model Id Set': props<{
+      id: string;
+      routeModelSegmentFromUrl: string | null;
+    }>(),
     'Model Entry Upserted': props<{ entry: StoredModelEntry }>(),
     'Epoch View Sync From Model': props<{ modelId: string }>(),
     'Epoch History Cleared': props<{ modelId: string }>(),

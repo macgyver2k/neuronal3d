@@ -14,6 +14,7 @@ import { Store } from '@ngrx/store';
 import { NeuronalAppInstance } from '../core/neuronal-app-instance';
 import { NeuronalAppService } from '../core/neuronal-app.service';
 import type { AppState } from '../store/app.state';
+import { routerUrlIsModelWorkspace } from '../core/router-model-url';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
 import { EpochTrackListComponent } from '../workspace-ui/epoch-track-list.component';
 import { InferPanelComponent } from '../workspace-ui/infer-panel.component';
@@ -127,9 +128,7 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
   }
 
   private modelWorkspacePathMatches(): boolean {
-    const path = this.router.url.split('?')[0].split('#')[0];
-    const segs = path.split('/').filter(Boolean);
-    return segs[0] === 'model' && segs.length >= 2;
+    return routerUrlIsModelWorkspace(this.router.url);
   }
 
   private async waitForModelWorkspaceRouterPath(gen: number): Promise<void> {
