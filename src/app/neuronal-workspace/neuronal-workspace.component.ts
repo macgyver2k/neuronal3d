@@ -8,7 +8,8 @@ import {
   signal,
   ViewChild,
 } from '@angular/core';
-import { NavigationEnd, Router } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, firstValueFrom, take } from 'rxjs';
 import { Store } from '@ngrx/store';
 import { NeuronalAppInstance } from '../core/neuronal-app-instance';
@@ -16,15 +17,23 @@ import { NeuronalAppService } from '../core/neuronal-app.service';
 import type { AppState } from '../store/app.state';
 import { routerUrlIsModelWorkspace } from '../core/router-model-url';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
+import { selectShellHeaderActiveModel } from '../store/neuronal/neuronal.selectors';
 import { EpochTrackListComponent } from '../workspace-ui/epoch-track-list.component';
 import { InferPanelComponent } from '../workspace-ui/infer-panel.component';
+import { NeuronalModelBarComponent } from '../workspace-ui/neuronal-model-bar.component';
 import { NetworkViz3dShellComponent } from '../workspace-ui/network-viz3d-shell.component';
 import { TrainingPanelComponent } from '../workspace-ui/training-panel.component';
+import { WorkspaceBrandComponent } from '../workspace-ui/workspace-brand.component';
+import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.component';
 
 @Component({
   selector: 'app-neuronal-workspace',
   standalone: true,
   imports: [
+    RouterLink,
+    WorkspaceBrandComponent,
+    NeuronalModelBarComponent,
+    WorkspaceStatusComponent,
     NetworkViz3dShellComponent,
     TrainingPanelComponent,
     EpochTrackListComponent,
@@ -37,6 +46,32 @@ import { TrainingPanelComponent } from '../workspace-ui/training-panel.component
       id="app"
       class="bg-base-100 text-base-content flex min-h-0 flex-1 flex-col"
     >
+      <div
+        role="region"
+        aria-label="Modell-Arbeitsbereich"
+        class="border-base-300/60 bg-base-100 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:px-4 sm:py-3"
+      >
+        <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <a
+            routerLink="/"
+            class="link link-hover shrink-0 self-center text-sm font-medium"
+            >Modelle</a
+          >
+          @if (headerModel(); as hm) {
+            <app-workspace-brand
+              class="min-w-0 shrink-0 max-sm:basis-full"
+              [title]="hm.title"
+              [subtitle]="hm.subtitle"
+            />
+          } @else {
+            <app-workspace-brand class="min-w-0" />
+          }
+        </div>
+        <div class="flex flex-col gap-2">
+          <app-neuronal-model-bar />
+          <app-workspace-status />
+        </div>
+      </div>
       <div
         class="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]"
       >
@@ -117,6 +152,9 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
   @ViewChild('appRoot', { read: ElementRef }) appRoot!: ElementRef<HTMLElement>;
   readonly sidebarTab = signal<'train' | 'infer'>('train');
   private readonly store = inject(Store<AppState>);
+  readonly headerModel = toSignal(this.store.select(selectShellHeaderActiveModel), {
+    initialValue: null,
+  });
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly appInstance = inject(NeuronalAppInstance);
   private readonly router = inject(Router);
