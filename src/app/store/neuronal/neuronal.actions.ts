@@ -65,5 +65,6 @@ export const NeuronalActions = createActionGroup({
     'Viz Hidden Layer Layout Changed': props<{ index: 0 | 1; raw: string }>(),
     'Viz Hidden Layer Scale Changed': props<{ index: 0 | 1; scale: number }>(),
     'Viz Active Neuron Max Scale Mul Changed': props<{ mul: number }>(),
+    'Ui Viz Immersive Toggled': emptyProps(),
   },
 });

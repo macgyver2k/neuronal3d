@@ -1,7 +1,3 @@
-import type {
-  PersistedEpochRow,
-  StoredModelCollection,
-} from '../../core/model.types';
 import {
   ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
   HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
@@ -9,6 +5,10 @@ import {
   type HiddenLayerVizLayout,
   type InputLayerVizLayout,
 } from '../../../viz/network3d';
+import type {
+  PersistedEpochRow,
+  StoredModelCollection,
+} from '../../core/model.types';
 
 const emptyModelCollection = (): StoredModelCollection => ({
   version: 3,
@@ -29,7 +29,10 @@ export function createInitialViz3dState(): Viz3dState {
     inputLayerLayout: INPUT_LAYER_PIXELS_LAYOUT,
     inputLayerScale: HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
     hiddenLayerLayouts: ['ring', 'ring'],
-    hiddenLayerScales: [HIDDEN_LAYER_VIZ_SCALE_DEFAULT, HIDDEN_LAYER_VIZ_SCALE_DEFAULT],
+    hiddenLayerScales: [
+      HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
+      HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
+    ],
     activeNeuronMaxScaleMul: ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
   };
 }
@@ -51,6 +54,8 @@ export type NeuronalState = {
   lastTrainLoss: number;
   lastTrainBatchAcc: number;
   modelDropdownOpen: boolean;
+  /** Nur 3D-Canvas: linke Viz-Einstellungen, rechte Seitenleiste und Kopfzeile ausgeblendet. */
+  vizImmersiveUi: boolean;
 };
 
 export function initialEpochDisplay(
@@ -82,5 +87,6 @@ export function createInitialNeuronalState(): NeuronalState {
     lastTrainLoss: 0,
     lastTrainBatchAcc: 0,
     modelDropdownOpen: false,
+    vizImmersiveUi: false,
   };
 }

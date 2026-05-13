@@ -21,9 +21,18 @@ export function createScene(container: HTMLElement): {
   scene.background = new THREE.Color(0x2a3140);
   scene.fog = new THREE.Fog(0x2a3140, 12, 40);
 
+  const drawableSize = (): { w: number; h: number } => {
+    const w = Math.max(1, Math.floor(container.clientWidth));
+    const h = Math.max(1, Math.floor(container.clientHeight));
+    return { w, h };
+  };
+
   const camera = new THREE.PerspectiveCamera(
     55,
-    Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight),
+    (() => {
+      const { w, h } = drawableSize();
+      return w / h;
+    })(),
     0.1,
     200,
   );
@@ -31,7 +40,10 @@ export function createScene(container: HTMLElement): {
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(container.clientWidth, container.clientHeight);
+  {
+    const { w, h } = drawableSize();
+    renderer.setSize(w, h);
+  }
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.35;
@@ -202,11 +214,9 @@ export function createScene(container: HTMLElement): {
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  const bloomInit = drawableSize();
   const bloom = new UnrealBloomPass(
-    new THREE.Vector2(
-      Math.max(1, container.clientWidth),
-      Math.max(1, container.clientHeight),
-    ),
+    new THREE.Vector2(bloomInit.w, bloomInit.h),
     0.55,
     0.45,
     0.22,
@@ -215,8 +225,7 @@ export function createScene(container: HTMLElement): {
   const fxaaPass = new ShaderPass(FXAAShader);
   const outputPass = new OutputPass();
   const updateFxaaResolution = () => {
-    const w = Math.max(1, container.clientWidth);
-    const h = Math.max(1, container.clientHeight);
+    const { w, h } = drawableSize();
     const pr = renderer.getPixelRatio();
     fxaaPass.material.uniforms['resolution'].value.set(
       1 / (w * pr),
@@ -230,9 +239,8 @@ export function createScene(container: HTMLElement): {
   container.appendChild(renderer.domElement);
 
   const onResize = () => {
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    camera.aspect = w / Math.max(1, h);
+    const { w, h } = drawableSize();
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     composer.setSize(w, h);
@@ -240,7 +248,31 @@ export function createScene(container: HTMLElement): {
   };
   window.addEventListener('resize', onResize);
 
+  let containerResizeRaf = 0;
+  const scheduleResizeFromContainer = () => {
+    if (containerResizeRaf !== 0) {
+      cancelAnimationFrame(containerResizeRaf);
+    }
+    containerResizeRaf = requestAnimationFrame(() => {
+      containerResizeRaf = 0;
+      onResize();
+    });
+  };
+
+  const resizeObserver =
+    typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => {
+          scheduleResizeFromContainer();
+        })
+      : null;
+  resizeObserver?.observe(container);
+
   const dispose = () => {
+    if (containerResizeRaf !== 0) {
+      cancelAnimationFrame(containerResizeRaf);
+      containerResizeRaf = 0;
+    }
+    resizeObserver?.disconnect();
     window.removeEventListener('resize', onResize);
     window.removeEventListener('keydown', onKeyNavDown);
     window.removeEventListener('keyup', onKeyNavUp);

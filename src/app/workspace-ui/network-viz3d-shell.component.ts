@@ -18,7 +18,10 @@ import {
 import { NeuronalAppService } from '../core/neuronal-app.service';
 import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
-import { model as selectVizModel } from '../store/neuronal/neuronal.selectors';
+import {
+  selectVizImmersiveUi,
+  model as selectVizModel,
+} from '../store/neuronal/neuronal.selectors';
 import { VizSettingsBlockComponent } from './viz-settings-block.component';
 
 @Component({
@@ -26,175 +29,175 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
   standalone: true,
   imports: [DecimalPipe, VizSettingsBlockComponent],
   host: {
-    class: 'block h-full min-h-0 min-w-0',
+    class: 'flex min-h-0 min-w-0 flex-1 flex-col',
   },
   template: `
-    <div
-      class="relative flex h-full min-h-0 w-full min-w-0 flex-row bg-base-300/25"
-    >
-      <aside
-        class="flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-base-300 bg-base-200/90 px-3 py-3 text-base-content shadow-md backdrop-blur-md"
-        aria-label="3D-Netz Darstellung"
-      >
-        <app-viz-settings-block heading="Eingabelayer">
-          <div class="min-w-0">
-            <label
-              for="inputLayerVizLayout"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
-              >Darstellung</label
-            >
-            <select
-              id="inputLayerVizLayout"
-              class="select select-bordered select-sm w-full"
-              [value]="model().inputLayerLayout"
-              (change)="onInputLayout($event)"
-            >
-              <option value="pixels">28×28 Pixel</option>
-              <option value="ring">Ring</option>
-              <option value="grid">Raster</option>
-              <option value="line">Linie</option>
-              <option value="arc">Bogen, Richtung 1</option>
-              <option value="arcAlt">Bogen, Richtung 2</option>
-            </select>
-          </div>
-          <div class="min-w-0">
-            <label
-              for="inputLayerVizScale"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
-              >Skala</label
-            >
-            <div class="flex min-w-0 items-center gap-2">
-              <input
-                id="inputLayerVizScale"
-                type="range"
-                [min]="scaleMin"
-                [max]="scaleMax"
-                [step]="scaleStep"
-                [value]="model().inputLayerScale"
-                (input)="onInputScale($event)"
-                class="range range-primary flex-1 min-w-0"
-              />
-              <span
-                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().inputLayerScale | number: '1.0-2' }}</span
+    <div class="relative flex min-h-0 min-w-0 flex-1 flex-row bg-base-300/25">
+      @if (!immersive()) {
+        <aside
+          class="flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-base-300 bg-base-200/90 px-3 py-3 text-base-content shadow-md backdrop-blur-md"
+          aria-label="3D-Netz Darstellung"
+        >
+          <app-viz-settings-block heading="Eingabelayer">
+            <div class="min-w-0">
+              <label
+                for="inputLayerVizLayout"
+                class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                >Darstellung</label
               >
-            </div>
-          </div>
-        </app-viz-settings-block>
-        <app-viz-settings-block heading="Zwischenlage 1">
-          <div class="min-w-0">
-            <label
-              for="hiddenLayerVizLayout0"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
-              >Darstellung</label
-            >
-            <select
-              id="hiddenLayerVizLayout0"
-              class="select select-bordered select-sm w-full"
-              [value]="model().hiddenLayerLayouts[0]"
-              (change)="onHiddenLayout(0, $event)"
-            >
-              <option value="ring">Ring</option>
-              <option value="grid">Raster</option>
-              <option value="line">Linie</option>
-              <option value="arc">Bogen, Richtung 1</option>
-              <option value="arcAlt">Bogen, Richtung 2</option>
-            </select>
-          </div>
-          <div class="min-w-0">
-            <label
-              for="hiddenLayerVizScale0"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
-              >Skala</label
-            >
-            <div class="flex min-w-0 items-center gap-2">
-              <input
-                id="hiddenLayerVizScale0"
-                type="range"
-                [min]="scaleMin"
-                [max]="scaleMax"
-                [step]="scaleStep"
-                [value]="model().hiddenLayerScales[0]"
-                (input)="onScale(0, $event)"
-                class="range range-primary flex-1 min-w-0"
-              />
-              <span
-                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().hiddenLayerScales[0] | number: '1.0-2' }}</span
+              <select
+                id="inputLayerVizLayout"
+                class="select select-bordered select-sm w-full"
+                [value]="model().inputLayerLayout"
+                (change)="onInputLayout($event)"
               >
+                <option value="pixels">28×28 Pixel</option>
+                <option value="ring">Ring</option>
+                <option value="grid">Raster</option>
+                <option value="line">Linie</option>
+                <option value="arc">Bogen, Richtung 1</option>
+                <option value="arcAlt">Bogen, Richtung 2</option>
+              </select>
             </div>
-          </div>
-        </app-viz-settings-block>
-        <app-viz-settings-block heading="Zwischenlage 2">
-          <div class="min-w-0">
-            <label
-              for="hiddenLayerVizLayout1"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
-              >Darstellung</label
-            >
-            <select
-              id="hiddenLayerVizLayout1"
-              class="select select-bordered select-sm w-full"
-              [value]="model().hiddenLayerLayouts[1]"
-              (change)="onHiddenLayout(1, $event)"
-            >
-              <option value="ring">Ring</option>
-              <option value="grid">Raster</option>
-              <option value="line">Linie</option>
-              <option value="arc">Bogen, Richtung 1</option>
-              <option value="arcAlt">Bogen, Richtung 2</option>
-            </select>
-          </div>
-          <div class="min-w-0">
-            <label
-              for="hiddenLayerVizScale1"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
-              >Skala</label
-            >
-            <div class="flex min-w-0 items-center gap-2">
-              <input
-                id="hiddenLayerVizScale1"
-                type="range"
-                [min]="scaleMin"
-                [max]="scaleMax"
-                [step]="scaleStep"
-                [value]="model().hiddenLayerScales[1]"
-                (input)="onScale(1, $event)"
-                class="range range-primary flex-1 min-w-0"
-              />
-              <span
-                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().hiddenLayerScales[1] | number: '1.0-2' }}</span
+            <div class="min-w-0">
+              <label
+                for="inputLayerVizScale"
+                class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                >Skala</label
               >
+              <div class="flex min-w-0 items-center gap-2">
+                <input
+                  id="inputLayerVizScale"
+                  type="range"
+                  [min]="scaleMin"
+                  [max]="scaleMax"
+                  [step]="scaleStep"
+                  [value]="model().inputLayerScale"
+                  (input)="onInputScale($event)"
+                  class="range range-primary flex-1 min-w-0"
+                />
+                <span
+                  class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                  >{{ model().inputLayerScale | number: '1.0-2' }}</span
+                >
+              </div>
             </div>
-          </div>
-        </app-viz-settings-block>
-        <app-viz-settings-block heading="Aktivität">
-          <div class="min-w-0">
-            <label
-              for="activeNeuronMaxMul"
-              class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
-              >Max. Größe aktiver Neuronen</label
-            >
-            <div class="flex min-w-0 items-center gap-2">
-              <input
-                id="activeNeuronMaxMul"
-                type="range"
-                [min]="neuronMulMin"
-                [max]="neuronMulMax"
-                [step]="neuronMulStep"
-                [value]="model().activeNeuronMaxScaleMul"
-                (input)="onActiveNeuronMaxMul($event)"
-                class="range range-primary flex-1 min-w-0"
-              />
-              <span
-                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().activeNeuronMaxScaleMul | number: '1.0-2' }}</span
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Zwischenlage 1">
+            <div class="min-w-0">
+              <label
+                for="hiddenLayerVizLayout0"
+                class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                >Darstellung</label
               >
+              <select
+                id="hiddenLayerVizLayout0"
+                class="select select-bordered select-sm w-full"
+                [value]="model().hiddenLayerLayouts[0]"
+                (change)="onHiddenLayout(0, $event)"
+              >
+                <option value="ring">Ring</option>
+                <option value="grid">Raster</option>
+                <option value="line">Linie</option>
+                <option value="arc">Bogen, Richtung 1</option>
+                <option value="arcAlt">Bogen, Richtung 2</option>
+              </select>
             </div>
-          </div>
-        </app-viz-settings-block>
-      </aside>
+            <div class="min-w-0">
+              <label
+                for="hiddenLayerVizScale0"
+                class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                >Skala</label
+              >
+              <div class="flex min-w-0 items-center gap-2">
+                <input
+                  id="hiddenLayerVizScale0"
+                  type="range"
+                  [min]="scaleMin"
+                  [max]="scaleMax"
+                  [step]="scaleStep"
+                  [value]="model().hiddenLayerScales[0]"
+                  (input)="onScale(0, $event)"
+                  class="range range-primary flex-1 min-w-0"
+                />
+                <span
+                  class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                  >{{ model().hiddenLayerScales[0] | number: '1.0-2' }}</span
+                >
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Zwischenlage 2">
+            <div class="min-w-0">
+              <label
+                for="hiddenLayerVizLayout1"
+                class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                >Darstellung</label
+              >
+              <select
+                id="hiddenLayerVizLayout1"
+                class="select select-bordered select-sm w-full"
+                [value]="model().hiddenLayerLayouts[1]"
+                (change)="onHiddenLayout(1, $event)"
+              >
+                <option value="ring">Ring</option>
+                <option value="grid">Raster</option>
+                <option value="line">Linie</option>
+                <option value="arc">Bogen, Richtung 1</option>
+                <option value="arcAlt">Bogen, Richtung 2</option>
+              </select>
+            </div>
+            <div class="min-w-0">
+              <label
+                for="hiddenLayerVizScale1"
+                class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                >Skala</label
+              >
+              <div class="flex min-w-0 items-center gap-2">
+                <input
+                  id="hiddenLayerVizScale1"
+                  type="range"
+                  [min]="scaleMin"
+                  [max]="scaleMax"
+                  [step]="scaleStep"
+                  [value]="model().hiddenLayerScales[1]"
+                  (input)="onScale(1, $event)"
+                  class="range range-primary flex-1 min-w-0"
+                />
+                <span
+                  class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                  >{{ model().hiddenLayerScales[1] | number: '1.0-2' }}</span
+                >
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Aktivität">
+            <div class="min-w-0">
+              <label
+                for="activeNeuronMaxMul"
+                class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                >Max. Größe aktiver Neuronen</label
+              >
+              <div class="flex min-w-0 items-center gap-2">
+                <input
+                  id="activeNeuronMaxMul"
+                  type="range"
+                  [min]="neuronMulMin"
+                  [max]="neuronMulMax"
+                  [step]="neuronMulStep"
+                  [value]="model().activeNeuronMaxScaleMul"
+                  (input)="onActiveNeuronMaxMul($event)"
+                  class="range range-primary flex-1 min-w-0"
+                />
+                <span
+                  class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                  >{{ model().activeNeuronMaxScaleMul | number: '1.0-2' }}</span
+                >
+              </div>
+            </div>
+          </app-viz-settings-block>
+        </aside>
+      }
       <div
         class="relative grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)]"
       >
@@ -203,8 +206,16 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
           class="col-start-1 row-start-1 min-h-0 min-w-0 size-full max-h-full"
         ></div>
         <div
-          class="pointer-events-none col-start-1 row-start-1 z-10 flex items-start justify-end p-2"
+          class="pointer-events-none col-start-1 row-start-1 z-10 flex flex-col items-end gap-2 p-2"
         >
+          <button
+            type="button"
+            class="pointer-events-auto btn btn-outline btn-sm shadow-lg"
+            [attr.aria-pressed]="immersive()"
+            (click)="toggleImmersive()"
+          >
+            {{ immersive() ? 'Leisten anzeigen' : 'Nur 3D' }}
+          </button>
           <button
             type="button"
             class="pointer-events-auto btn btn-secondary btn-sm shadow-lg"
@@ -228,6 +239,9 @@ export class NetworkViz3dShellComponent {
   protected readonly scaleStep = HIDDEN_LAYER_VIZ_SCALE_STEP;
   readonly model = toSignal(this.store.select(selectVizModel), {
     requireSync: true,
+  });
+  readonly immersive = toSignal(this.store.select(selectVizImmersiveUi), {
+    initialValue: false,
   });
   protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
   protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
@@ -277,6 +291,10 @@ export class NetworkViz3dShellComponent {
     this.store.dispatch(
       NeuronalActions.vizActiveNeuronMaxScaleMulChanged({ mul: v }),
     );
+  }
+
+  toggleImmersive(): void {
+    this.store.dispatch(NeuronalActions.uiVizImmersiveToggled());
   }
 
   toggleVibeCamera(): void {
