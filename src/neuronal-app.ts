@@ -88,8 +88,55 @@ type ElRefs = {
 
 let el!: ElRefs;
 let ctx2d!: CanvasRenderingContext2D;
-const canvasLineWidthDraw = 14;
-const canvasLineWidthErase = 32;
+/** Zeichen-Canvas: Bitmap exakt MNIST 28×28 (1 Pixel = 1 Eingabe); Anzeige skaliert per CSS. */
+const MNIST_DRAW_GRID = 28;
+
+/** UI-Stufe 1…7: Stift-Chebyshev-Radius = `stufe − 1` (0…6), Radierer = Stift + 1 (max. 6). */
+const INFER_DRAW_BRUSH_SIZE_MIN = 1;
+const INFER_DRAW_BRUSH_SIZE_MAX = 7;
+let inferDrawBrushSize = 4;
+
+function drawPenChebRFromBrushSize(): number {
+  return Math.min(6, Math.max(0, inferDrawBrushSize - 1));
+}
+
+function drawEraserChebRFromBrushSize(): number {
+  return Math.min(6, drawPenChebRFromBrushSize() + 1);
+}
+
+/** Referenz-Canvas-Kante (früher 320px) — weiche Pinselradien skalieren davon auf aktuelle `drawCanvas`-Größe. */
+const SOFT_DAB_REF_SIDE = 320;
+
+function inferDrawBrushSoftScale(): number {
+  return 0.52 + inferDrawBrushSize * 0.11;
+}
+
+function drawCanvasMinSide(): number {
+  return Math.min(el.drawCanvas.width, el.drawCanvas.height);
+}
+
+function softPenDabRadius(): number {
+  return (
+    Math.max(2, (36 * drawCanvasMinSide()) / SOFT_DAB_REF_SIDE) *
+    inferDrawBrushSoftScale()
+  );
+}
+
+function softEraserDabRadius(): number {
+  return (
+    Math.max(2.2, (42 * drawCanvasMinSide()) / SOFT_DAB_REF_SIDE) *
+    inferDrawBrushSoftScale()
+  );
+}
+
+function softDabStepPx(): number {
+  const base = Math.max(0.3, (2.5 * drawCanvasMinSide()) / SOFT_DAB_REF_SIDE);
+  return base / Math.sqrt(inferDrawBrushSoftScale());
+}
+
+export type InferDrawBrushMode = 'pixels' | 'soft';
+
+let inferDrawBrushMode: InferDrawBrushMode = 'pixels';
 
 function bindFromHost(root: HTMLElement): ElRefs {
   const m = <T extends HTMLElement>(id: string) => {
@@ -170,6 +217,231 @@ function canvasPos(ev: PointerEvent): { x: number; y: number } {
   const sy = el.drawCanvas.height / r.height;
   return { x: (ev.clientX - r.left) * sx, y: (ev.clientY - r.top) * sy };
 }
+
+let drawLastCell: { gx: number; gy: number } | null = null;
+let drawLastSoftPoint: { x: number; y: number } | null = null;
+let drawSoftIsPen = true;
+let drawInk = '#ffffff';
+let drawBrushChebR = 0;
+
+export function setInferDrawBrushModeGlobal(m: InferDrawBrushMode): void {
+  inferDrawBrushMode = m;
+  drawing = false;
+  drawLastCell = null;
+  drawLastSoftPoint = null;
+}
+
+export function getInferDrawBrushModeGlobal(): InferDrawBrushMode {
+  return inferDrawBrushMode;
+}
+
+export function setInferDrawBrushSizeGlobal(n: number): void {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return;
+  inferDrawBrushSize = Math.min(
+    INFER_DRAW_BRUSH_SIZE_MAX,
+    Math.max(INFER_DRAW_BRUSH_SIZE_MIN, v),
+  );
+}
+
+export function getInferDrawBrushSizeGlobal(): number {
+  return inferDrawBrushSize;
+}
+
+function resetCanvas2dShadow(): void {
+  ctx2d.shadowBlur = 0;
+  ctx2d.shadowColor = 'transparent';
+}
+
+/** Nach weichem Radierer / Pinsel: Standard-Komposit wiederherstellen. */
+function resetCanvas2dPaintExtras(): void {
+  resetCanvas2dShadow();
+  ctx2d.globalCompositeOperation = 'source-over';
+  ctx2d.globalAlpha = 1;
+}
+
+function drawSoftPenDab(x: number, y: number): void {
+  ctx2d.globalCompositeOperation = 'source-over';
+  ctx2d.globalAlpha = 1;
+  resetCanvas2dShadow();
+  const r = softPenDabRadius();
+  const g = ctx2d.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.1, 'rgba(255,255,255,1)');
+  g.addColorStop(0.22, 'rgba(255,255,255,0.88)');
+  g.addColorStop(0.38, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.32)');
+  g.addColorStop(0.72, 'rgba(255,255,255,0.14)');
+  g.addColorStop(0.88, 'rgba(255,255,255,0.05)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx2d.fillStyle = g;
+  ctx2d.beginPath();
+  ctx2d.arc(x, y, r, 0, Math.PI * 2);
+  ctx2d.fill();
+}
+
+/** Weiches Wegradieren per Alpha-Maske (weicher Rand). */
+function drawSoftEraseDab(x: number, y: number): void {
+  resetCanvas2dShadow();
+  ctx2d.globalAlpha = 1;
+  const r = softEraserDabRadius();
+  ctx2d.globalCompositeOperation = 'destination-out';
+  const g = ctx2d.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, 'rgba(255,255,255,0.94)');
+  g.addColorStop(0.22, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.48, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.72, 'rgba(255,255,255,0.08)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx2d.fillStyle = g;
+  ctx2d.beginPath();
+  ctx2d.arc(x, y, r, 0, Math.PI * 2);
+  ctx2d.fill();
+  ctx2d.globalCompositeOperation = 'source-over';
+}
+
+function stampSoftBrushAlongSegment(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  pen: boolean,
+): void {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  const step = softDabStepPx();
+  const n = Math.max(1, Math.ceil(len / step));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = x0 + dx * t;
+    const y = y0 + dy * t;
+    if (pen) drawSoftPenDab(x, y);
+    else drawSoftEraseDab(x, y);
+  }
+}
+
+function drawCanvasCellSize(): { cellW: number; cellH: number } {
+  const cw = el.drawCanvas.width;
+  const ch = el.drawCanvas.height;
+  return { cellW: cw / MNIST_DRAW_GRID, cellH: ch / MNIST_DRAW_GRID };
+}
+
+function canvasPosToDrawCell(p: { x: number; y: number }): {
+  gx: number;
+  gy: number;
+} {
+  const { cellW, cellH } = drawCanvasCellSize();
+  return {
+    gx: Math.max(0, Math.min(MNIST_DRAW_GRID - 1, Math.floor(p.x / cellW))),
+    gy: Math.max(0, Math.min(MNIST_DRAW_GRID - 1, Math.floor(p.y / cellH))),
+  };
+}
+
+/**
+ * Raster-Zelle: exaktes 28×28-Rechteck (hart am Gitter), plus nur ein äußerer Ring
+ * mit Grau in die Nachbarzellen (Radial mit innerem „Loch“, kein weicher Vollkreis).
+ */
+function fillDrawCanvasCell(gx: number, gy: number, style: string): void {
+  resetCanvas2dPaintExtras();
+  const { cellW, cellH } = drawCanvasCellSize();
+  const x0 = gx * cellW;
+  const y0 = gy * cellH;
+  const w = Math.ceil(cellW);
+  const h = Math.ceil(cellH);
+  const cx = x0 + cellW * 0.5;
+  const cy = y0 + cellH * 0.5;
+  const base = Math.max(cellW, cellH);
+  /** Innerer Kreis knapp außerhalb der Zellecken → Kern bleibt kantengleich zum Gitter */
+  const rHole = Math.hypot(cellW, cellH) * 0.505;
+  const rAura = base * 2.18;
+  const isErase = style === '#000000' || style.toLowerCase() === '#000000';
+
+  if (!isErase) {
+    ctx2d.fillStyle = '#ffffff';
+    ctx2d.fillRect(x0, y0, w, h);
+
+    /** Nur Weiß+Alpha (kein graues RGB): überlagert es andere weiße Kerne nicht ab. */
+    const g = ctx2d.createRadialGradient(cx, cy, rHole, cx, cy, rAura);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.06, 'rgba(255,255,255,0.38)');
+    g.addColorStop(0.18, 'rgba(255,255,255,0.24)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.14)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.07)');
+    g.addColorStop(0.78, 'rgba(255,255,255,0.03)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx2d.fillStyle = g;
+    ctx2d.beginPath();
+    ctx2d.arc(cx, cy, rAura, 0, Math.PI * 2);
+    ctx2d.fill();
+    ctx2d.fillStyle = '#ffffff';
+    ctx2d.fillRect(x0, y0, w, h);
+  } else {
+    ctx2d.globalCompositeOperation = 'destination-out';
+    ctx2d.fillStyle = 'rgba(255,255,255,1)';
+    ctx2d.fillRect(x0, y0, w, h);
+
+    const g = ctx2d.createRadialGradient(cx, cy, rHole, cx, cy, rAura * 1.06);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.08, 'rgba(255,255,255,0.38)');
+    g.addColorStop(0.26, 'rgba(255,255,255,0.2)');
+    g.addColorStop(0.48, 'rgba(255,255,255,0.1)');
+    g.addColorStop(0.72, 'rgba(255,255,255,0.04)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx2d.fillStyle = g;
+    ctx2d.beginPath();
+    ctx2d.arc(cx, cy, rAura * 1.06, 0, Math.PI * 2);
+    ctx2d.fill();
+    ctx2d.globalCompositeOperation = 'source-over';
+  }
+}
+
+function stampDrawCells(
+  cx: number,
+  cy: number,
+  chebR: number,
+  style: string,
+): void {
+  for (let dy = -chebR; dy <= chebR; dy++) {
+    for (let dx = -chebR; dx <= chebR; dx++) {
+      const gx = cx + dx;
+      const gy = cy + dy;
+      if (gx >= 0 && gx < MNIST_DRAW_GRID && gy >= 0 && gy < MNIST_DRAW_GRID) {
+        fillDrawCanvasCell(gx, gy, style);
+      }
+    }
+  }
+}
+
+function strokeDrawCellsBresenham(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  chebR: number,
+  style: string,
+): void {
+  let x = x0;
+  let y = y0;
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  for (;;) {
+    stampDrawCells(x, y, chebR, style);
+    if (x === x1 && y === y1) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y += sy;
+    }
+  }
+}
+
 function cancelLiveCanvasInferRaf(): void {
   if (liveCanvasInferRaf !== null) {
     cancelAnimationFrame(liveCanvasInferRaf);
@@ -707,6 +979,19 @@ function canvasToMnistPixels(): number[] {
   const h = el.drawCanvas.height;
   const img = ctx2d.getImageData(0, 0, w, h);
   const d = img.data;
+
+  if (w === MNIST_DRAW_GRID && h === MNIST_DRAW_GRID) {
+    const out = new Array<number>(784);
+    let k = 0;
+    for (let gy = 0; gy < MNIST_DRAW_GRID; gy++) {
+      for (let gx = 0; gx < MNIST_DRAW_GRID; gx++) {
+        const i = (gy * w + gx) * 4;
+        out[k++] = (d[i]! + d[i + 1]! + d[i + 2]!) / 3 / 255;
+      }
+    }
+    return out;
+  }
+
   let minX = w;
   let minY = h;
   let maxX = -1;
@@ -761,36 +1046,41 @@ function canvasToMnistPixels(): number[] {
   return out;
 }
 
-/** MNIST 28×28 (0…1, zeilenweise) aufs Zeichen-Canvas — Originaldatensatz ist nur 28×28; Hochskalierung ohne Weichzeichnen = scharfe Pixelraster. */
+/** MNIST 28×28 (0…1) direkt aufs Zeichen-Canvas (Bitmap 28×28 = kein Hochskalieren nötig). */
 function paintMnistPixelsToInferCanvas(pixels: number[]): void {
   if (pixels.length !== 784) return;
   cancelLiveCanvasInferRaf();
+  resetCanvas2dPaintExtras();
   const canvas = el.drawCanvas;
   const ctx = ctx2d;
   const cw = canvas.width;
   const ch = canvas.height;
-  const img = ctx.createImageData(28, 28);
+  const img = ctx.createImageData(MNIST_DRAW_GRID, MNIST_DRAW_GRID);
   const d = img.data;
-  for (let gy = 0; gy < 28; gy++) {
-    for (let gx = 0; gx < 28; gx++) {
+  for (let gy = 0; gy < MNIST_DRAW_GRID; gy++) {
+    for (let gx = 0; gx < MNIST_DRAW_GRID; gx++) {
       const v = Math.round(
-        Math.max(0, Math.min(1, pixels[gy * 28 + gx]!)) * 255,
+        Math.max(0, Math.min(1, pixels[gy * MNIST_DRAW_GRID + gx]!)) * 255,
       );
-      const j = (gy * 28 + gx) * 4;
+      const j = (gy * MNIST_DRAW_GRID + gx) * 4;
       d[j] = v;
       d[j + 1] = v;
       d[j + 2] = v;
       d[j + 3] = 255;
     }
   }
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, cw, ch);
+  if (cw === MNIST_DRAW_GRID && ch === MNIST_DRAW_GRID) {
+    ctx.putImageData(img, 0, 0);
+    return;
+  }
   const tmp = document.createElement('canvas');
-  tmp.width = 28;
-  tmp.height = 28;
+  tmp.width = MNIST_DRAW_GRID;
+  tmp.height = MNIST_DRAW_GRID;
   const tctx = tmp.getContext('2d');
   if (!tctx) return;
   tctx.putImageData(img, 0, 0);
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, cw, ch);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tmp, 0, 0, cw, ch);
 }
@@ -939,15 +1229,14 @@ export function createNeuronalAppRuntime(
     selectModelById(id, 'Aktives Modell');
   };
   setModelDropdownOpen(false);
+  el.drawCanvas.width = MNIST_DRAW_GRID;
+  el.drawCanvas.height = MNIST_DRAW_GRID;
   const ctxDraw = el.drawCanvas.getContext('2d');
   if (!ctxDraw) throw new Error('canvas');
   ctx2d = ctxDraw;
+  resetCanvas2dPaintExtras();
   ctx2d.fillStyle = '#000000';
   ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
-  ctx2d.lineWidth = canvasLineWidthDraw;
-  ctx2d.lineCap = 'round';
-  ctx2d.lineJoin = 'round';
-  ctx2d.strokeStyle = '#ffffff';
 
   const {
     scene,
@@ -1067,31 +1356,77 @@ export function createNeuronalAppRuntime(
     if (e.button !== 0 && e.button !== 2) return;
     if (e.button === 2) e.preventDefault();
     drawing = true;
-    ctx2d.strokeStyle = e.button === 2 ? '#000000' : '#ffffff';
-    ctx2d.lineWidth =
-      e.button === 2 ? canvasLineWidthErase : canvasLineWidthDraw;
     el.drawCanvas.setPointerCapture(e.pointerId);
-    const p = canvasPos(e);
-    ctx2d.beginPath();
-    ctx2d.moveTo(p.x, p.y);
+    if (inferDrawBrushMode === 'soft') {
+      resetCanvas2dPaintExtras();
+      drawSoftIsPen = e.button === 0;
+      const p = canvasPos(e);
+      if (drawSoftIsPen) drawSoftPenDab(p.x, p.y);
+      else drawSoftEraseDab(p.x, p.y);
+      drawLastSoftPoint = p;
+      drawLastCell = null;
+      scheduleLiveCanvasInfer();
+      return;
+    }
+    drawInk = e.button === 2 ? '#000000' : '#ffffff';
+    drawBrushChebR =
+      e.button === 2
+        ? drawEraserChebRFromBrushSize()
+        : drawPenChebRFromBrushSize();
+    const c = canvasPosToDrawCell(canvasPos(e));
+    drawLastCell = c;
+    drawLastSoftPoint = null;
+    stampDrawCells(c.gx, c.gy, drawBrushChebR, drawInk);
+    scheduleLiveCanvasInfer();
   };
   const onDrawPointerMove = (e: PointerEvent): void => {
     if (!drawing) return;
-    const p = canvasPos(e);
-    ctx2d.lineTo(p.x, p.y);
-    ctx2d.stroke();
+    if (inferDrawBrushMode === 'soft') {
+      if (drawLastSoftPoint === null) return;
+      const p = canvasPos(e);
+      stampSoftBrushAlongSegment(
+        drawLastSoftPoint.x,
+        drawLastSoftPoint.y,
+        p.x,
+        p.y,
+        drawSoftIsPen,
+      );
+      drawLastSoftPoint = p;
+      scheduleLiveCanvasInfer();
+      return;
+    }
+    if (drawLastCell === null) return;
+    const c = canvasPosToDrawCell(canvasPos(e));
+    strokeDrawCellsBresenham(
+      drawLastCell.gx,
+      drawLastCell.gy,
+      c.gx,
+      c.gy,
+      drawBrushChebR,
+      drawInk,
+    );
+    drawLastCell = c;
     scheduleLiveCanvasInfer();
   };
   const onDrawPointerUp = (): void => {
     drawing = false;
+    drawLastCell = null;
+    drawLastSoftPoint = null;
+    resetCanvas2dPaintExtras();
     runLiveCanvasInferNow();
   };
   const onDrawPointerCancel = (): void => {
     drawing = false;
+    drawLastCell = null;
+    drawLastSoftPoint = null;
+    resetCanvas2dPaintExtras();
     runLiveCanvasInferNow();
   };
   const onDrawPointerLeave = (): void => {
     drawing = false;
+    drawLastCell = null;
+    drawLastSoftPoint = null;
+    resetCanvas2dPaintExtras();
     runLiveCanvasInferNow();
   };
   const onHiddenLayerLayoutChange = (index: number, raw: string): void => {
@@ -1146,6 +1481,7 @@ export function createNeuronalAppRuntime(
     renderFrame();
   };
   const onClearDraw = (): void => {
+    resetCanvas2dPaintExtras();
     ctx2d.fillStyle = '#000000';
     ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
     runLiveCanvasInferNow();

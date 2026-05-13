@@ -1,6 +1,8 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   OnDestroy,
@@ -57,11 +59,33 @@ import { selectTrainingRunning } from '../store/neuronal/neuronal.selectors';
             }}
           </button>
         </div>
+        <div
+          class="flex w-full max-w-[min(280px,100%)] flex-col gap-1 self-center"
+        >
+          <div
+            class="text-base-content/70 flex items-center justify-between gap-2 text-xs"
+          >
+            <span class="text-base-content font-medium">Pinselgröße</span>
+            <span class="tabular-nums"
+              >Stift {{ penStampCells() }}×{{ penStampCells() }}</span
+            >
+          </div>
+          <input
+            type="range"
+            class="range range-primary range-sm w-full"
+            [min]="neuronalApp.inferDrawBrushSizeUi.min"
+            [max]="neuronalApp.inferDrawBrushSizeUi.max"
+            step="1"
+            [value]="brushSize()"
+            [attr.aria-valuetext]="'Pinselstufe ' + brushSize()"
+            (input)="onBrushSizeInput($event)"
+          />
+        </div>
         <canvas
           id="drawCanvas"
-          width="320"
-          height="320"
-          class="border-base-300/60 aspect-square max-w-[290px] w-full touch-none self-center rounded-xl border bg-black shadow-xl"
+          width="28"
+          height="28"
+          class="border-base-300/60 h-auto w-[min(280px,100%)] touch-none self-center rounded-xl border bg-black shadow-xl [image-rendering:pixelated]"
           (contextmenu)="$event.preventDefault()"
           (pointerdown)="drawDown($event)"
           (pointermove)="drawMove($event)"
@@ -71,35 +95,52 @@ import { selectTrainingRunning } from '../store/neuronal/neuronal.selectors';
         ></canvas>
         <div
           id="drawActions"
-          class="grid w-full max-w-[290px] grid-cols-2 gap-2 self-center"
+          class="flex w-full max-w-[290px] flex-col gap-2 self-center"
         >
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              id="btnInferDraw"
+              type="button"
+              class="btn btn-outline btn-sm"
+              disabled
+              (click)="inferDraw()"
+            >
+              Zeichnung auswerten
+            </button>
+            <button
+              id="btnClearDraw"
+              type="button"
+              class="btn btn-ghost btn-sm"
+              (click)="clearDraw()"
+            >
+              Leeren
+            </button>
+          </div>
           <button
-            id="btnInferDraw"
             type="button"
-            class="btn btn-outline btn-sm"
-            disabled
-            (click)="inferDraw()"
+            class="btn btn-ghost btn-sm w-full"
+            [attr.aria-pressed]="softBrushOn()"
+            (click)="toggleSoftBrush()"
           >
-            Zeichnung auswerten
-          </button>
-          <button
-            id="btnClearDraw"
-            type="button"
-            class="btn btn-ghost btn-sm"
-            (click)="clearDraw()"
-          >
-            Leeren
+            {{ softBrushOn() ? 'Pinsel: weich (AA)' : 'Pinsel: Pixel-Raster' }}
           </button>
         </div>
       </div>
     </article>
   `,
 })
-export class InferPanelComponent implements OnDestroy {
+export class InferPanelComponent implements AfterViewInit, OnDestroy {
   private readonly store = inject(Store<AppState>);
-  private readonly neuronalApp = inject(NeuronalAppService);
+  protected readonly neuronalApp = inject(NeuronalAppService);
 
   protected readonly testCarouselOn = signal(false);
+  protected readonly softBrushOn = signal(false);
+  protected readonly brushSize = signal(4);
+
+  protected readonly penStampCells = computed(() => {
+    const cheb = Math.min(6, Math.max(0, this.brushSize() - 1));
+    return 2 * cheb + 1;
+  });
 
   private readonly trainingRunning = toSignal(
     this.store.select(selectTrainingRunning),
@@ -115,6 +156,12 @@ export class InferPanelComponent implements OnDestroy {
     });
   }
 
+  ngAfterViewInit(): void {
+    queueMicrotask(() => {
+      this.softBrushOn.set(this.neuronalApp.getInferDrawBrushMode() === 'soft');
+      this.brushSize.set(this.neuronalApp.getInferDrawBrushSize());
+    });
+  }
   ngOnDestroy(): void {
     this.neuronalApp.stopTestImageCarousel();
     this.testCarouselOn.set(false);
@@ -130,6 +177,18 @@ export class InferPanelComponent implements OnDestroy {
     );
     if (next === null) return;
     this.testCarouselOn.set(next);
+  }
+
+  toggleSoftBrush(): void {
+    const next = !this.softBrushOn();
+    this.neuronalApp.setInferDrawBrushMode(next ? 'soft' : 'pixels');
+    this.softBrushOn.set(next);
+  }
+
+  onBrushSizeInput(ev: Event): void {
+    const raw = Number((ev.target as HTMLInputElement).value);
+    this.brushSize.set(raw);
+    this.neuronalApp.setInferDrawBrushSize(raw);
   }
 
   inferDraw(): void {

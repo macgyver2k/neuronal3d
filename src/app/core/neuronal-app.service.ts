@@ -11,6 +11,11 @@ import {
 } from 'rxjs';
 import {
   createNeuronalAppRuntime,
+  getInferDrawBrushModeGlobal,
+  getInferDrawBrushSizeGlobal,
+  setInferDrawBrushModeGlobal,
+  setInferDrawBrushSizeGlobal,
+  type InferDrawBrushMode,
   type NeuronalAppRuntime,
 } from '../../neuronal-app';
 import type {
@@ -30,6 +35,9 @@ import { routerUrlModelIdFromPath } from './router-model-url';
 
 @Injectable({ providedIn: 'root' })
 export class NeuronalAppService {
+  /** Grenzen für den Pinselgrößen-Schieberegler (Stufe 1…7). */
+  readonly inferDrawBrushSizeUi = { min: 1, max: 7 } as const;
+
   readonly store = inject(Store<AppState>);
   private readonly router = inject(Router);
   private readonly appInstance = inject(NeuronalAppInstance);
@@ -223,5 +231,21 @@ export class NeuronalAppService {
   /** Karussell stoppen (z. B. beim Verlassen des Infer-Panels). */
   stopTestImageCarousel(): void {
     this.runtime?.setTestImageCarouselMode(false);
+  }
+
+  setInferDrawBrushMode(mode: InferDrawBrushMode): void {
+    setInferDrawBrushModeGlobal(mode);
+  }
+
+  getInferDrawBrushMode(): InferDrawBrushMode {
+    return getInferDrawBrushModeGlobal();
+  }
+
+  setInferDrawBrushSize(n: number): void {
+    setInferDrawBrushSizeGlobal(n);
+  }
+
+  getInferDrawBrushSize(): number {
+    return getInferDrawBrushSizeGlobal();
   }
 }
