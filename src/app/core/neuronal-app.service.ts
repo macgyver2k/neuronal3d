@@ -207,4 +207,21 @@ export class NeuronalAppService {
     this.runtime.setVibeCameraMode(next);
     return next;
   }
+
+  /** Karussell läuft nur, wenn `enabled` true und Netz + Testdaten vorhanden sind. @returns ob das Karussell aktiv ist */
+  setTestImageCarouselMode(enabled: boolean): boolean {
+    return this.runtime?.setTestImageCarouselMode(enabled) ?? false;
+  }
+
+  /** @returns Karussell aktiv (`true`/`false`), oder `null` ohne Runtime */
+  toggleTestImageCarouselState(current: boolean): boolean | null {
+    if (!this.runtime) return null;
+    const want = !current;
+    return this.runtime.setTestImageCarouselMode(want);
+  }
+
+  /** Karussell stoppen (z. B. beim Verlassen des Infer-Panels). */
+  stopTestImageCarousel(): void {
+    this.runtime?.setTestImageCarouselMode(false);
+  }
 }

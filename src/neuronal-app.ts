@@ -78,6 +78,7 @@ type ElRefs = {
   batchSizeInput: HTMLInputElement;
   vizEveryInput: HTMLInputElement;
   btnInferRandom: HTMLButtonElement;
+  btnTestCarousel: HTMLButtonElement;
   btnInferDraw: HTMLButtonElement;
   btnClearDraw: HTMLButtonElement;
   status: HTMLSpanElement;
@@ -122,6 +123,7 @@ function bindFromHost(root: HTMLElement): ElRefs {
     batchSizeInput: m('batchSizeInput'),
     vizEveryInput: m('vizEveryInput'),
     btnInferRandom: m('btnInferRandom'),
+    btnTestCarousel: m('btnTestCarousel'),
     btnInferDraw: m('btnInferDraw'),
     btnClearDraw: m('btnClearDraw'),
     status: m('status'),
@@ -288,6 +290,7 @@ function updateButtons(): void {
   el.btnSaveModelAs.disabled = !net || tr;
   el.btnResetModel.disabled = !net || tr;
   el.btnInferRandom.disabled = !net || !hasTest;
+  el.btnTestCarousel.disabled = !net || !hasTest || tr;
   el.btnInferDraw.disabled = !net;
   el.btnNewModel.disabled = tr || !nLatest.modelStoreHydrated;
   el.epochsInput.disabled = tr;
@@ -758,6 +761,40 @@ function canvasToMnistPixels(): number[] {
   return out;
 }
 
+/** MNIST 28×28 (0…1, zeilenweise) aufs Zeichen-Canvas skalieren — hell = Tinte, wie bei manueller Eingabe. */
+function paintMnistPixelsToInferCanvas(pixels: number[]): void {
+  if (pixels.length !== 784) return;
+  cancelLiveCanvasInferRaf();
+  const canvas = el.drawCanvas;
+  const ctx = ctx2d;
+  const cw = canvas.width;
+  const ch = canvas.height;
+  const img = ctx.createImageData(28, 28);
+  const d = img.data;
+  for (let gy = 0; gy < 28; gy++) {
+    for (let gx = 0; gx < 28; gx++) {
+      const v = Math.round(
+        Math.max(0, Math.min(1, pixels[gy * 28 + gx]!)) * 255,
+      );
+      const j = (gy * 28 + gx) * 4;
+      d[j] = v;
+      d[j + 1] = v;
+      d[j + 2] = v;
+      d[j + 3] = 255;
+    }
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = 28;
+  tmp.height = 28;
+  const tctx = tmp.getContext('2d');
+  if (!tctx) return;
+  tctx.putImageData(img, 0, 0);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(tmp, 0, 0, cw, ch);
+}
+
 function inferWithPixels(
   pixels: number[],
   label?: number,
@@ -779,6 +816,9 @@ function inferWithPixels(
     if (VIZ_DEBUG_INFER) lastInferActsDebug = acts.map((row) => [...row]);
     net3d.setInferResult(pred, label ?? null);
     publishVizState('infer', acts);
+    if (sampleIndex !== undefined) {
+      paintMnistPixelsToInferCanvas(pixels);
+    }
     if (!live) renderFrame();
     const probs = fwd.prob.map((row, i) => ({ digit: i, p: row[0] }));
     const probStr = probs.map((x) => x.p.toFixed(4)).join(' ');
@@ -856,6 +896,7 @@ export type NeuronalAppRuntime = {
   ) => void;
   cancelPendingVizColorPreviews: () => void;
   setVibeCameraMode: (enabled: boolean) => void;
+  setTestImageCarouselMode: (enabled: boolean) => boolean;
 };
 
 export function createNeuronalAppRuntime(
@@ -1120,6 +1161,41 @@ export function createNeuronalAppRuntime(
     const s = testData[idx]!;
     inferWithPixels(s.pixels, s.label, idx);
   };
+
+  let testCarouselTimer: number | null = null;
+  let testCarouselIndex = 0;
+  const TEST_CAROUSEL_MS = 2800;
+
+  const clearTestCarouselTimer = (): void => {
+    if (testCarouselTimer === null) return;
+    window.clearInterval(testCarouselTimer);
+    testCarouselTimer = null;
+  };
+
+  const stepTestImageCarousel = (): void => {
+    if (!net || testData.length === 0) {
+      clearTestCarouselTimer();
+      return;
+    }
+    const idx = testCarouselIndex % testData.length;
+    const s = testData[idx]!;
+    lastInferSampleIndex = idx;
+    inferWithPixels(s.pixels, s.label, idx);
+    testCarouselIndex = (testCarouselIndex + 1) % testData.length;
+  };
+
+  const setTestImageCarouselMode = (enabled: boolean): boolean => {
+    clearTestCarouselTimer();
+    if (!enabled) return false;
+    if (!net || testData.length === 0) return false;
+    stepTestImageCarousel();
+    testCarouselTimer = window.setInterval(
+      stepTestImageCarousel,
+      TEST_CAROUSEL_MS,
+    );
+    return true;
+  };
+
   const onInferDraw = (): void => {
     if (!net) return;
     const pixels = canvasToMnistPixels();
@@ -1385,6 +1461,7 @@ export function createNeuronalAppRuntime(
       } catch {}
       cancelLiveCanvasInferRaf();
       cancelPendingVizColorPreviews();
+      clearTestCarouselTimer();
       if (neuronalUiRaf !== 0) {
         cancelAnimationFrame(neuronalUiRaf);
         neuronalUiRaf = 0;
@@ -1434,5 +1511,6 @@ export function createNeuronalAppRuntime(
     previewVizLightColor,
     cancelPendingVizColorPreviews,
     setVibeCameraMode,
+    setTestImageCarouselMode,
   };
 }

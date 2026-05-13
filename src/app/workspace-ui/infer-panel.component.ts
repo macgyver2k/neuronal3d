@@ -1,11 +1,20 @@
-import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
-import { Store } from "@ngrx/store";
-import { NeuronalAppService } from "../core/neuronal-app.service";
-import type { AppState } from "../store/app.state";
-import { NeuronalActions } from "../store/neuronal/neuronal.actions";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  OnDestroy,
+  signal,
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { Store } from '@ngrx/store';
+import { NeuronalAppService } from '../core/neuronal-app.service';
+import type { AppState } from '../store/app.state';
+import { NeuronalActions } from '../store/neuronal/neuronal.actions';
+import { selectTrainingRunning } from '../store/neuronal/neuronal.selectors';
 
 @Component({
-  selector: "app-infer-panel",
+  selector: 'app-infer-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -16,7 +25,9 @@ import { NeuronalActions } from "../store/neuronal/neuronal.actions";
       <div class="card-body min-h-0 flex flex-1 flex-col gap-3 p-5">
         <div class="shrink-0">
           <h2 class="card-title text-base">Inferenz</h2>
-          <p class="text-base-content/60 text-xs">Direkt mit dem aktiven Modell testen</p>
+          <p class="text-base-content/60 text-xs">
+            Direkt mit dem aktiven Modell testen
+          </p>
         </div>
         <p
           id="inferModelContext"
@@ -32,6 +43,18 @@ import { NeuronalActions } from "../store/neuronal/neuronal.actions";
             (click)="inferRandom()"
           >
             Zufälliges Testbild
+          </button>
+          <button
+            id="btnTestCarousel"
+            type="button"
+            class="btn btn-outline btn-sm"
+            disabled
+            [attr.aria-pressed]="testCarouselOn()"
+            (click)="toggleTestCarousel()"
+          >
+            {{
+              testCarouselOn() ? 'Testbild-Karussell aus' : 'Testbild-Karussell'
+            }}
           </button>
         </div>
         <canvas
@@ -50,10 +73,21 @@ import { NeuronalActions } from "../store/neuronal/neuronal.actions";
           id="drawActions"
           class="grid w-full max-w-[290px] grid-cols-2 gap-2 self-center"
         >
-          <button id="btnInferDraw" type="button" class="btn btn-outline btn-sm" disabled (click)="inferDraw()">
+          <button
+            id="btnInferDraw"
+            type="button"
+            class="btn btn-outline btn-sm"
+            disabled
+            (click)="inferDraw()"
+          >
             Zeichnung auswerten
           </button>
-          <button id="btnClearDraw" type="button" class="btn btn-ghost btn-sm" (click)="clearDraw()">
+          <button
+            id="btnClearDraw"
+            type="button"
+            class="btn btn-ghost btn-sm"
+            (click)="clearDraw()"
+          >
             Leeren
           </button>
         </div>
@@ -61,12 +95,41 @@ import { NeuronalActions } from "../store/neuronal/neuronal.actions";
     </article>
   `,
 })
-export class InferPanelComponent {
+export class InferPanelComponent implements OnDestroy {
   private readonly store = inject(Store<AppState>);
   private readonly neuronalApp = inject(NeuronalAppService);
 
+  protected readonly testCarouselOn = signal(false);
+
+  private readonly trainingRunning = toSignal(
+    this.store.select(selectTrainingRunning),
+    { initialValue: false },
+  );
+
+  constructor() {
+    effect(() => {
+      if (this.trainingRunning()) {
+        this.neuronalApp.stopTestImageCarousel();
+        this.testCarouselOn.set(false);
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.neuronalApp.stopTestImageCarousel();
+    this.testCarouselOn.set(false);
+  }
+
   inferRandom(): void {
     this.store.dispatch(NeuronalActions.uiInferRandomRequested());
+  }
+
+  toggleTestCarousel(): void {
+    const next = this.neuronalApp.toggleTestImageCarouselState(
+      this.testCarouselOn(),
+    );
+    if (next === null) return;
+    this.testCarouselOn.set(next);
   }
 
   inferDraw(): void {
