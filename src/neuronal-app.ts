@@ -34,6 +34,8 @@ import { animateLoop, createScene } from './viz/scene';
 import {
   isValidHexColor6,
   type VizLightColorSettings,
+  type VizNetworkColorSettings,
+  type VizPostProcessSettings,
   type VizSceneColorSettings,
 } from './viz/viz-appearance';
 
@@ -842,6 +844,8 @@ export type NeuronalAppRuntime = {
   onActiveNeuronMaxScaleMulChange: (mul: number) => void;
   onVizSceneColorsApply: (colors: VizSceneColorSettings) => void;
   onVizLightColorsApply: (colors: VizLightColorSettings) => void;
+  onVizNetworkColorsApply: (colors: VizNetworkColorSettings) => void;
+  onVizPostProcessApply: (pp: VizPostProcessSettings) => void;
   previewVizSceneColor: (
     key: keyof VizSceneColorSettings,
     color: string,
@@ -913,14 +917,22 @@ export function createNeuronalAppRuntime(
     setVibeCameraMode,
     applyVizSceneColors,
     applyVizLightColors,
+    applyVizPostProcess,
   } = createScene(el.viz);
   applyVizSceneColors(nLatest.viz3d.sceneColors);
   applyVizLightColors(nLatest.viz3d.lightColors);
+  applyVizPostProcess(nLatest.viz3d.postProcess);
   let sceneColorBaseline: VizSceneColorSettings = {
     ...nLatest.viz3d.sceneColors,
   };
   let lightColorBaseline: VizLightColorSettings = {
     ...nLatest.viz3d.lightColors,
+  };
+  let networkColorBaseline: VizNetworkColorSettings = {
+    ...nLatest.viz3d.networkColors,
+  };
+  let postProcessBaseline: VizPostProcessSettings = {
+    ...nLatest.viz3d.postProcess,
   };
 
   let sceneColorPreviewRaf = 0;
@@ -998,6 +1010,7 @@ export function createNeuronalAppRuntime(
   disposeSceneBound = dispose;
   setVibeCameraMode(true);
   const net3dInst = new Network3D(LAYER_SIZES);
+  net3dInst.applyVizNetworkColors(networkColorBaseline);
   net3d = net3dInst;
   scene.add(net3dInst.root);
   stopAnimCleanup = animateLoop(render, controls, tickViz);
@@ -1077,6 +1090,19 @@ export function createNeuronalAppRuntime(
   const onVizLightColorsApply = (colors: VizLightColorSettings): void => {
     lightColorBaseline = { ...colors };
     applyVizLightColors(lightColorBaseline);
+  };
+  const onVizNetworkColorsApply = (colors: VizNetworkColorSettings): void => {
+    networkColorBaseline = { ...colors };
+    if (net3d) {
+      net3d.applyVizNetworkColors(networkColorBaseline);
+      if (net) net3d.setWeights(net.weights);
+    }
+    renderFrame();
+  };
+  const onVizPostProcessApply = (pp: VizPostProcessSettings): void => {
+    postProcessBaseline = { ...pp };
+    applyVizPostProcess(postProcessBaseline);
+    renderFrame();
   };
   const onClearDraw = (): void => {
     ctx2d.fillStyle = '#000000';
@@ -1402,6 +1428,8 @@ export function createNeuronalAppRuntime(
     onActiveNeuronMaxScaleMulChange,
     onVizSceneColorsApply,
     onVizLightColorsApply,
+    onVizNetworkColorsApply,
+    onVizPostProcessApply,
     previewVizSceneColor,
     previewVizLightColor,
     cancelPendingVizColorPreviews,

@@ -7,8 +7,12 @@ import {
 } from '../../../viz/network3d';
 import {
   DEFAULT_VIZ_LIGHT_COLORS,
+  DEFAULT_VIZ_NETWORK_COLORS,
+  DEFAULT_VIZ_POST_PROCESS,
   DEFAULT_VIZ_SCENE_COLORS,
   type VizLightColorSettings,
+  type VizNetworkColorSettings,
+  type VizPostProcessSettings,
   type VizSceneColorSettings,
 } from '../../../viz/viz-appearance';
 import type {
@@ -30,6 +34,8 @@ export type Viz3dState = {
   activeNeuronMaxScaleMul: number;
   sceneColors: VizSceneColorSettings;
   lightColors: VizLightColorSettings;
+  networkColors: VizNetworkColorSettings;
+  postProcess: VizPostProcessSettings;
 };
 
 export function createInitialViz3dState(): Viz3dState {
@@ -44,6 +50,8 @@ export function createInitialViz3dState(): Viz3dState {
     activeNeuronMaxScaleMul: ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
     sceneColors: { ...DEFAULT_VIZ_SCENE_COLORS },
     lightColors: { ...DEFAULT_VIZ_LIGHT_COLORS },
+    networkColors: { ...DEFAULT_VIZ_NETWORK_COLORS },
+    postProcess: { ...DEFAULT_VIZ_POST_PROCESS },
   };
 }
 

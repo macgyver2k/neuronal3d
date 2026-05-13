@@ -33,3 +33,124 @@ export const DEFAULT_VIZ_LIGHT_COLORS: VizLightColorSettings = {
 export function isValidHexColor6(s: string): boolean {
   return typeof s === 'string' && /^#[0-9A-Fa-f]{6}$/.test(s);
 }
+
+/** Farben für Neuronen (Körper über Aktivität) und Kanten (Gewichte / Fokus). */
+export type VizNetworkColorSettings = {
+  /** Emissive Grundton der Neuron-Kugeln (wirkt wie Leuchten). */
+  neuronEmissive: string;
+  neuronEmissiveIntensityActive: number;
+  neuronEmissiveIntensityIdle: number;
+  neuronHiddenCold: string;
+  neuronHiddenHot: string;
+  neuronInputCold: string;
+  neuronInputHot: string;
+  neuronOutputCold: string;
+  neuronOutputHot: string;
+  edgePositiveCold: string;
+  edgePositiveHot: string;
+  edgeNegativeCold: string;
+  edgeNegativeHot: string;
+  edgeInferMuted: string;
+  edgeTrainRecent: string;
+};
+
+export type VizPostProcessSettings = {
+  bloomEnabled: boolean;
+  bloomStrength: number;
+  bloomRadius: number;
+  bloomThreshold: number;
+  fxaaEnabled: boolean;
+  toneMappingExposure: number;
+};
+
+/** Entspricht den früher fest codierten Standardwerten in `network3d.ts`. */
+export const DEFAULT_VIZ_NETWORK_COLORS: VizNetworkColorSettings = {
+  neuronEmissive: '#2a6bff',
+  neuronEmissiveIntensityActive: 1.9,
+  neuronEmissiveIntensityIdle: 0.28,
+  neuronHiddenCold: '#1f59cc',
+  neuronHiddenHot: '#5eccff',
+  neuronInputCold: '#1f59cc',
+  neuronInputHot: '#ffffff',
+  neuronOutputCold: '#3373d9',
+  neuronOutputHot: '#99d9ff',
+  edgePositiveCold: '#40240f',
+  edgePositiveHot: '#ffb83a',
+  edgeNegativeCold: '#0f3852',
+  edgeNegativeHot: '#57b3ff',
+  edgeInferMuted: '#0d1217',
+  edgeTrainRecent: '#f29e2e',
+};
+
+export const DEFAULT_VIZ_POST_PROCESS: VizPostProcessSettings = {
+  bloomEnabled: true,
+  bloomStrength: 0.55,
+  bloomRadius: 0.45,
+  bloomThreshold: 0.22,
+  fxaaEnabled: true,
+  toneMappingExposure: 1.35,
+};
+
+const NETWORK_COLOR_KEYS = [
+  'neuronEmissive',
+  'neuronHiddenCold',
+  'neuronHiddenHot',
+  'neuronInputCold',
+  'neuronInputHot',
+  'neuronOutputCold',
+  'neuronOutputHot',
+  'edgePositiveCold',
+  'edgePositiveHot',
+  'edgeNegativeCold',
+  'edgeNegativeHot',
+  'edgeInferMuted',
+  'edgeTrainRecent',
+] as const satisfies readonly (keyof VizNetworkColorSettings)[];
+
+export function mergeVizNetworkColors(
+  base: VizNetworkColorSettings,
+  patch: Partial<VizNetworkColorSettings>,
+): VizNetworkColorSettings {
+  const next = { ...base };
+  for (const k of NETWORK_COLOR_KEYS) {
+    const v = patch[k];
+    if (typeof v === 'string' && isValidHexColor6(v)) next[k] = v;
+  }
+  const ia = patch.neuronEmissiveIntensityActive;
+  if (typeof ia === 'number' && Number.isFinite(ia)) {
+    next.neuronEmissiveIntensityActive = Math.min(4, Math.max(0.05, ia));
+  }
+  const ii = patch.neuronEmissiveIntensityIdle;
+  if (typeof ii === 'number' && Number.isFinite(ii)) {
+    next.neuronEmissiveIntensityIdle = Math.min(2, Math.max(0, ii));
+  }
+  return next;
+}
+
+export function mergeVizPostProcess(
+  base: VizPostProcessSettings,
+  patch: Partial<VizPostProcessSettings>,
+): VizPostProcessSettings {
+  const next = { ...base };
+  if (typeof patch.bloomEnabled === 'boolean')
+    next.bloomEnabled = patch.bloomEnabled;
+  if (typeof patch.fxaaEnabled === 'boolean')
+    next.fxaaEnabled = patch.fxaaEnabled;
+  const bs = patch.bloomStrength;
+  if (typeof bs === 'number' && Number.isFinite(bs)) {
+    next.bloomStrength = Math.min(3, Math.max(0, bs));
+  }
+  const br = patch.bloomRadius;
+  if (typeof br === 'number' && Number.isFinite(br)) {
+    next.bloomRadius = Math.min(1, Math.max(0, br));
+  }
+  const bt = patch.bloomThreshold;
+  if (typeof bt === 'number' && Number.isFinite(bt)) {
+    next.bloomThreshold = Math.min(1, Math.max(0, bt));
+  }
+  const te = patch.toneMappingExposure;
+  if (typeof te === 'number' && Number.isFinite(te)) {
+    next.toneMappingExposure = Math.min(3, Math.max(0.2, te));
+  }
+  return next;
+}

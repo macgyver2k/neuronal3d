@@ -15,6 +15,8 @@ import {
 } from '../../neuronal-app';
 import type {
   VizLightColorSettings,
+  VizNetworkColorSettings,
+  VizPostProcessSettings,
   VizSceneColorSettings,
 } from '../../viz/viz-appearance';
 import type { AppState } from '../store/app.state';
@@ -175,6 +177,12 @@ export class NeuronalAppService {
   };
   onVizLightColorsApply = (colors: VizLightColorSettings): void => {
     this.runtime?.onVizLightColorsApply(colors);
+  };
+  onVizNetworkColorsApply = (colors: VizNetworkColorSettings): void => {
+    this.runtime?.onVizNetworkColorsApply(colors);
+  };
+  onVizPostProcessApply = (pp: VizPostProcessSettings): void => {
+    this.runtime?.onVizPostProcessApply(pp);
   };
   previewVizSceneColor = (
     key: keyof VizSceneColorSettings,

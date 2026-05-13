@@ -10,6 +10,8 @@ import {
 import {
   DEFAULT_VIZ_LIGHT_COLORS,
   isValidHexColor6,
+  mergeVizNetworkColors,
+  mergeVizPostProcess,
 } from '../../../viz/viz-appearance';
 import { EPOCH_TRACK_MAX_ROWS_PER_MODEL } from '../../core/epoch-storage';
 import type {
@@ -311,6 +313,26 @@ export const neuronalReducer = createReducer<NeuronalState>(
         },
       };
     },
+  ),
+  on(
+    NeuronalActions.vizNetworkColorsPatch,
+    (s, { patch }): NeuronalState => ({
+      ...s,
+      viz3d: {
+        ...s.viz3d,
+        networkColors: mergeVizNetworkColors(s.viz3d.networkColors, patch),
+      },
+    }),
+  ),
+  on(
+    NeuronalActions.vizPostProcessPatch,
+    (s, { patch }): NeuronalState => ({
+      ...s,
+      viz3d: {
+        ...s.viz3d,
+        postProcess: mergeVizPostProcess(s.viz3d.postProcess, patch),
+      },
+    }),
   ),
   on(
     NeuronalActions.uiVizImmersiveToggled,

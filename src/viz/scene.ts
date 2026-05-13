@@ -8,8 +8,10 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import {
   DEFAULT_VIZ_LIGHT_COLORS,
+  DEFAULT_VIZ_POST_PROCESS,
   DEFAULT_VIZ_SCENE_COLORS,
   type VizLightColorSettings,
+  type VizPostProcessSettings,
   type VizSceneColorSettings,
   isValidHexColor6,
 } from './viz-appearance';
@@ -28,6 +30,7 @@ export function createScene(container: HTMLElement): {
   setVibeCameraMode: (enabled: boolean) => void;
   applyVizSceneColors: (next: VizSceneColorSettings) => void;
   applyVizLightColors: (next: VizLightColorSettings) => void;
+  applyVizPostProcess: (next: VizPostProcessSettings) => void;
   dispose: () => void;
 } {
   const scene = new THREE.Scene();
@@ -276,6 +279,16 @@ export function createScene(container: HTMLElement): {
   composer.addPass(fxaaPass);
   composer.addPass(outputPass);
 
+  const applyVizPostProcess = (next: VizPostProcessSettings): void => {
+    bloom.enabled = next.bloomEnabled;
+    bloom.strength = next.bloomStrength;
+    bloom.radius = next.bloomRadius;
+    bloom.threshold = next.bloomThreshold;
+    fxaaPass.enabled = next.fxaaEnabled;
+    renderer.toneMappingExposure = next.toneMappingExposure;
+  };
+  applyVizPostProcess({ ...DEFAULT_VIZ_POST_PROCESS });
+
   container.appendChild(renderer.domElement);
 
   const onResize = () => {
@@ -414,6 +427,7 @@ export function createScene(container: HTMLElement): {
     setVibeCameraMode,
     applyVizSceneColors,
     applyVizLightColors,
+    applyVizPostProcess,
     dispose,
   };
 }

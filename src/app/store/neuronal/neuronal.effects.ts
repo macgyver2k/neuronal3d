@@ -373,6 +373,34 @@ export class NeuronalEffects {
     { dispatch: false },
   );
 
+  vizNetworkColors$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizNetworkColorsPatch),
+        withLatestFrom(this.store.select(selectNeuronalState)),
+        tap(([, n]) => {
+          this.zone.runOutsideAngular(() => {
+            this.neuronalApp.onVizNetworkColorsApply(n.viz3d.networkColors);
+          });
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizPostProcess$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizPostProcessPatch),
+        withLatestFrom(this.store.select(selectNeuronalState)),
+        tap(([, n]) => {
+          this.zone.runOutsideAngular(() => {
+            this.neuronalApp.onVizPostProcessApply(n.viz3d.postProcess);
+          });
+        }),
+      ),
+    { dispatch: false },
+  );
+
   uiExportBundle$ = createEffect(
     () =>
       this.actions$.pipe(

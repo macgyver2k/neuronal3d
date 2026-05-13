@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import {
+  DEFAULT_VIZ_NETWORK_COLORS,
+  isValidHexColor6,
+  type VizNetworkColorSettings,
+} from './viz-appearance';
 
 function createDigitTexture(digit: number): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -103,11 +108,7 @@ function placeHiddenLayerPoints(
     }
   } else if (mode === 'line') {
     const minStep = 0.34;
-    const span = Math.max(
-      ringR * 3.5,
-      1.4,
-      minStep * Math.max(0, n - 1),
-    );
+    const span = Math.max(ringR * 3.5, 1.4, minStep * Math.max(0, n - 1));
     const step = n > 1 ? span / (n - 1) : 0;
     const z0 = -((n - 1) * 0.5) * step;
     for (let i = 0; i < n; i++) {
@@ -116,8 +117,7 @@ function placeHiddenLayerPoints(
   } else {
     const t0 = mode === 'arc' ? 0 : Math.PI;
     for (let i = 0; i < n; i++) {
-      const t =
-        n <= 1 ? t0 + Math.PI * 0.5 : t0 + (i / (n - 1)) * Math.PI;
+      const t = n <= 1 ? t0 + Math.PI * 0.5 : t0 + (i / (n - 1)) * Math.PI;
       pts[i]!.set(x, Math.sin(t) * ringR, Math.cos(t) * ringR);
     }
   }
@@ -185,22 +185,14 @@ function layoutPositions(
       const h = L - 1;
       const mode = hiddenLayouts[h] ?? 'ring';
       const sc = hiddenScales[h] ?? HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
-      placeHiddenLayerPoints(
-        n,
-        x,
-        mode,
-        pts,
-        sc,
-      );
+      placeHiddenLayerPoints(n, x, mode, pts, sc);
     }
     out.push(pts);
   }
   return out;
 }
 
-function defaultHiddenLayouts(
-  layerSizes: number[],
-): HiddenLayerVizLayout[] {
+function defaultHiddenLayouts(layerSizes: number[]): HiddenLayerVizLayout[] {
   return new Array<HiddenLayerVizLayout>(
     Math.max(0, layerSizes.length - 2),
   ).fill('ring');
@@ -244,6 +236,23 @@ export class Network3D {
   private inputLayerLayout: InputLayerVizLayout = INPUT_LAYER_PIXELS_LAYOUT;
   private inputLayerScale = HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
   private activeNeuronMaxScaleMul = ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT;
+  private networkColors: VizNetworkColorSettings = {
+    ...DEFAULT_VIZ_NETWORK_COLORS,
+  };
+  private readonly colNeuronHiddenCold = new THREE.Color();
+  private readonly colNeuronHiddenHot = new THREE.Color();
+  private readonly colNeuronInputCold = new THREE.Color();
+  private readonly colNeuronInputHot = new THREE.Color();
+  private readonly colNeuronOutputCold = new THREE.Color();
+  private readonly colNeuronOutputHot = new THREE.Color();
+  private readonly colEdgePosCold = new THREE.Color();
+  private readonly colEdgePosHot = new THREE.Color();
+  private readonly colEdgeNegCold = new THREE.Color();
+  private readonly colEdgeNegHot = new THREE.Color();
+  private readonly colEdgeInferMuted = new THREE.Color();
+  private readonly colEdgeTrainRecent = new THREE.Color();
+  private readonly colNeuronEmissive = new THREE.Color();
+  private readonly scratchNeuronColor = new THREE.Color();
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -363,13 +372,93 @@ export class Network3D {
       this.outputDigitSprites.push(spr);
       this.root.add(spr);
     }
+    this.applyVizNetworkColors({ ...DEFAULT_VIZ_NETWORK_COLORS });
     this.setIdleDim(true);
   }
 
-  setHiddenLayerLayout(
-    index: number,
-    layout: HiddenLayerVizLayout,
-  ): void {
+  applyVizNetworkColors(next: VizNetworkColorSettings): void {
+    this.networkColors = { ...next };
+    const setHex = (c: THREE.Color, hex: string, fb: string): void => {
+      const h = isValidHexColor6(hex) ? hex : fb;
+      c.setHex(parseInt(h.slice(1), 16));
+    };
+    setHex(
+      this.colNeuronEmissive,
+      next.neuronEmissive,
+      DEFAULT_VIZ_NETWORK_COLORS.neuronEmissive,
+    );
+    setHex(
+      this.colNeuronHiddenCold,
+      next.neuronHiddenCold,
+      DEFAULT_VIZ_NETWORK_COLORS.neuronHiddenCold,
+    );
+    setHex(
+      this.colNeuronHiddenHot,
+      next.neuronHiddenHot,
+      DEFAULT_VIZ_NETWORK_COLORS.neuronHiddenHot,
+    );
+    setHex(
+      this.colNeuronInputCold,
+      next.neuronInputCold,
+      DEFAULT_VIZ_NETWORK_COLORS.neuronInputCold,
+    );
+    setHex(
+      this.colNeuronInputHot,
+      next.neuronInputHot,
+      DEFAULT_VIZ_NETWORK_COLORS.neuronInputHot,
+    );
+    setHex(
+      this.colNeuronOutputCold,
+      next.neuronOutputCold,
+      DEFAULT_VIZ_NETWORK_COLORS.neuronOutputCold,
+    );
+    setHex(
+      this.colNeuronOutputHot,
+      next.neuronOutputHot,
+      DEFAULT_VIZ_NETWORK_COLORS.neuronOutputHot,
+    );
+    setHex(
+      this.colEdgePosCold,
+      next.edgePositiveCold,
+      DEFAULT_VIZ_NETWORK_COLORS.edgePositiveCold,
+    );
+    setHex(
+      this.colEdgePosHot,
+      next.edgePositiveHot,
+      DEFAULT_VIZ_NETWORK_COLORS.edgePositiveHot,
+    );
+    setHex(
+      this.colEdgeNegCold,
+      next.edgeNegativeCold,
+      DEFAULT_VIZ_NETWORK_COLORS.edgeNegativeCold,
+    );
+    setHex(
+      this.colEdgeNegHot,
+      next.edgeNegativeHot,
+      DEFAULT_VIZ_NETWORK_COLORS.edgeNegativeHot,
+    );
+    setHex(
+      this.colEdgeInferMuted,
+      next.edgeInferMuted,
+      DEFAULT_VIZ_NETWORK_COLORS.edgeInferMuted,
+    );
+    setHex(
+      this.colEdgeTrainRecent,
+      next.edgeTrainRecent,
+      DEFAULT_VIZ_NETWORK_COLORS.edgeTrainRecent,
+    );
+    const emissive = this.colNeuronEmissive;
+    const intensity = this.idleDimmed
+      ? this.networkColors.neuronEmissiveIntensityIdle
+      : this.networkColors.neuronEmissiveIntensityActive;
+    for (const mesh of this.meshes) {
+      const mat = mesh.material as THREE.MeshPhongMaterial;
+      mat.emissive.copy(emissive);
+      mat.emissiveIntensity = intensity;
+    }
+  }
+
+  setHiddenLayerLayout(index: number, layout: HiddenLayerVizLayout): void {
     if (index < 0 || index >= this.hiddenLayouts.length) return;
     if (this.hiddenLayouts[index] === layout) return;
     this.hiddenLayouts[index] = layout;
@@ -385,12 +474,7 @@ export class Network3D {
     if (this.inputLayerLayout === layout) return;
     this.inputLayerLayout = layout;
     const x = 0;
-    placeInputLayer784(
-      this.positions[0]!,
-      x,
-      layout,
-      this.inputLayerScale,
-    );
+    placeInputLayer784(this.positions[0]!, x, layout, this.inputLayerScale);
   }
 
   setInputLayerLayoutScale(scale: number): void {
@@ -399,12 +483,7 @@ export class Network3D {
     if (this.inputLayerScale === s) return;
     this.inputLayerScale = s;
     const x = 0;
-    placeInputLayer784(
-      this.positions[0]!,
-      x,
-      this.inputLayerLayout,
-      s,
-    );
+    placeInputLayer784(this.positions[0]!, x, this.inputLayerLayout, s);
   }
 
   setHiddenLayerLayoutScale(index: number, scale: number): void {
@@ -467,7 +546,9 @@ export class Network3D {
   setIdleDim(dim: boolean): void {
     if (this.idleDimmed === dim) return;
     this.idleDimmed = dim;
-    const emissiveIntensity = dim ? 0.28 : 1.9;
+    const emissiveIntensity = dim
+      ? this.networkColors.neuronEmissiveIntensityIdle
+      : this.networkColors.neuronEmissiveIntensityActive;
     for (const mesh of this.meshes) {
       const mat = mesh.material as THREE.MeshPhongMaterial;
       mat.emissiveIntensity = emissiveIntensity;
@@ -529,9 +610,12 @@ export class Network3D {
           this.dummy.scale.setScalar(s);
           this.dummy.updateMatrix();
           mesh.setMatrixAt(i, this.dummy.matrix);
-          arr[i * 3 + 0] = 0.2 + 0.4 * t;
-          arr[i * 3 + 1] = 0.45 + 0.4 * t;
-          arr[i * 3 + 2] = 0.85 + 0.15 * t;
+          this.scratchNeuronColor
+            .copy(this.colNeuronOutputCold)
+            .lerp(this.colNeuronOutputHot, t);
+          arr[i * 3 + 0] = this.scratchNeuronColor.r;
+          arr[i * 3 + 1] = this.scratchNeuronColor.g;
+          arr[i * 3 + 2] = this.scratchNeuronColor.b;
         }
         let best = 0;
         let bestVal = -Infinity;
@@ -626,17 +710,23 @@ export class Network3D {
           this.dummy.updateMatrix();
           mesh.setMatrixAt(i, this.dummy.matrix);
           if (L === 0) {
-            const c0 = 0.12 + 0.25 * t;
-            const c1 = 0.35 + 0.45 * t;
-            const c2 = 0.8 + 0.2 * t;
+            this.scratchNeuronColor
+              .copy(this.colNeuronInputCold)
+              .lerp(this.colNeuronInputHot, t);
             const f = t * t;
-            arr[i * 3 + 0] = c0 + (1 - c0) * f;
-            arr[i * 3 + 1] = c1 + (1 - c1) * f;
-            arr[i * 3 + 2] = c2 + (1 - c2) * f;
+            arr[i * 3 + 0] =
+              this.scratchNeuronColor.r + (1 - this.scratchNeuronColor.r) * f;
+            arr[i * 3 + 1] =
+              this.scratchNeuronColor.g + (1 - this.scratchNeuronColor.g) * f;
+            arr[i * 3 + 2] =
+              this.scratchNeuronColor.b + (1 - this.scratchNeuronColor.b) * f;
           } else {
-            arr[i * 3 + 0] = 0.12 + 0.25 * t;
-            arr[i * 3 + 1] = 0.35 + 0.45 * t;
-            arr[i * 3 + 2] = 0.8 + 0.2 * t;
+            this.scratchNeuronColor
+              .copy(this.colNeuronHiddenCold)
+              .lerp(this.colNeuronHiddenHot, t);
+            arr[i * 3 + 0] = this.scratchNeuronColor.r;
+            arr[i * 3 + 1] = this.scratchNeuronColor.g;
+            arr[i * 3 + 2] = this.scratchNeuronColor.b;
           }
         }
       }
@@ -779,22 +869,31 @@ export class Network3D {
             const tI = 0.15 + 0.85 * tMem[k]!;
             const tAge = 1 - ageArr[k]! / (this.edgeRecentWindow + 1);
             const mul = Math.pow(tAge, 0.7);
-            r = 0.95 * tI * mul;
-            g = 0.62 * tI * mul;
-            b = 0.18 * tI * mul;
+            this.scratchNeuronColor
+              .copy(this.colEdgeTrainRecent)
+              .multiplyScalar(tI * mul);
+            r = Math.min(1, this.scratchNeuronColor.r);
+            g = Math.min(1, this.scratchNeuronColor.g);
+            b = Math.min(1, this.scratchNeuronColor.b);
           } else if (w >= 0) {
-            r = 0.25 + 0.75 * t;
-            g = 0.14 + 0.58 * t;
-            b = 0.07 + 0.16 * t;
+            this.scratchNeuronColor
+              .copy(this.colEdgePosCold)
+              .lerp(this.colEdgePosHot, t);
+            r = this.scratchNeuronColor.r;
+            g = this.scratchNeuronColor.g;
+            b = this.scratchNeuronColor.b;
           } else {
-            r = 0.06 + 0.28 * t;
-            g = 0.22 + 0.48 * t;
-            b = 0.32 + 0.68 * t;
+            this.scratchNeuronColor
+              .copy(this.colEdgeNegCold)
+              .lerp(this.colEdgeNegHot, t);
+            r = this.scratchNeuronColor.r;
+            g = this.scratchNeuronColor.g;
+            b = this.scratchNeuronColor.b;
           }
         } else if (this.edgeFocusMode === 'infer') {
-          r = 0.05;
-          g = 0.07;
-          b = 0.09;
+          r = this.colEdgeInferMuted.r;
+          g = this.colEdgeInferMuted.g;
+          b = this.colEdgeInferMuted.b;
         }
         const i = k * 6;
         const pFrom = this.positions[L][ref.from];

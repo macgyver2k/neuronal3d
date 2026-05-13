@@ -19,6 +19,7 @@ import {
 } from '../../viz/network3d';
 import type {
   VizLightColorSettings,
+  VizNetworkColorSettings,
   VizSceneColorSettings,
 } from '../../viz/viz-appearance';
 import { NeuronalAppService } from '../core/neuronal-app.service';
@@ -199,6 +200,369 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
                   class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
                   >{{ model().activeNeuronMaxScaleMul | number: '1.0-2' }}</span
                 >
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Neuronen (Leuchten)">
+            <div class="flex flex-col gap-2.5">
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizNeuronEmissive"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Emissive</label
+                >
+                <input
+                  id="vizNeuronEmissive"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.neuronEmissive"
+                  (change)="onNetworkColorHex('neuronEmissive', $event)"
+                  title="Leuchtfarbe der Neuronen"
+                />
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vizNeuronEmissiveAct"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Intensität (aktiv)</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vizNeuronEmissiveAct"
+                    type="range"
+                    min="0.05"
+                    max="4"
+                    step="0.05"
+                    [value]="
+                      model().networkColors.neuronEmissiveIntensityActive
+                    "
+                    (input)="
+                      onNetworkNumber('neuronEmissiveIntensityActive', $event)
+                    "
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-10 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().networkColors.neuronEmissiveIntensityActive
+                        | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vizNeuronEmissiveIdle"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Intensität (ruhend)</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vizNeuronEmissiveIdle"
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="0.02"
+                    [value]="model().networkColors.neuronEmissiveIntensityIdle"
+                    (input)="
+                      onNetworkNumber('neuronEmissiveIntensityIdle', $event)
+                    "
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-10 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().networkColors.neuronEmissiveIntensityIdle
+                        | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Neuronen (Aktivität)">
+            <div class="flex flex-col gap-2.5">
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Zwischenlagen kalt</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.neuronHiddenCold"
+                  (change)="onNetworkColorHex('neuronHiddenCold', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Zwischenlagen warm</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.neuronHiddenHot"
+                  (change)="onNetworkColorHex('neuronHiddenHot', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Eingabe kalt</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.neuronInputCold"
+                  (change)="onNetworkColorHex('neuronInputCold', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Eingabe warm</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.neuronInputHot"
+                  (change)="onNetworkColorHex('neuronInputHot', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Ausgabe kalt</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.neuronOutputCold"
+                  (change)="onNetworkColorHex('neuronOutputCold', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Ausgabe warm</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.neuronOutputHot"
+                  (change)="onNetworkColorHex('neuronOutputHot', $event)"
+                />
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Kanten (Gewichte)">
+            <div class="flex flex-col gap-2.5">
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Positiv schwach</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.edgePositiveCold"
+                  (change)="onNetworkColorHex('edgePositiveCold', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Positiv stark</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.edgePositiveHot"
+                  (change)="onNetworkColorHex('edgePositiveHot', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Negativ schwach</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.edgeNegativeCold"
+                  (change)="onNetworkColorHex('edgeNegativeCold', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Negativ stark</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.edgeNegativeHot"
+                  (change)="onNetworkColorHex('edgeNegativeHot', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Inferenz ausgeblendet</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.edgeInferMuted"
+                  (change)="onNetworkColorHex('edgeInferMuted', $event)"
+                />
+              </div>
+              <div
+                class="flex min-w-0 flex-wrap items-center justify-between gap-2"
+              >
+                <span class="text-[0.65rem] text-base-content/80"
+                  >Training (zuletzt)</span
+                >
+                <input
+                  type="color"
+                  class="border-base-300 bg-base-100 h-8 w-14 shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().networkColors.edgeTrainRecent"
+                  (change)="onNetworkColorHex('edgeTrainRecent', $event)"
+                />
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Nachbearbeitung">
+            <div class="flex flex-col gap-3">
+              <label
+                class="flex cursor-pointer items-center justify-between gap-2"
+              >
+                <span class="text-[0.68rem] font-medium text-base-content"
+                  >Bloom (Glow)</span
+                >
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  [checked]="model().postProcess.bloomEnabled"
+                  (change)="onPostBool('bloomEnabled', $event)"
+                />
+              </label>
+              <div class="min-w-0">
+                <label
+                  class="mb-1 block text-[0.65rem] font-medium text-base-content/90"
+                  >Bloom-Stärke</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max="3"
+                    step="0.02"
+                    [value]="model().postProcess.bloomStrength"
+                    (input)="onPostNumber('bloomStrength', $event)"
+                    class="range range-secondary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-9 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().postProcess.bloomStrength | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  class="mb-1 block text-[0.65rem] font-medium text-base-content/90"
+                  >Bloom-Radius</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    [value]="model().postProcess.bloomRadius"
+                    (input)="onPostNumber('bloomRadius', $event)"
+                    class="range range-secondary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-9 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().postProcess.bloomRadius | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  class="mb-1 block text-[0.65rem] font-medium text-base-content/90"
+                  >Bloom-Schwelle</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    [value]="model().postProcess.bloomThreshold"
+                    (input)="onPostNumber('bloomThreshold', $event)"
+                    class="range range-secondary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-9 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().postProcess.bloomThreshold | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <label
+                class="flex cursor-pointer items-center justify-between gap-2"
+              >
+                <span class="text-[0.68rem] font-medium text-base-content"
+                  >FXAA (Kantenglättung)</span
+                >
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  [checked]="model().postProcess.fxaaEnabled"
+                  (change)="onPostBool('fxaaEnabled', $event)"
+                />
+              </label>
+              <div class="min-w-0">
+                <label
+                  class="mb-1 block text-[0.65rem] font-medium text-base-content/90"
+                  >Belichtung (Tone mapping)</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    type="range"
+                    min="0.2"
+                    max="3"
+                    step="0.02"
+                    [value]="model().postProcess.toneMappingExposure"
+                    (input)="onPostNumber('toneMappingExposure', $event)"
+                    class="range range-accent flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-9 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().postProcess.toneMappingExposure | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
               </div>
             </div>
           </app-viz-settings-block>
@@ -407,6 +771,60 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
   protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
   protected readonly neuronMulStep = ACTIVE_NEURON_MAX_SCALE_MUL_STEP;
+
+  onNetworkColorHex(
+    key: Exclude<
+      keyof VizNetworkColorSettings,
+      'neuronEmissiveIntensityActive' | 'neuronEmissiveIntensityIdle'
+    >,
+    ev: Event,
+  ): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'color') return;
+    this.store.dispatch(
+      NeuronalActions.vizNetworkColorsPatch({
+        patch: { [key]: t.value } as Partial<VizNetworkColorSettings>,
+      }),
+    );
+  }
+
+  onNetworkNumber(
+    key: 'neuronEmissiveIntensityActive' | 'neuronEmissiveIntensityIdle',
+    ev: Event,
+  ): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'range') return;
+    const v = parseFloat(t.value);
+    if (!Number.isFinite(v)) return;
+    this.store.dispatch(
+      NeuronalActions.vizNetworkColorsPatch({ patch: { [key]: v } }),
+    );
+  }
+
+  onPostBool(key: 'bloomEnabled' | 'fxaaEnabled', ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'checkbox') return;
+    this.store.dispatch(
+      NeuronalActions.vizPostProcessPatch({ patch: { [key]: t.checked } }),
+    );
+  }
+
+  onPostNumber(
+    key:
+      | 'bloomStrength'
+      | 'bloomRadius'
+      | 'bloomThreshold'
+      | 'toneMappingExposure',
+    ev: Event,
+  ): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'range') return;
+    const v = parseFloat(t.value);
+    if (!Number.isFinite(v)) return;
+    this.store.dispatch(
+      NeuronalActions.vizPostProcessPatch({ patch: { [key]: v } }),
+    );
+  }
 
   onInputLayout(ev: Event): void {
     const t = ev.target;

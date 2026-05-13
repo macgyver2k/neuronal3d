@@ -1,6 +1,8 @@
 import { createActionGroup, emptyProps, props } from '@ngrx/store';
 import type {
   VizLightColorSettings,
+  VizNetworkColorSettings,
+  VizPostProcessSettings,
   VizSceneColorSettings,
 } from '../../../viz/viz-appearance';
 import type {
@@ -76,6 +78,12 @@ export const NeuronalActions = createActionGroup({
     'Viz Light Color Changed': props<{
       key: keyof VizLightColorSettings;
       color: string;
+    }>(),
+    'Viz Network Colors Patch': props<{
+      patch: Partial<VizNetworkColorSettings>;
+    }>(),
+    'Viz Post Process Patch': props<{
+      patch: Partial<VizPostProcessSettings>;
     }>(),
     'Ui Viz Immersive Toggled': emptyProps(),
   },
