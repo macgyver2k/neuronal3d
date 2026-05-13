@@ -761,7 +761,7 @@ function canvasToMnistPixels(): number[] {
   return out;
 }
 
-/** MNIST 28×28 (0…1, zeilenweise) aufs Zeichen-Canvas skalieren — hell = Tinte, wie bei manueller Eingabe. */
+/** MNIST 28×28 (0…1, zeilenweise) aufs Zeichen-Canvas — Originaldatensatz ist nur 28×28; Hochskalierung ohne Weichzeichnen = scharfe Pixelraster. */
 function paintMnistPixelsToInferCanvas(pixels: number[]): void {
   if (pixels.length !== 784) return;
   cancelLiveCanvasInferRaf();
@@ -791,7 +791,7 @@ function paintMnistPixelsToInferCanvas(pixels: number[]): void {
   tctx.putImageData(img, 0, 0);
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, cw, ch);
-  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tmp, 0, 0, cw, ch);
 }
 
