@@ -29,6 +29,7 @@ import {
   selectVizImmersiveUi,
   model as selectVizModel,
 } from '../store/neuronal/neuronal.selectors';
+import { DAISYUI_THEMES, isDaisyUiThemeName } from './daisy-theme';
 import { VizSettingsBlockComponent } from './viz-settings-block.component';
 
 @Component({
@@ -566,6 +567,36 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
               </div>
             </div>
           </app-viz-settings-block>
+          <app-viz-settings-block heading="3D-Farbschema (DaisyUI)">
+            <div class="flex flex-col gap-2">
+              <label
+                for="viz3dColorPreset"
+                class="text-[0.68rem] font-medium text-base-content/90"
+                >Vorlage für Szene, Licht und Netzwerkfarben</label
+              >
+              <select
+                id="viz3dColorPreset"
+                class="select select-bordered select-sm w-full max-w-full text-sm"
+                [value]="colorPresetSelectValue()"
+                (change)="onColorPresetSelect($event)"
+              >
+                @if (model().colorPresetMode === 'custom') {
+                  <option value="__custom__" disabled>
+                    Benutzerdefiniert (Farben manuell geändert)
+                  </option>
+                }
+                <option value="followUi">Wie App-Theme</option>
+                @for (t of daisyThemeNames; track t) {
+                  <option [value]="t">{{ t }}</option>
+                }
+              </select>
+              <p class="text-[0.62rem] leading-snug text-base-content/55">
+                Die Werte werden aus den DaisyUI-Theme-Variablen abgeleitet. Bei
+                „Wie App-Theme“ aktualisiert sich die 3D-Palette automatisch,
+                wenn du das App-Theme wechselst.
+              </p>
+            </div>
+          </app-viz-settings-block>
           <app-viz-settings-block heading="Szene &amp; Umgebung">
             <div class="flex flex-col gap-2.5">
               <div class="flex min-w-0 items-center justify-between gap-2">
@@ -758,6 +789,8 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   private readonly store = inject(Store<AppState>);
   private readonly ngZone = inject(NgZone);
   private readonly neuronalApp = inject(NeuronalAppService);
+  /** DaisyUI-Themenamen für das 3D-Farbschema-Dropdown. */
+  protected readonly daisyThemeNames = [...DAISYUI_THEMES];
   protected readonly vibeCameraOn = signal(true);
   protected readonly scaleMin = HIDDEN_LAYER_VIZ_SCALE_MIN;
   protected readonly scaleMax = HIDDEN_LAYER_VIZ_SCALE_MAX;
@@ -824,6 +857,34 @@ export class NetworkViz3dShellComponent implements OnDestroy {
     this.store.dispatch(
       NeuronalActions.vizPostProcessPatch({ patch: { [key]: v } }),
     );
+  }
+
+  protected colorPresetSelectValue(): string {
+    const m = this.model();
+    if (m.colorPresetMode === 'custom') return '__custom__';
+    if (m.colorPresetMode === 'followUi') return 'followUi';
+    return m.colorPresetFixedTheme;
+  }
+
+  onColorPresetSelect(ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLSelectElement)) return;
+    const v = t.value;
+    if (v === '__custom__') return;
+    if (v === 'followUi') {
+      this.store.dispatch(
+        NeuronalActions.viz3dColorPresetModeChanged({ mode: 'followUi' }),
+      );
+      return;
+    }
+    if (isDaisyUiThemeName(v)) {
+      this.store.dispatch(
+        NeuronalActions.viz3dColorPresetModeChanged({
+          mode: 'fixedTheme',
+          fixedTheme: v,
+        }),
+      );
+    }
   }
 
   onInputLayout(ev: Event): void {

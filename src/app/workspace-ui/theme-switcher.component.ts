@@ -5,10 +5,14 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { Store } from '@ngrx/store';
+import type { AppState } from '../store/app.state';
+import { NeuronalActions } from '../store/neuronal/neuronal.actions';
 import {
   DAISYUI_DEFAULT_THEME,
   DAISYUI_THEME_STORAGE_KEY,
   DAISYUI_THEMES,
+  isDaisyUiThemeName,
 } from './daisy-theme';
 
 @Component({
@@ -35,6 +39,7 @@ import {
 })
 export class ThemeSwitcherComponent {
   private readonly doc = inject(DOCUMENT);
+  private readonly store = inject(Store<AppState>);
   readonly themes = DAISYUI_THEMES;
   readonly currentTheme = signal(
     this.doc.documentElement.getAttribute('data-theme') ??
@@ -44,6 +49,7 @@ export class ThemeSwitcherComponent {
   onThemePick(ev: Event): void {
     const el = ev.target as HTMLSelectElement;
     const next = el.value;
+    if (!isDaisyUiThemeName(next)) return;
     this.doc.documentElement.setAttribute('data-theme', next);
     try {
       localStorage.setItem(DAISYUI_THEME_STORAGE_KEY, next);
@@ -51,5 +57,8 @@ export class ThemeSwitcherComponent {
       void 0;
     }
     this.currentTheme.set(next);
+    this.store.dispatch(
+      NeuronalActions.daisyUiAppThemeChanged({ theme: next }),
+    );
   }
 }

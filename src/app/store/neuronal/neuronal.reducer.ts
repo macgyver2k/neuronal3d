@@ -12,12 +12,17 @@ import {
   isValidHexColor6,
   mergeVizNetworkColors,
   mergeVizPostProcess,
+  vizNetworkPatchHasHexColor,
 } from '../../../viz/viz-appearance';
 import { EPOCH_TRACK_MAX_ROWS_PER_MODEL } from '../../core/epoch-storage';
 import type {
   PersistedEpochRow,
   StoredModelEntry,
 } from '../../core/model.types';
+import {
+  DAISYUI_DEFAULT_THEME,
+  isDaisyUiThemeName,
+} from '../../workspace-ui/daisy-theme';
 import { NeuronalActions } from './neuronal.actions';
 import {
   createInitialNeuronalState,
@@ -292,6 +297,7 @@ export const neuronalReducer = createReducer<NeuronalState>(
         ...s,
         viz3d: {
           ...s.viz3d,
+          colorPresetMode: 'custom',
           sceneColors: { ...s.viz3d.sceneColors, [key]: color },
         },
       };
@@ -306,6 +312,7 @@ export const neuronalReducer = createReducer<NeuronalState>(
         ...s,
         viz3d: {
           ...s.viz3d,
+          colorPresetMode: 'custom',
           lightColors: {
             ...s.viz3d.lightColors,
             [key]: color,
@@ -320,7 +327,49 @@ export const neuronalReducer = createReducer<NeuronalState>(
       ...s,
       viz3d: {
         ...s.viz3d,
+        colorPresetMode: vizNetworkPatchHasHexColor(patch)
+          ? 'custom'
+          : s.viz3d.colorPresetMode,
         networkColors: mergeVizNetworkColors(s.viz3d.networkColors, patch),
+      },
+    }),
+  ),
+  on(
+    NeuronalActions.viz3dColorPresetModeChanged,
+    (s, { mode, fixedTheme }): NeuronalState => {
+      if (mode === 'followUi') {
+        return {
+          ...s,
+          viz3d: { ...s.viz3d, colorPresetMode: 'followUi' },
+        };
+      }
+      const ft =
+        fixedTheme && isDaisyUiThemeName(fixedTheme)
+          ? fixedTheme
+          : DAISYUI_DEFAULT_THEME;
+      return {
+        ...s,
+        viz3d: {
+          ...s.viz3d,
+          colorPresetMode: 'fixedTheme',
+          colorPresetFixedTheme: ft,
+        },
+      };
+    },
+  ),
+  on(
+    NeuronalActions.viz3dDaisyPaletteApplied,
+    (
+      s,
+      { sceneColors, lightColors, networkColors, postProcessPatch },
+    ): NeuronalState => ({
+      ...s,
+      viz3d: {
+        ...s.viz3d,
+        sceneColors: { ...sceneColors },
+        lightColors: { ...lightColors },
+        networkColors: { ...networkColors },
+        postProcess: mergeVizPostProcess(s.viz3d.postProcess, postProcessPatch),
       },
     }),
   ),

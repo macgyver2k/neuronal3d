@@ -10,14 +10,45 @@ import {
   DEFAULT_VIZ_LIGHT_COLORS,
   DEFAULT_VIZ_POST_PROCESS,
   DEFAULT_VIZ_SCENE_COLORS,
+  isValidHexColor6,
+  relativeLuminanceHex,
   type VizLightColorSettings,
   type VizPostProcessSettings,
   type VizSceneColorSettings,
-  isValidHexColor6,
 } from './viz-appearance';
 
 function colorFromHex6(hex: string): THREE.Color {
   return new THREE.Color(parseInt(hex.slice(1), 16));
+}
+
+/** Referenz-Intensitäten (dunkle Szene); bei hellen Lichtfarben runterskalieren */
+const LIGHT_INTENSITY_BASE = {
+  hemi: 1.7,
+  ambient: 0.95,
+  key: 2.8,
+  fill: 1.6,
+  rim: 1.2,
+  point: 14,
+};
+
+/**
+ * Wenn Hemisphären-Boden und Himmel alle sehr hell sind (typisch helles Daisy-Theme),
+ * sonst würden die hohen Three-Intensitäten + Bloom alles ausfressen.
+ */
+function intensityScaleForLights(lc: VizLightColorSettings): number {
+  if (!isValidHexColor6(lc.hemiGround)) return 1;
+  const g = relativeLuminanceHex(lc.hemiGround);
+  if (g < 0.34) return 1;
+  const sky = isValidHexColor6(lc.hemiSky)
+    ? relativeLuminanceHex(lc.hemiSky)
+    : g;
+  const amb = isValidHexColor6(lc.ambient)
+    ? relativeLuminanceHex(lc.ambient)
+    : g;
+  const mx = Math.max(sky, amb, g);
+  if (mx < 0.52) return 1;
+  if (mx > 0.9) return 0.32;
+  return 1 - ((mx - 0.52) / (0.9 - 0.52)) * (1 - 0.32);
 }
 
 export function createScene(container: HTMLElement): {
@@ -394,6 +425,17 @@ export function createScene(container: HTMLElement): {
   };
 
   const applyVizLightColors = (next: VizLightColorSettings): void => {
+    const sc = intensityScaleForLights(next);
+    hemi.intensity = LIGHT_INTENSITY_BASE.hemi * sc;
+    ambient.intensity = LIGHT_INTENSITY_BASE.ambient * sc;
+    key.intensity = LIGHT_INTENSITY_BASE.key * sc;
+    fill.intensity = LIGHT_INTENSITY_BASE.fill * sc;
+    rim.intensity = LIGHT_INTENSITY_BASE.rim * sc;
+    const pt = Math.min(
+      8.5,
+      LIGHT_INTENSITY_BASE.point * sc * (0.45 + 0.55 * sc),
+    );
+    backAccent.intensity = pt;
     if (isValidHexColor6(next.hemiSky)) {
       hemi.color.setHex(parseInt(next.hemiSky.slice(1), 16));
     }

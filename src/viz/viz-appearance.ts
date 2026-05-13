@@ -34,6 +34,20 @@ export function isValidHexColor6(s: string): boolean {
   return typeof s === 'string' && /^#[0-9A-Fa-f]{6}$/.test(s);
 }
 
+/** WCAG-relative sRGB-Luminanz (0…1), für Belichtungsheuristik */
+export function relativeLuminanceHex(hex: string): number {
+  if (!isValidHexColor6(hex)) return 0;
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c8: number): number => {
+    const x = c8 / 255;
+    return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  };
+  const r = lin((n >> 16) & 255);
+  const g = lin((n >> 8) & 255);
+  const b = lin(n & 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 /** Farben für Neuronen (Körper über Aktivität) und Kanten (Gewichte / Fokus). */
 export type VizNetworkColorSettings = {
   /** Emissive Grundton der Neuron-Kugeln (wirkt wie Leuchten). */
@@ -91,7 +105,7 @@ export const DEFAULT_VIZ_POST_PROCESS: VizPostProcessSettings = {
   toneMappingExposure: 1.35,
 };
 
-const NETWORK_COLOR_KEYS = [
+export const VIZ_NETWORK_COLOR_HEX_KEYS = [
   'neuronEmissive',
   'neuronHiddenCold',
   'neuronHiddenHot',
@@ -107,12 +121,21 @@ const NETWORK_COLOR_KEYS = [
   'edgeTrainRecent',
 ] as const satisfies readonly (keyof VizNetworkColorSettings)[];
 
+export function vizNetworkPatchHasHexColor(
+  patch: Partial<VizNetworkColorSettings>,
+): boolean {
+  for (const k of VIZ_NETWORK_COLOR_HEX_KEYS) {
+    if (typeof patch[k] === 'string') return true;
+  }
+  return false;
+}
+
 export function mergeVizNetworkColors(
   base: VizNetworkColorSettings,
   patch: Partial<VizNetworkColorSettings>,
 ): VizNetworkColorSettings {
   const next = { ...base };
-  for (const k of NETWORK_COLOR_KEYS) {
+  for (const k of VIZ_NETWORK_COLOR_HEX_KEYS) {
     const v = patch[k];
     if (typeof v === 'string' && isValidHexColor6(v)) next[k] = v;
   }

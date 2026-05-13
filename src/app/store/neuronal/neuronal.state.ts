@@ -19,6 +19,10 @@ import type {
   PersistedEpochRow,
   StoredModelCollection,
 } from '../../core/model.types';
+import {
+  DAISYUI_DEFAULT_THEME,
+  type DaisyUiThemeName,
+} from '../../workspace-ui/daisy-theme';
 
 const emptyModelCollection = (): StoredModelCollection => ({
   version: 3,
@@ -26,12 +30,18 @@ const emptyModelCollection = (): StoredModelCollection => ({
   models: [],
 });
 
+export type Viz3dColorPresetMode = 'followUi' | 'fixedTheme' | 'custom';
+
 export type Viz3dState = {
   inputLayerLayout: InputLayerVizLayout;
   inputLayerScale: number;
   hiddenLayerLayouts: readonly [HiddenLayerVizLayout, HiddenLayerVizLayout];
   hiddenLayerScales: readonly [number, number];
   activeNeuronMaxScaleMul: number;
+  /** Preset für Szene-, Licht- und Netzwerkfarben aus DaisyUI-Themes. */
+  colorPresetMode: Viz3dColorPresetMode;
+  /** Bei `fixedTheme`: welches DaisyUI-Theme als Farbvorlage dient. */
+  colorPresetFixedTheme: DaisyUiThemeName;
   sceneColors: VizSceneColorSettings;
   lightColors: VizLightColorSettings;
   networkColors: VizNetworkColorSettings;
@@ -48,6 +58,8 @@ export function createInitialViz3dState(): Viz3dState {
       HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
     ],
     activeNeuronMaxScaleMul: ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
+    colorPresetMode: 'followUi',
+    colorPresetFixedTheme: DAISYUI_DEFAULT_THEME,
     sceneColors: { ...DEFAULT_VIZ_SCENE_COLORS },
     lightColors: { ...DEFAULT_VIZ_LIGHT_COLORS },
     networkColors: { ...DEFAULT_VIZ_NETWORK_COLORS },

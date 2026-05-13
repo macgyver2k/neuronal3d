@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import { inject, Injectable, NgZone } from '@angular/core';
 import { Actions, createEffect, ofType } from '@ngrx/effects';
 import { Store } from '@ngrx/store';
@@ -5,9 +6,11 @@ import {
   asyncScheduler,
   concatMap,
   debounceTime,
+  EMPTY,
   exhaustMap,
   filter,
   from,
+  mergeMap,
   of,
   skip,
   switchMap,
@@ -15,6 +18,7 @@ import {
   withLatestFrom,
 } from 'rxjs';
 import { observeOn } from 'rxjs/operators';
+import { sampleDaisyThemeVizPalette } from '../../../viz/daisy-viz-palette';
 import { createFreshStoredModelEntry } from '../../core/create-fresh-model-entry';
 import { downloadJsonFile } from '../../core/download-json';
 import { clearEpochTrackLocalStorageSync } from '../../core/epoch-storage';
@@ -24,6 +28,7 @@ import { NeuronalAppService } from '../../core/neuronal-app.service';
 import { NeuronalEpochsIdbService } from '../../core/neuronal-epochs-idb.service';
 import { ensureNeuronalDataLayout } from '../../core/neuronal-indexed-db';
 import { NeuronalModelsIdbService } from '../../core/neuronal-models-idb.service';
+import { readCurrentDaisyThemeFromDocument } from '../../workspace-ui/daisy-theme';
 import type { AppState } from '../app.state';
 import { NeuronalActions } from './neuronal.actions';
 import {
@@ -37,10 +42,64 @@ export class NeuronalEffects {
   private readonly store = inject(Store<AppState>);
   private readonly actions$ = inject(Actions);
   private readonly zone = inject(NgZone);
+  private readonly doc = inject(DOCUMENT);
   private readonly app = inject(NeuronalAppInstance);
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly modelsIdb = inject(NeuronalModelsIdbService);
   private readonly epochsIdb = inject(NeuronalEpochsIdbService);
+
+  viz3dBootstrapDaisySync$ = createEffect(() =>
+    of(NeuronalActions.viz3dColorsSyncFromDaisyRequested()),
+  );
+
+  viz3dDaisyPaletteSync$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(
+        NeuronalActions.daisyUiAppThemeChanged,
+        NeuronalActions.viz3dColorsSyncFromDaisyRequested,
+        NeuronalActions.viz3dColorPresetModeChanged,
+      ),
+      withLatestFrom(this.store.select(selectNeuronalState)),
+      mergeMap(([a, n]) => {
+        if (n.viz3d.colorPresetMode === 'custom') return EMPTY;
+        if ('theme' in a && n.viz3d.colorPresetMode !== 'followUi') {
+          return EMPTY;
+        }
+        const theme =
+          n.viz3d.colorPresetMode === 'fixedTheme'
+            ? n.viz3d.colorPresetFixedTheme
+            : 'theme' in a
+              ? a.theme
+              : readCurrentDaisyThemeFromDocument(this.doc);
+        const sampled = sampleDaisyThemeVizPalette(this.doc, theme);
+        return of(
+          NeuronalActions.viz3dDaisyPaletteApplied({
+            sceneColors: sampled.sceneColors,
+            lightColors: sampled.lightColors,
+            networkColors: sampled.networkColors,
+            postProcessPatch: sampled.postProcessPatch,
+          }),
+        );
+      }),
+    ),
+  );
+
+  viz3dDaisyPaletteAppliedToRuntime$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.viz3dDaisyPaletteApplied),
+        withLatestFrom(this.store.select(selectNeuronalState)),
+        tap(([, n]) => {
+          this.zone.runOutsideAngular(() => {
+            this.neuronalApp.onVizSceneColorsApply(n.viz3d.sceneColors);
+            this.neuronalApp.onVizLightColorsApply(n.viz3d.lightColors);
+            this.neuronalApp.onVizNetworkColorsApply(n.viz3d.networkColors);
+            this.neuronalApp.onVizPostProcessApply(n.viz3d.postProcess);
+          });
+        }),
+      ),
+    { dispatch: false },
+  );
 
   modelStoreFromIdbLoad$ = createEffect(() =>
     this.actions$.pipe(

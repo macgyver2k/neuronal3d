@@ -10,6 +10,7 @@ import type {
   StoredModelCollection,
   StoredModelEntry,
 } from '../../core/model.types';
+import type { DaisyUiThemeName } from '../../workspace-ui/daisy-theme';
 
 export const NeuronalActions = createActionGroup({
   source: 'Neuronal',
@@ -86,5 +87,17 @@ export const NeuronalActions = createActionGroup({
       patch: Partial<VizPostProcessSettings>;
     }>(),
     'Ui Viz Immersive Toggled': emptyProps(),
+    'Daisy Ui App Theme Changed': props<{ theme: DaisyUiThemeName }>(),
+    'Viz 3d Colors Sync From Daisy Requested': emptyProps(),
+    'Viz 3d Color Preset Mode Changed': props<{
+      mode: 'followUi' | 'fixedTheme';
+      fixedTheme?: DaisyUiThemeName;
+    }>(),
+    'Viz 3d Daisy Palette Applied': props<{
+      sceneColors: VizSceneColorSettings;
+      lightColors: VizLightColorSettings;
+      networkColors: VizNetworkColorSettings;
+      postProcessPatch: Partial<VizPostProcessSettings>;
+    }>(),
   },
 });
