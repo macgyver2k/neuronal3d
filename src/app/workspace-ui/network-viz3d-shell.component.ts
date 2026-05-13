@@ -1,4 +1,4 @@
-import { DecimalPipe } from '@angular/common';
+import { DecimalPipe, DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -29,7 +29,12 @@ import {
   selectVizImmersiveUi,
   model as selectVizModel,
 } from '../store/neuronal/neuronal.selectors';
-import { DAISYUI_THEMES, isDaisyUiThemeName } from './daisy-theme';
+import {
+  DAISYUI_THEMES,
+  isDaisyUiThemeName,
+  readCurrentDaisyThemeFromDocument,
+  writeDaisyUiAppThemeToDocument,
+} from './daisy-theme';
 import { VizSettingsBlockComponent } from './viz-settings-block.component';
 
 @Component({
@@ -779,6 +784,14 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
           >
             {{ vibeCameraOn() ? 'Kamera-Vibe aus' : 'Kamera-Vibe' }}
           </button>
+          <button
+            type="button"
+            class="pointer-events-auto btn btn-accent btn-sm shadow-lg"
+            [attr.aria-pressed]="themeRotateOn()"
+            (click)="toggleThemeRotate()"
+          >
+            {{ themeRotateOn() ? 'Theme-Rotation aus' : 'Theme-Rotation' }}
+          </button>
         </div>
       </div>
     </div>
@@ -786,12 +799,18 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NetworkViz3dShellComponent implements OnDestroy {
+  private static readonly THEME_ROTATE_MS = 4200;
+
+  private readonly doc = inject(DOCUMENT);
   private readonly store = inject(Store<AppState>);
   private readonly ngZone = inject(NgZone);
   private readonly neuronalApp = inject(NeuronalAppService);
   /** DaisyUI-Themenamen für das 3D-Farbschema-Dropdown. */
   protected readonly daisyThemeNames = [...DAISYUI_THEMES];
   protected readonly vibeCameraOn = signal(true);
+  protected readonly themeRotateOn = signal(false);
+  private themeRotateTimer: number | null = null;
+  private themeRotateIndex = 0;
   protected readonly scaleMin = HIDDEN_LAYER_VIZ_SCALE_MIN;
   protected readonly scaleMax = HIDDEN_LAYER_VIZ_SCALE_MAX;
   protected readonly scaleStep = HIDDEN_LAYER_VIZ_SCALE_STEP;
@@ -976,6 +995,7 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearThemeRotateTimer();
     this.neuronalApp.cancelPendingVizColorPreviews();
     const m = this.model();
     this.neuronalApp.onVizSceneColorsApply(m.sceneColors);
@@ -990,5 +1010,38 @@ export class NetworkViz3dShellComponent implements OnDestroy {
     const next = this.neuronalApp.toggleVibeCameraState(this.vibeCameraOn());
     if (next === null) return;
     this.vibeCameraOn.set(next);
+  }
+
+  toggleThemeRotate(): void {
+    if (this.themeRotateOn()) {
+      this.clearThemeRotateTimer();
+      this.themeRotateOn.set(false);
+      return;
+    }
+    this.themeRotateOn.set(true);
+    const current = readCurrentDaisyThemeFromDocument(this.doc);
+    const idx = DAISYUI_THEMES.indexOf(current);
+    this.themeRotateIndex = idx >= 0 ? idx : 0;
+    const tick = (): void => {
+      this.themeRotateIndex =
+        (this.themeRotateIndex + 1) % DAISYUI_THEMES.length;
+      const next = DAISYUI_THEMES[this.themeRotateIndex];
+      writeDaisyUiAppThemeToDocument(this.doc, next);
+      this.ngZone.run(() => {
+        this.store.dispatch(
+          NeuronalActions.daisyUiAppThemeChanged({ theme: next }),
+        );
+      });
+    };
+    this.themeRotateTimer = window.setInterval(
+      tick,
+      NetworkViz3dShellComponent.THEME_ROTATE_MS,
+    );
+  }
+
+  private clearThemeRotateTimer(): void {
+    if (this.themeRotateTimer === null) return;
+    window.clearInterval(this.themeRotateTimer);
+    this.themeRotateTimer = null;
   }
 }

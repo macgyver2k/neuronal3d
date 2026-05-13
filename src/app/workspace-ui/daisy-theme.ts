@@ -69,3 +69,16 @@ export function readCurrentDaisyThemeFromDocument(
     doc.documentElement.getAttribute('data-theme') ?? DAISYUI_DEFAULT_THEME;
   return isDaisyUiThemeName(raw) ? raw : DAISYUI_DEFAULT_THEME;
 }
+
+/** `data-theme` am Root setzen und optional in `localStorage` spiegeln (wie Theme-Switcher). */
+export function writeDaisyUiAppThemeToDocument(
+  doc: Document,
+  theme: DaisyUiThemeName,
+): void {
+  doc.documentElement.setAttribute('data-theme', theme);
+  try {
+    localStorage.setItem(DAISYUI_THEME_STORAGE_KEY, theme);
+  } catch {
+    void 0;
+  }
+}

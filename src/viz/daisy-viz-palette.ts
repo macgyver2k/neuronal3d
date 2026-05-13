@@ -147,6 +147,40 @@ export function readCssColorVarToHex(
   return fromResolved ?? fromVar ?? '#808080';
 }
 
+/** Extrem dunkle Daisy-Themes (z. B. „black“): Primary und Szene fast #000 → Netz in der Nebelfarbe unsichtbar. */
+function ensureDaisyVizPaletteContrast(
+  sceneColors: VizSceneColorSettings,
+  networkColors: VizNetworkColorSettings,
+): {
+  sceneColors: VizSceneColorSettings;
+  networkColors: VizNetworkColorSettings;
+} {
+  let sc = sceneColors;
+  let nc = networkColors;
+  const lBg0 = relativeLuminanceHex(sc.backgroundFog);
+  if (lBg0 < 0.06) {
+    sc = {
+      ...sc,
+      backgroundFog: lightenHex(sc.backgroundFog, 0.2),
+      floor: lightenHex(sc.floor, 0.16),
+    };
+  }
+  const lBg = relativeLuminanceHex(sc.backgroundFog);
+  const lEm = relativeLuminanceHex(nc.neuronEmissive);
+  if (lBg < 0.16 && lEm < 0.16 && Math.abs(lBg - lEm) < 0.048) {
+    const u = 0.38;
+    nc = mergeVizNetworkColors(nc, {
+      neuronEmissive: lightenHex(nc.neuronEmissive, u),
+      neuronHiddenCold: lightenHex(nc.neuronHiddenCold, u * 0.85),
+      neuronHiddenHot: lightenHex(nc.neuronHiddenHot, u * 0.45),
+      neuronInputCold: lightenHex(nc.neuronInputCold, u * 0.85),
+      neuronOutputCold: lightenHex(nc.neuronOutputCold, u * 0.75),
+      edgeInferMuted: lightenHex(nc.edgeInferMuted, u * 0.55),
+    });
+  }
+  return { sceneColors: sc, networkColors: nc };
+}
+
 export function sampleDaisyThemeVizPalette(
   doc: Document,
   theme: DaisyUiThemeName,
@@ -333,5 +367,13 @@ export function sampleDaisyThemeVizPalette(
     edgeTrainRecent: mixHex(warning, error, 0.35),
   });
 
-  return { sceneColors, lightColors, networkColors, postProcessPatch };
+  const { sceneColors: scVis, networkColors: netVis } =
+    ensureDaisyVizPaletteContrast(sceneColors, networkColors);
+
+  return {
+    sceneColors: scVis,
+    lightColors,
+    networkColors: netVis,
+    postProcessPatch,
+  };
 }

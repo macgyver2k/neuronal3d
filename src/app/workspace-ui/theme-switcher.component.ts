@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   inject,
   signal,
 } from '@angular/core';
@@ -9,10 +10,10 @@ import { Store } from '@ngrx/store';
 import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
 import {
-  DAISYUI_DEFAULT_THEME,
-  DAISYUI_THEME_STORAGE_KEY,
   DAISYUI_THEMES,
   isDaisyUiThemeName,
+  readCurrentDaisyThemeFromDocument,
+  writeDaisyUiAppThemeToDocument,
 } from './daisy-theme';
 
 @Component({
@@ -39,24 +40,27 @@ import {
 })
 export class ThemeSwitcherComponent {
   private readonly doc = inject(DOCUMENT);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly store = inject(Store<AppState>);
   readonly themes = DAISYUI_THEMES;
-  readonly currentTheme = signal(
-    this.doc.documentElement.getAttribute('data-theme') ??
-      DAISYUI_DEFAULT_THEME,
-  );
+  readonly currentTheme = signal(readCurrentDaisyThemeFromDocument(this.doc));
+
+  constructor() {
+    const obs = new MutationObserver(() => {
+      this.currentTheme.set(readCurrentDaisyThemeFromDocument(this.doc));
+    });
+    obs.observe(this.doc.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    this.destroyRef.onDestroy(() => obs.disconnect());
+  }
 
   onThemePick(ev: Event): void {
     const el = ev.target as HTMLSelectElement;
     const next = el.value;
     if (!isDaisyUiThemeName(next)) return;
-    this.doc.documentElement.setAttribute('data-theme', next);
-    try {
-      localStorage.setItem(DAISYUI_THEME_STORAGE_KEY, next);
-    } catch {
-      void 0;
-    }
-    this.currentTheme.set(next);
+    writeDaisyUiAppThemeToDocument(this.doc, next);
     this.store.dispatch(
       NeuronalActions.daisyUiAppThemeChanged({ theme: next }),
     );
