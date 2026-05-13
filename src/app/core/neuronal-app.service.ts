@@ -1,16 +1,22 @@
-import { inject, Injectable } from "@angular/core";
-import { Router } from "@angular/router";
-import { Actions, createEffect, ofType } from "@ngrx/effects";
-import { Store } from "@ngrx/store";
-import { filter, firstValueFrom, take, withLatestFrom } from "rxjs";
-import { createNeuronalAppRuntime, type NeuronalAppRuntime } from "../../neuronal-app";
-import { routerUrlModelIdFromPath } from "./router-model-url";
-import { NeuronalAppInstance } from "./neuronal-app-instance";
-import type { AppState } from "../store/app.state";
-import { NeuronalActions } from "../store/neuronal/neuronal.actions";
-import { selectModelStoreHydrated, selectTrainingRunning } from "../store/neuronal/neuronal.selectors";
+import { inject, Injectable } from '@angular/core';
+import { Router } from '@angular/router';
+import { Actions, ofType } from '@ngrx/effects';
+import { Store } from '@ngrx/store';
+import { filter, firstValueFrom, take, withLatestFrom } from 'rxjs';
+import {
+  createNeuronalAppRuntime,
+  type NeuronalAppRuntime,
+} from '../../neuronal-app';
+import type { AppState } from '../store/app.state';
+import { NeuronalActions } from '../store/neuronal/neuronal.actions';
+import {
+  selectModelStoreHydrated,
+  selectTrainingRunning,
+} from '../store/neuronal/neuronal.selectors';
+import { NeuronalAppInstance } from './neuronal-app-instance';
+import { routerUrlModelIdFromPath } from './router-model-url';
 
-@Injectable({ providedIn: "root" })
+@Injectable({ providedIn: 'root' })
 export class NeuronalAppService {
   readonly store = inject(Store<AppState>);
   private readonly router = inject(Router);
@@ -43,7 +49,10 @@ export class NeuronalAppService {
     await this.hydrateOnce;
   }
 
-  async bindRuntime(root: HTMLElement, appInstance: NeuronalAppInstance): Promise<() => void> {
+  async bindRuntime(
+    root: HTMLElement,
+    appInstance: NeuronalAppInstance,
+  ): Promise<() => void> {
     await this.ensureStoreHydrated();
     this.runtime?.destroy();
     const next = createNeuronalAppRuntime(
@@ -53,7 +62,7 @@ export class NeuronalAppService {
       (selectedModelId) => {
         const before = routerUrlModelIdFromPath(this.router.url);
         if (before != null && before !== selectedModelId) {
-          void this.router.navigate(["/model", selectedModelId], {
+          void this.router.navigate(['/model', selectedModelId], {
             replaceUrl: true,
           });
         }
@@ -85,7 +94,9 @@ export class NeuronalAppService {
     this.runtime?.onModelSelectChange();
   };
   onActiveModelFromMenu = (id: string): void => {
-    this.store.dispatch(NeuronalActions.activeModelFromToolbarRequested({ id }));
+    this.store.dispatch(
+      NeuronalActions.activeModelFromToolbarRequested({ id }),
+    );
   };
   onNewModel = (): void => {
     this.runtime?.onNewModel();
@@ -147,4 +158,12 @@ export class NeuronalAppService {
   onActiveNeuronMaxScaleMulChange = (mul: number): void => {
     this.runtime?.onActiveNeuronMaxScaleMulChange(mul);
   };
+
+  /** @returns neuer Zustand, oder `null` wenn die Runtime noch nicht gebunden ist */
+  toggleVibeCameraState(current: boolean): boolean | null {
+    if (!this.runtime) return null;
+    const next = !current;
+    this.runtime.setVibeCameraMode(next);
+    return next;
+  }
 }

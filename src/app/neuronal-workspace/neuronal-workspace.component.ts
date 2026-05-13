@@ -10,18 +10,18 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
-import { filter, firstValueFrom, take } from 'rxjs';
 import { Store } from '@ngrx/store';
+import { filter, firstValueFrom, take } from 'rxjs';
 import { NeuronalAppInstance } from '../core/neuronal-app-instance';
 import { NeuronalAppService } from '../core/neuronal-app.service';
-import type { AppState } from '../store/app.state';
 import { routerUrlIsModelWorkspace } from '../core/router-model-url';
+import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
 import { selectShellHeaderActiveModel } from '../store/neuronal/neuronal.selectors';
 import { EpochTrackListComponent } from '../workspace-ui/epoch-track-list.component';
 import { InferPanelComponent } from '../workspace-ui/infer-panel.component';
-import { NeuronalModelBarComponent } from '../workspace-ui/neuronal-model-bar.component';
 import { NetworkViz3dShellComponent } from '../workspace-ui/network-viz3d-shell.component';
+import { NeuronalModelBarComponent } from '../workspace-ui/neuronal-model-bar.component';
 import { TrainingPanelComponent } from '../workspace-ui/training-panel.component';
 import { WorkspaceBrandComponent } from '../workspace-ui/workspace-brand.component';
 import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.component';
@@ -73,16 +73,16 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
         </div>
       </div>
       <div
-        class="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]"
+        class="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] xl:grid-rows-[minmax(0,1fr)]"
       >
         <main
-          class="grid min-h-0 min-w-0 grid-rows-[minmax(280px,1fr)] gap-3 max-xl:grid-rows-[minmax(260px,40vh)]"
+          class="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] gap-3"
         >
           <section
-            class="card border-base-300 bg-base-200 overflow-hidden rounded-box border shadow-xl"
+            class="card border-base-300 bg-base-200 h-full min-h-0 overflow-hidden rounded-box border shadow-xl"
             aria-label="Netzwerk-Visualisierung"
           >
-            <div class="card-body h-full min-h-0 p-0">
+            <div class="card-body flex h-full min-h-0 flex-col p-0">
               <app-network-viz3d-shell />
             </div>
           </section>
@@ -152,9 +152,12 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
   @ViewChild('appRoot', { read: ElementRef }) appRoot!: ElementRef<HTMLElement>;
   readonly sidebarTab = signal<'train' | 'infer'>('train');
   private readonly store = inject(Store<AppState>);
-  readonly headerModel = toSignal(this.store.select(selectShellHeaderActiveModel), {
-    initialValue: null,
-  });
+  readonly headerModel = toSignal(
+    this.store.select(selectShellHeaderActiveModel),
+    {
+      initialValue: null,
+    },
+  );
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly appInstance = inject(NeuronalAppInstance);
   private readonly router = inject(Router);

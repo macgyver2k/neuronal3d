@@ -1,12 +1,12 @@
-import { DecimalPipe } from "@angular/common";
+import { DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   inject,
-} from "@angular/core";
-import { toSignal } from "@angular/core/rxjs-interop";
-import { Store } from "@ngrx/store";
-import { VizSettingsBlockComponent } from "./viz-settings-block.component";
+  signal,
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { Store } from '@ngrx/store';
 import {
   ACTIVE_NEURON_MAX_SCALE_MUL_MAX,
   ACTIVE_NEURON_MAX_SCALE_MUL_MIN,
@@ -14,15 +14,20 @@ import {
   HIDDEN_LAYER_VIZ_SCALE_MAX,
   HIDDEN_LAYER_VIZ_SCALE_MIN,
   HIDDEN_LAYER_VIZ_SCALE_STEP,
-} from "../../viz/network3d";
-import type { AppState } from "../store/app.state";
-import { NeuronalActions } from "../store/neuronal/neuronal.actions";
-import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
+} from '../../viz/network3d';
+import { NeuronalAppService } from '../core/neuronal-app.service';
+import type { AppState } from '../store/app.state';
+import { NeuronalActions } from '../store/neuronal/neuronal.actions';
+import { model as selectVizModel } from '../store/neuronal/neuronal.selectors';
+import { VizSettingsBlockComponent } from './viz-settings-block.component';
 
 @Component({
-  selector: "app-network-viz3d-shell",
+  selector: 'app-network-viz3d-shell',
   standalone: true,
   imports: [DecimalPipe, VizSettingsBlockComponent],
+  host: {
+    class: 'block h-full min-h-0 min-w-0',
+  },
   template: `
     <div
       class="relative flex h-full min-h-0 w-full min-w-0 flex-row bg-base-300/25"
@@ -69,8 +74,9 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 (input)="onInputScale($event)"
                 class="range range-primary flex-1 min-w-0"
               />
-              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().inputLayerScale | number : "1.0-2" }}</span
+              <span
+                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                >{{ model().inputLayerScale | number: '1.0-2' }}</span
               >
             </div>
           </div>
@@ -112,8 +118,9 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 (input)="onScale(0, $event)"
                 class="range range-primary flex-1 min-w-0"
               />
-              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().hiddenLayerScales[0] | number : "1.0-2" }}</span
+              <span
+                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                >{{ model().hiddenLayerScales[0] | number: '1.0-2' }}</span
               >
             </div>
           </div>
@@ -155,8 +162,9 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 (input)="onScale(1, $event)"
                 class="range range-primary flex-1 min-w-0"
               />
-              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().hiddenLayerScales[1] | number : "1.0-2" }}</span
+              <span
+                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                >{{ model().hiddenLayerScales[1] | number: '1.0-2' }}</span
               >
             </div>
           </div>
@@ -179,24 +187,48 @@ import { model as selectVizModel } from "../store/neuronal/neuronal.selectors";
                 (input)="onActiveNeuronMaxMul($event)"
                 class="range range-primary flex-1 min-w-0"
               />
-              <span class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
-                >{{ model().activeNeuronMaxScaleMul | number : "1.0-2" }}</span
+              <span
+                class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                >{{ model().activeNeuronMaxScaleMul | number: '1.0-2' }}</span
               >
             </div>
           </div>
         </app-viz-settings-block>
       </aside>
-      <div id="viz" class="relative min-h-0 min-w-0 flex-1"></div>
+      <div
+        class="relative grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)]"
+      >
+        <div
+          id="viz"
+          class="col-start-1 row-start-1 min-h-0 min-w-0 size-full max-h-full"
+        ></div>
+        <div
+          class="pointer-events-none col-start-1 row-start-1 z-10 flex items-start justify-end p-2"
+        >
+          <button
+            type="button"
+            class="pointer-events-auto btn btn-secondary btn-sm shadow-lg"
+            [attr.aria-pressed]="vibeCameraOn()"
+            (click)="toggleVibeCamera()"
+          >
+            {{ vibeCameraOn() ? 'Kamera-Vibe aus' : 'Kamera-Vibe' }}
+          </button>
+        </div>
+      </div>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NetworkViz3dShellComponent {
   private readonly store = inject(Store<AppState>);
+  private readonly neuronalApp = inject(NeuronalAppService);
+  protected readonly vibeCameraOn = signal(true);
   protected readonly scaleMin = HIDDEN_LAYER_VIZ_SCALE_MIN;
   protected readonly scaleMax = HIDDEN_LAYER_VIZ_SCALE_MAX;
   protected readonly scaleStep = HIDDEN_LAYER_VIZ_SCALE_STEP;
-  readonly model = toSignal(this.store.select(selectVizModel), { requireSync: true });
+  readonly model = toSignal(this.store.select(selectVizModel), {
+    requireSync: true,
+  });
   protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
   protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
   protected readonly neuronMulStep = ACTIVE_NEURON_MAX_SCALE_MUL_STEP;
@@ -204,36 +236,52 @@ export class NetworkViz3dShellComponent {
   onInputLayout(ev: Event): void {
     const t = ev.target;
     if (!(t instanceof HTMLSelectElement)) return;
-    this.store.dispatch(NeuronalActions.vizInputLayerLayoutChanged({ raw: t.value }));
+    this.store.dispatch(
+      NeuronalActions.vizInputLayerLayoutChanged({ raw: t.value }),
+    );
   }
 
   onInputScale(ev: Event): void {
     const t = ev.target;
-    if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'range') return;
     const v = parseFloat(t.value);
     if (!Number.isFinite(v)) return;
-    this.store.dispatch(NeuronalActions.vizInputLayerScaleChanged({ scale: v }));
+    this.store.dispatch(
+      NeuronalActions.vizInputLayerScaleChanged({ scale: v }),
+    );
   }
 
   onHiddenLayout(index: 0 | 1, ev: Event): void {
     const t = ev.target;
     if (!(t instanceof HTMLSelectElement)) return;
-    this.store.dispatch(NeuronalActions.vizHiddenLayerLayoutChanged({ index, raw: t.value }));
+    this.store.dispatch(
+      NeuronalActions.vizHiddenLayerLayoutChanged({ index, raw: t.value }),
+    );
   }
 
   onScale(index: 0 | 1, ev: Event): void {
     const t = ev.target;
-    if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'range') return;
     const v = parseFloat(t.value);
     if (!Number.isFinite(v)) return;
-    this.store.dispatch(NeuronalActions.vizHiddenLayerScaleChanged({ index, scale: v }));
+    this.store.dispatch(
+      NeuronalActions.vizHiddenLayerScaleChanged({ index, scale: v }),
+    );
   }
 
   onActiveNeuronMaxMul(ev: Event): void {
     const t = ev.target;
-    if (!(t instanceof HTMLInputElement) || t.type !== "range") return;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'range') return;
     const v = parseFloat(t.value);
     if (!Number.isFinite(v)) return;
-    this.store.dispatch(NeuronalActions.vizActiveNeuronMaxScaleMulChanged({ mul: v }));
+    this.store.dispatch(
+      NeuronalActions.vizActiveNeuronMaxScaleMulChanged({ mul: v }),
+    );
+  }
+
+  toggleVibeCamera(): void {
+    const next = this.neuronalApp.toggleVibeCameraState(this.vibeCameraOn());
+    if (next === null) return;
+    this.vibeCameraOn.set(next);
   }
 }

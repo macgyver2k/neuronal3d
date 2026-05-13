@@ -1,17 +1,15 @@
 import { Store } from '@ngrx/store';
-import {
-  modelMatchesExpectedLayout,
-} from './app/core/model-storage';
-import { NeuronalEpochsIdbService } from './app/core/neuronal-epochs-idb.service';
-import { NeuronalModelsIdbService } from './app/core/neuronal-models-idb.service';
+import { createFreshStoredModelEntry } from './app/core/create-fresh-model-entry';
+import { modelMatchesExpectedLayout } from './app/core/model-storage';
 import {
   EXPECTED_LAYER_HIDDEN,
   type PersistedEpochRow,
   type StoredModel,
   type StoredModelEntry,
 } from './app/core/model.types';
-import { createFreshStoredModelEntry } from './app/core/create-fresh-model-entry';
 import { NeuronalAppInstance } from './app/core/neuronal-app-instance';
+import { NeuronalEpochsIdbService } from './app/core/neuronal-epochs-idb.service';
+import { NeuronalModelsIdbService } from './app/core/neuronal-models-idb.service';
 import type { AppState } from './app/store/app.state';
 import { NeuronalActions } from './app/store/neuronal/neuronal.actions';
 import { selectNeuronalState } from './app/store/neuronal/neuronal.selectors';
@@ -28,9 +26,9 @@ import { trainLoop } from './train/trainer';
 import {
   HIDDEN_LAYER_VIZ_LAYOUTS,
   INPUT_LAYER_VIZ_LAYOUTS,
+  Network3D,
   type HiddenLayerVizLayout,
   type InputLayerVizLayout,
-  Network3D,
 } from './viz/network3d';
 import { animateLoop, createScene } from './viz/scene';
 
@@ -837,6 +835,7 @@ export type NeuronalAppRuntime = {
   onInputLayerLayoutChange: (raw: string) => void;
   onInputLayerLayoutScaleChange: (scale: number) => void;
   onActiveNeuronMaxScaleMulChange: (mul: number) => void;
+  setVibeCameraMode: (enabled: boolean) => void;
 };
 
 export function createNeuronalAppRuntime(
@@ -893,12 +892,12 @@ export function createNeuronalAppRuntime(
   ctx2d.lineJoin = 'round';
   ctx2d.strokeStyle = '#ffffff';
 
-  const { scene, controls, render, renderDisplay, dispose } = createScene(
-    el.viz,
-  );
+  const { scene, controls, render, renderDisplay, dispose, setVibeCameraMode } =
+    createScene(el.viz);
   renderSceneBound = render;
   renderDisplayBound = renderDisplay;
   disposeSceneBound = dispose;
+  setVibeCameraMode(true);
   const net3dInst = new Network3D(LAYER_SIZES);
   net3d = net3dInst;
   scene.add(net3dInst.root);
@@ -1236,7 +1235,9 @@ export function createNeuronalAppRuntime(
   return {
     destroy: () => {
       try {
-        void new NeuronalModelsIdbService().saveCollection(nLatest.modelCollection);
+        void new NeuronalModelsIdbService().saveCollection(
+          nLatest.modelCollection,
+        );
         void new NeuronalEpochsIdbService().saveEpochStore({
           version: 1,
           byModelId: nLatest.epochByModelId,
@@ -1284,5 +1285,6 @@ export function createNeuronalAppRuntime(
     onInputLayerLayoutChange,
     onInputLayerLayoutScaleChange,
     onActiveNeuronMaxScaleMulChange,
+    setVibeCameraMode,
   };
 }
