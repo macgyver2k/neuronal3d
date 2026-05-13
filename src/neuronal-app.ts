@@ -31,6 +31,11 @@ import {
   type InputLayerVizLayout,
 } from './viz/network3d';
 import { animateLoop, createScene } from './viz/scene';
+import {
+  isValidHexColor6,
+  type VizLightColorSettings,
+  type VizSceneColorSettings,
+} from './viz/viz-appearance';
 
 const LAYER_SIZES = [784, 64, 32, 10];
 const HIDDEN: number[] = [...EXPECTED_LAYER_HIDDEN];
@@ -835,6 +840,17 @@ export type NeuronalAppRuntime = {
   onInputLayerLayoutChange: (raw: string) => void;
   onInputLayerLayoutScaleChange: (scale: number) => void;
   onActiveNeuronMaxScaleMulChange: (mul: number) => void;
+  onVizSceneColorsApply: (colors: VizSceneColorSettings) => void;
+  onVizLightColorsApply: (colors: VizLightColorSettings) => void;
+  previewVizSceneColor: (
+    key: keyof VizSceneColorSettings,
+    color: string,
+  ) => void;
+  previewVizLightColor: (
+    key: keyof VizLightColorSettings,
+    color: string,
+  ) => void;
+  cancelPendingVizColorPreviews: () => void;
   setVibeCameraMode: (enabled: boolean) => void;
 };
 
@@ -877,10 +893,6 @@ export function createNeuronalAppRuntime(
     if (!id) return;
     selectModelById(id, 'Aktives Modell');
   };
-  appInstance.connect({
-    newModelFromToolbar: runNewModelFromToolbar,
-    activeModelFromToolbar: runActiveModelFromToolbar,
-  });
   setModelDropdownOpen(false);
   const ctxDraw = el.drawCanvas.getContext('2d');
   if (!ctxDraw) throw new Error('canvas');
@@ -892,8 +904,95 @@ export function createNeuronalAppRuntime(
   ctx2d.lineJoin = 'round';
   ctx2d.strokeStyle = '#ffffff';
 
-  const { scene, controls, render, renderDisplay, dispose, setVibeCameraMode } =
-    createScene(el.viz);
+  const {
+    scene,
+    controls,
+    render,
+    renderDisplay,
+    dispose,
+    setVibeCameraMode,
+    applyVizSceneColors,
+    applyVizLightColors,
+  } = createScene(el.viz);
+  applyVizSceneColors(nLatest.viz3d.sceneColors);
+  applyVizLightColors(nLatest.viz3d.lightColors);
+  let sceneColorBaseline: VizSceneColorSettings = {
+    ...nLatest.viz3d.sceneColors,
+  };
+  let lightColorBaseline: VizLightColorSettings = {
+    ...nLatest.viz3d.lightColors,
+  };
+
+  let sceneColorPreviewRaf = 0;
+  let sceneColorPreviewPatch: Partial<VizSceneColorSettings> = {};
+  let lightColorPreviewRaf = 0;
+  let lightColorPreviewPatch: Partial<VizLightColorSettings> = {};
+
+  const flushSceneColorPreview = (): void => {
+    if (Object.keys(sceneColorPreviewPatch).length === 0) return;
+    const merged: VizSceneColorSettings = { ...sceneColorBaseline };
+    (
+      Object.keys(sceneColorPreviewPatch) as (keyof VizSceneColorSettings)[]
+    ).forEach((k) => {
+      const v = sceneColorPreviewPatch[k];
+      if (v !== undefined && isValidHexColor6(v)) merged[k] = v;
+    });
+    sceneColorPreviewPatch = {};
+    applyVizSceneColors(merged);
+  };
+
+  const flushLightColorPreview = (): void => {
+    if (Object.keys(lightColorPreviewPatch).length === 0) return;
+    const merged: VizLightColorSettings = { ...lightColorBaseline };
+    (
+      Object.keys(lightColorPreviewPatch) as (keyof VizLightColorSettings)[]
+    ).forEach((k) => {
+      const v = lightColorPreviewPatch[k];
+      if (v !== undefined && isValidHexColor6(v)) merged[k] = v;
+    });
+    lightColorPreviewPatch = {};
+    applyVizLightColors(merged);
+  };
+
+  const cancelPendingVizColorPreviews = (): void => {
+    if (sceneColorPreviewRaf !== 0) {
+      cancelAnimationFrame(sceneColorPreviewRaf);
+      sceneColorPreviewRaf = 0;
+    }
+    sceneColorPreviewPatch = {};
+    if (lightColorPreviewRaf !== 0) {
+      cancelAnimationFrame(lightColorPreviewRaf);
+      lightColorPreviewRaf = 0;
+    }
+    lightColorPreviewPatch = {};
+  };
+
+  const previewVizSceneColor = (
+    key: keyof VizSceneColorSettings,
+    color: string,
+  ): void => {
+    if (!isValidHexColor6(color)) return;
+    sceneColorPreviewPatch = { ...sceneColorPreviewPatch, [key]: color };
+    if (sceneColorPreviewRaf !== 0) return;
+    sceneColorPreviewRaf = requestAnimationFrame(() => {
+      sceneColorPreviewRaf = 0;
+      flushSceneColorPreview();
+    });
+  };
+
+  const previewVizLightColor = (
+    key: keyof VizLightColorSettings,
+    color: string,
+  ): void => {
+    if (!isValidHexColor6(color)) return;
+    lightColorPreviewPatch = { ...lightColorPreviewPatch, [key]: color };
+    if (lightColorPreviewRaf !== 0) return;
+    lightColorPreviewRaf = requestAnimationFrame(() => {
+      lightColorPreviewRaf = 0;
+      flushLightColorPreview();
+    });
+  };
+
   renderSceneBound = render;
   renderDisplayBound = renderDisplay;
   disposeSceneBound = dispose;
@@ -902,6 +1001,13 @@ export function createNeuronalAppRuntime(
   net3d = net3dInst;
   scene.add(net3dInst.root);
   stopAnimCleanup = animateLoop(render, controls, tickViz);
+
+  // connect erst nach net3d/Renderloop: flushPending / Modellwahl dürfen nicht
+  // mitten in der synchronen Initialisierung Router + Store + Viz triggern.
+  appInstance.connect({
+    newModelFromToolbar: runNewModelFromToolbar,
+    activeModelFromToolbar: runActiveModelFromToolbar,
+  });
 
   const onDrawPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0 && e.button !== 2) return;
@@ -963,6 +1069,14 @@ export function createNeuronalAppRuntime(
     if (!net3d || !Number.isFinite(mul)) return;
     net3d.setActiveNeuronMaxScaleMul(mul);
     reapplyViz3dAfterLayoutChange();
+  };
+  const onVizSceneColorsApply = (colors: VizSceneColorSettings): void => {
+    sceneColorBaseline = { ...colors };
+    applyVizSceneColors(sceneColorBaseline);
+  };
+  const onVizLightColorsApply = (colors: VizLightColorSettings): void => {
+    lightColorBaseline = { ...colors };
+    applyVizLightColors(lightColorBaseline);
   };
   const onClearDraw = (): void => {
     ctx2d.fillStyle = '#000000';
@@ -1244,6 +1358,7 @@ export function createNeuronalAppRuntime(
         });
       } catch {}
       cancelLiveCanvasInferRaf();
+      cancelPendingVizColorPreviews();
       if (neuronalUiRaf !== 0) {
         cancelAnimationFrame(neuronalUiRaf);
         neuronalUiRaf = 0;
@@ -1285,6 +1400,11 @@ export function createNeuronalAppRuntime(
     onInputLayerLayoutChange,
     onInputLayerLayoutScaleChange,
     onActiveNeuronMaxScaleMulChange,
+    onVizSceneColorsApply,
+    onVizLightColorsApply,
+    previewVizSceneColor,
+    previewVizLightColor,
+    cancelPendingVizColorPreviews,
     setVibeCameraMode,
   };
 }

@@ -5,6 +5,12 @@ import {
   type HiddenLayerVizLayout,
   type InputLayerVizLayout,
 } from '../../../viz/network3d';
+import {
+  DEFAULT_VIZ_LIGHT_COLORS,
+  DEFAULT_VIZ_SCENE_COLORS,
+  type VizLightColorSettings,
+  type VizSceneColorSettings,
+} from '../../../viz/viz-appearance';
 import type {
   PersistedEpochRow,
   StoredModelCollection,
@@ -22,6 +28,8 @@ export type Viz3dState = {
   hiddenLayerLayouts: readonly [HiddenLayerVizLayout, HiddenLayerVizLayout];
   hiddenLayerScales: readonly [number, number];
   activeNeuronMaxScaleMul: number;
+  sceneColors: VizSceneColorSettings;
+  lightColors: VizLightColorSettings;
 };
 
 export function createInitialViz3dState(): Viz3dState {
@@ -34,6 +42,8 @@ export function createInitialViz3dState(): Viz3dState {
       HIDDEN_LAYER_VIZ_SCALE_DEFAULT,
     ],
     activeNeuronMaxScaleMul: ACTIVE_NEURON_MAX_SCALE_MUL_DEFAULT,
+    sceneColors: { ...DEFAULT_VIZ_SCENE_COLORS },
+    lightColors: { ...DEFAULT_VIZ_LIGHT_COLORS },
   };
 }
 

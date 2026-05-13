@@ -7,6 +7,10 @@ import {
   type HiddenLayerVizLayout,
   type InputLayerVizLayout,
 } from '../../../viz/network3d';
+import {
+  DEFAULT_VIZ_LIGHT_COLORS,
+  isValidHexColor6,
+} from '../../../viz/viz-appearance';
 import { EPOCH_TRACK_MAX_ROWS_PER_MODEL } from '../../core/epoch-storage';
 import type {
   PersistedEpochRow,
@@ -273,6 +277,37 @@ export const neuronalReducer = createReducer<NeuronalState>(
         viz3d: {
           ...s.viz3d,
           activeNeuronMaxScaleMul: clampActiveNeuronMaxScaleMul(mul),
+        },
+      };
+    },
+  ),
+  on(
+    NeuronalActions.vizSceneColorChanged,
+    (s, { key, color }): NeuronalState => {
+      if (!isValidHexColor6(color)) return s;
+      if (key !== 'backgroundFog' && key !== 'floor') return s;
+      return {
+        ...s,
+        viz3d: {
+          ...s.viz3d,
+          sceneColors: { ...s.viz3d.sceneColors, [key]: color },
+        },
+      };
+    },
+  ),
+  on(
+    NeuronalActions.vizLightColorChanged,
+    (s, { key, color }): NeuronalState => {
+      if (!isValidHexColor6(color)) return s;
+      if (!(key in DEFAULT_VIZ_LIGHT_COLORS)) return s;
+      return {
+        ...s,
+        viz3d: {
+          ...s.viz3d,
+          lightColors: {
+            ...s.viz3d.lightColors,
+            [key]: color,
+          },
         },
       };
     },

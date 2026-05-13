@@ -2,11 +2,21 @@ import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 import { Actions, ofType } from '@ngrx/effects';
 import { Store } from '@ngrx/store';
-import { filter, firstValueFrom, take, withLatestFrom } from 'rxjs';
+import {
+  asyncScheduler,
+  filter,
+  firstValueFrom,
+  take,
+  withLatestFrom,
+} from 'rxjs';
 import {
   createNeuronalAppRuntime,
   type NeuronalAppRuntime,
 } from '../../neuronal-app';
+import type {
+  VizLightColorSettings,
+  VizSceneColorSettings,
+} from '../../viz/viz-appearance';
 import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
 import {
@@ -33,7 +43,9 @@ export class NeuronalAppService {
         filter(([, running]) => !running),
       )
       .subscribe(([{ id }]) => {
-        this.appInstance.activeModelFromToolbar(id);
+        asyncScheduler.schedule(() =>
+          this.appInstance.activeModelFromToolbar(id),
+        );
       });
   }
 
@@ -157,6 +169,27 @@ export class NeuronalAppService {
   };
   onActiveNeuronMaxScaleMulChange = (mul: number): void => {
     this.runtime?.onActiveNeuronMaxScaleMulChange(mul);
+  };
+  onVizSceneColorsApply = (colors: VizSceneColorSettings): void => {
+    this.runtime?.onVizSceneColorsApply(colors);
+  };
+  onVizLightColorsApply = (colors: VizLightColorSettings): void => {
+    this.runtime?.onVizLightColorsApply(colors);
+  };
+  previewVizSceneColor = (
+    key: keyof VizSceneColorSettings,
+    color: string,
+  ): void => {
+    this.runtime?.previewVizSceneColor(key, color);
+  };
+  previewVizLightColor = (
+    key: keyof VizLightColorSettings,
+    color: string,
+  ): void => {
+    this.runtime?.previewVizLightColor(key, color);
+  };
+  cancelPendingVizColorPreviews = (): void => {
+    this.runtime?.cancelPendingVizColorPreviews();
   };
 
   /** @returns neuer Zustand, oder `null` wenn die Runtime noch nicht gebunden ist */

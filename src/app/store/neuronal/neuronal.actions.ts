@@ -1,5 +1,9 @@
 import { createActionGroup, emptyProps, props } from '@ngrx/store';
 import type {
+  VizLightColorSettings,
+  VizSceneColorSettings,
+} from '../../../viz/viz-appearance';
+import type {
   PersistedEpochRow,
   StoredModelCollection,
   StoredModelEntry,
@@ -65,6 +69,14 @@ export const NeuronalActions = createActionGroup({
     'Viz Hidden Layer Layout Changed': props<{ index: 0 | 1; raw: string }>(),
     'Viz Hidden Layer Scale Changed': props<{ index: 0 | 1; scale: number }>(),
     'Viz Active Neuron Max Scale Mul Changed': props<{ mul: number }>(),
+    'Viz Scene Color Changed': props<{
+      key: keyof VizSceneColorSettings;
+      color: string;
+    }>(),
+    'Viz Light Color Changed': props<{
+      key: keyof VizLightColorSettings;
+      color: string;
+    }>(),
     'Ui Viz Immersive Toggled': emptyProps(),
   },
 });

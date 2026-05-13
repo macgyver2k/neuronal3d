@@ -6,6 +6,17 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import {
+  DEFAULT_VIZ_LIGHT_COLORS,
+  DEFAULT_VIZ_SCENE_COLORS,
+  type VizLightColorSettings,
+  type VizSceneColorSettings,
+  isValidHexColor6,
+} from './viz-appearance';
+
+function colorFromHex6(hex: string): THREE.Color {
+  return new THREE.Color(parseInt(hex.slice(1), 16));
+}
 
 export function createScene(container: HTMLElement): {
   scene: THREE.Scene;
@@ -15,11 +26,17 @@ export function createScene(container: HTMLElement): {
   render: () => void;
   renderDisplay: () => void;
   setVibeCameraMode: (enabled: boolean) => void;
+  applyVizSceneColors: (next: VizSceneColorSettings) => void;
+  applyVizLightColors: (next: VizLightColorSettings) => void;
   dispose: () => void;
 } {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x2a3140);
-  scene.fog = new THREE.Fog(0x2a3140, 12, 40);
+  scene.background = colorFromHex6(DEFAULT_VIZ_SCENE_COLORS.backgroundFog);
+  scene.fog = new THREE.Fog(
+    parseInt(DEFAULT_VIZ_SCENE_COLORS.backgroundFog.slice(1), 16),
+    12,
+    40,
+  );
 
   const drawableSize = (): { w: number; h: number } => {
     const w = Math.max(1, Math.floor(container.clientWidth));
@@ -48,31 +65,54 @@ export function createScene(container: HTMLElement): {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.35;
 
-  const hemi = new THREE.HemisphereLight(0xd6e2ff, 0x4b5668, 1.7);
+  const hemi = new THREE.HemisphereLight(
+    parseInt(DEFAULT_VIZ_LIGHT_COLORS.hemiSky.slice(1), 16),
+    parseInt(DEFAULT_VIZ_LIGHT_COLORS.hemiGround.slice(1), 16),
+    1.7,
+  );
   scene.add(hemi);
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.95);
+  const ambient = new THREE.AmbientLight(
+    parseInt(DEFAULT_VIZ_LIGHT_COLORS.ambient.slice(1), 16),
+    0.95,
+  );
   scene.add(ambient);
 
-  const key = new THREE.DirectionalLight(0xfff7ef, 2.8);
+  const key = new THREE.DirectionalLight(
+    parseInt(DEFAULT_VIZ_LIGHT_COLORS.key.slice(1), 16),
+    2.8,
+  );
   key.position.set(7, 10, 8);
   scene.add(key);
 
-  const fill = new THREE.DirectionalLight(0xaec3ff, 1.6);
+  const fill = new THREE.DirectionalLight(
+    parseInt(DEFAULT_VIZ_LIGHT_COLORS.fill.slice(1), 16),
+    1.6,
+  );
   fill.position.set(-6, 4, -3);
   scene.add(fill);
 
-  const rim = new THREE.DirectionalLight(0x9df0ff, 1.2);
+  const rim = new THREE.DirectionalLight(
+    parseInt(DEFAULT_VIZ_LIGHT_COLORS.rim.slice(1), 16),
+    1.2,
+  );
   rim.position.set(-2, 7, 12);
   scene.add(rim);
 
-  const backAccent = new THREE.PointLight(0x5fd3ff, 14, 24, 2);
+  const backAccent = new THREE.PointLight(
+    parseInt(DEFAULT_VIZ_LIGHT_COLORS.backAccent.slice(1), 16),
+    14,
+    24,
+    2,
+  );
   backAccent.position.set(-4, 3, -10);
   scene.add(backAccent);
 
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(60, 96),
-    new THREE.MeshBasicMaterial({ color: 0x3d4658 }),
+    new THREE.MeshBasicMaterial({
+      color: parseInt(DEFAULT_VIZ_SCENE_COLORS.floor.slice(1), 16),
+    }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -3.2;
@@ -324,6 +364,46 @@ export function createScene(container: HTMLElement): {
     renderDisplay();
   };
 
+  const applyVizSceneColors = (next: VizSceneColorSettings): void => {
+    if (isValidHexColor6(next.backgroundFog)) {
+      const h = parseInt(next.backgroundFog.slice(1), 16);
+      (scene.background as THREE.Color).setHex(h);
+      const fog = scene.fog;
+      if (fog instanceof THREE.Fog) {
+        fog.color.setHex(h);
+      }
+    }
+    if (isValidHexColor6(next.floor)) {
+      (floor.material as THREE.MeshBasicMaterial).color.setHex(
+        parseInt(next.floor.slice(1), 16),
+      );
+    }
+  };
+
+  const applyVizLightColors = (next: VizLightColorSettings): void => {
+    if (isValidHexColor6(next.hemiSky)) {
+      hemi.color.setHex(parseInt(next.hemiSky.slice(1), 16));
+    }
+    if (isValidHexColor6(next.hemiGround)) {
+      hemi.groundColor.setHex(parseInt(next.hemiGround.slice(1), 16));
+    }
+    if (isValidHexColor6(next.ambient)) {
+      ambient.color.setHex(parseInt(next.ambient.slice(1), 16));
+    }
+    if (isValidHexColor6(next.key)) {
+      key.color.setHex(parseInt(next.key.slice(1), 16));
+    }
+    if (isValidHexColor6(next.fill)) {
+      fill.color.setHex(parseInt(next.fill.slice(1), 16));
+    }
+    if (isValidHexColor6(next.rim)) {
+      rim.color.setHex(parseInt(next.rim.slice(1), 16));
+    }
+    if (isValidHexColor6(next.backAccent)) {
+      backAccent.color.setHex(parseInt(next.backAccent.slice(1), 16));
+    }
+  };
+
   return {
     scene,
     camera,
@@ -332,6 +412,8 @@ export function createScene(container: HTMLElement): {
     render,
     renderDisplay,
     setVibeCameraMode,
+    applyVizSceneColors,
+    applyVizLightColors,
     dispose,
   };
 }

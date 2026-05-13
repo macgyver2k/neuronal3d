@@ -1,7 +1,8 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, NgZone } from '@angular/core';
 import { Actions, createEffect, ofType } from '@ngrx/effects';
 import { Store } from '@ngrx/store';
 import {
+  asyncScheduler,
   concatMap,
   debounceTime,
   exhaustMap,
@@ -10,18 +11,18 @@ import {
   of,
   skip,
   switchMap,
-  take,
   tap,
   withLatestFrom,
 } from 'rxjs';
+import { observeOn } from 'rxjs/operators';
+import { createFreshStoredModelEntry } from '../../core/create-fresh-model-entry';
 import { downloadJsonFile } from '../../core/download-json';
 import { clearEpochTrackLocalStorageSync } from '../../core/epoch-storage';
 import { clearModelStoreLocalStorageSync } from '../../core/model-storage';
-import { createFreshStoredModelEntry } from '../../core/create-fresh-model-entry';
-import { ensureNeuronalDataLayout } from '../../core/neuronal-indexed-db';
 import { NeuronalAppInstance } from '../../core/neuronal-app-instance';
 import { NeuronalAppService } from '../../core/neuronal-app.service';
 import { NeuronalEpochsIdbService } from '../../core/neuronal-epochs-idb.service';
+import { ensureNeuronalDataLayout } from '../../core/neuronal-indexed-db';
 import { NeuronalModelsIdbService } from '../../core/neuronal-models-idb.service';
 import type { AppState } from '../app.state';
 import { NeuronalActions } from './neuronal.actions';
@@ -35,6 +36,7 @@ import {
 export class NeuronalEffects {
   private readonly store = inject(Store<AppState>);
   private readonly actions$ = inject(Actions);
+  private readonly zone = inject(NgZone);
   private readonly app = inject(NeuronalAppInstance);
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly modelsIdb = inject(NeuronalModelsIdbService);
@@ -104,6 +106,7 @@ export class NeuronalEffects {
         ofType(NeuronalActions.activeModelFromToolbarRequested),
         withLatestFrom(this.store.select(selectTrainingRunning)),
         filter(([a, running]) => !running && a.id.length > 0),
+        observeOn(asyncScheduler),
         tap(([a]) => {
           this.app.activeModelFromToolbar(a.id);
         }),
@@ -337,6 +340,34 @@ export class NeuronalEffects {
         ofType(NeuronalActions.vizActiveNeuronMaxScaleMulChanged),
         tap(({ mul }) => {
           this.neuronalApp.onActiveNeuronMaxScaleMulChange(mul);
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizSceneColor$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizSceneColorChanged),
+        withLatestFrom(this.store.select(selectNeuronalState)),
+        tap(([, n]) => {
+          this.zone.runOutsideAngular(() => {
+            this.neuronalApp.onVizSceneColorsApply(n.viz3d.sceneColors);
+          });
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizLightColor$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizLightColorChanged),
+        withLatestFrom(this.store.select(selectNeuronalState)),
+        tap(([, n]) => {
+          this.zone.runOutsideAngular(() => {
+            this.neuronalApp.onVizLightColorsApply(n.viz3d.lightColors);
+          });
         }),
       ),
     { dispatch: false },

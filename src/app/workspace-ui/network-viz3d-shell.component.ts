@@ -3,6 +3,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   inject,
+  NgZone,
+  OnDestroy,
   signal,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -15,6 +17,10 @@ import {
   HIDDEN_LAYER_VIZ_SCALE_MIN,
   HIDDEN_LAYER_VIZ_SCALE_STEP,
 } from '../../viz/network3d';
+import type {
+  VizLightColorSettings,
+  VizSceneColorSettings,
+} from '../../viz/viz-appearance';
 import { NeuronalAppService } from '../core/neuronal-app.service';
 import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
@@ -196,6 +202,160 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
               </div>
             </div>
           </app-viz-settings-block>
+          <app-viz-settings-block heading="Szene &amp; Umgebung">
+            <div class="flex flex-col gap-2.5">
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizSceneBgFog"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Hintergrund &amp; Nebel</label
+                >
+                <input
+                  id="vizSceneBgFog"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().sceneColors.backgroundFog"
+                  (input)="onSceneColorInput('backgroundFog', $event)"
+                  (change)="onSceneColorCommit('backgroundFog', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                  title="Hintergrund und Nebelfarbe"
+                />
+              </div>
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizSceneFloor"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Boden</label
+                >
+                <input
+                  id="vizSceneFloor"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().sceneColors.floor"
+                  (input)="onSceneColorInput('floor', $event)"
+                  (change)="onSceneColorCommit('floor', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                  title="Bodenfarbe"
+                />
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Lichtfarben">
+            <div class="flex flex-col gap-2.5">
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizLightHemiSky"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Hemisphäre (oben)</label
+                >
+                <input
+                  id="vizLightHemiSky"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().lightColors.hemiSky"
+                  (input)="onLightColorInput('hemiSky', $event)"
+                  (change)="onLightColorCommit('hemiSky', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                />
+              </div>
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizLightHemiGrd"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Hemisphäre (unten)</label
+                >
+                <input
+                  id="vizLightHemiGrd"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().lightColors.hemiGround"
+                  (input)="onLightColorInput('hemiGround', $event)"
+                  (change)="onLightColorCommit('hemiGround', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                />
+              </div>
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizLightAmb"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Umgebungslicht</label
+                >
+                <input
+                  id="vizLightAmb"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().lightColors.ambient"
+                  (input)="onLightColorInput('ambient', $event)"
+                  (change)="onLightColorCommit('ambient', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                />
+              </div>
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizLightKey"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Key-Licht</label
+                >
+                <input
+                  id="vizLightKey"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().lightColors.key"
+                  (input)="onLightColorInput('key', $event)"
+                  (change)="onLightColorCommit('key', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                />
+              </div>
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizLightFill"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Fill-Licht</label
+                >
+                <input
+                  id="vizLightFill"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().lightColors.fill"
+                  (input)="onLightColorInput('fill', $event)"
+                  (change)="onLightColorCommit('fill', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                />
+              </div>
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizLightRim"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Rim-Licht</label
+                >
+                <input
+                  id="vizLightRim"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().lightColors.rim"
+                  (input)="onLightColorInput('rim', $event)"
+                  (change)="onLightColorCommit('rim', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                />
+              </div>
+              <div class="flex min-w-0 items-center justify-between gap-2">
+                <label
+                  for="vizLightBack"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Akzent hinten</label
+                >
+                <input
+                  id="vizLightBack"
+                  type="color"
+                  class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
+                  [value]="model().lightColors.backAccent"
+                  (input)="onLightColorInput('backAccent', $event)"
+                  (change)="onLightColorCommit('backAccent', $event)"
+                  (blur)="onVizColorPickerBlur()"
+                />
+              </div>
+            </div>
+          </app-viz-settings-block>
         </aside>
       }
       <div
@@ -230,8 +390,9 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class NetworkViz3dShellComponent {
+export class NetworkViz3dShellComponent implements OnDestroy {
   private readonly store = inject(Store<AppState>);
+  private readonly ngZone = inject(NgZone);
   private readonly neuronalApp = inject(NeuronalAppService);
   protected readonly vibeCameraOn = signal(true);
   protected readonly scaleMin = HIDDEN_LAYER_VIZ_SCALE_MIN;
@@ -291,6 +452,55 @@ export class NetworkViz3dShellComponent {
     this.store.dispatch(
       NeuronalActions.vizActiveNeuronMaxScaleMulChanged({ mul: v }),
     );
+  }
+
+  onSceneColorInput(key: keyof VizSceneColorSettings, ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'color') return;
+    const color = t.value;
+    this.ngZone.runOutsideAngular(() => {
+      this.neuronalApp.previewVizSceneColor(key, color);
+    });
+  }
+
+  onSceneColorCommit(key: keyof VizSceneColorSettings, ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'color') return;
+    this.store.dispatch(
+      NeuronalActions.vizSceneColorChanged({ key, color: t.value }),
+    );
+  }
+
+  onLightColorInput(key: keyof VizLightColorSettings, ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'color') return;
+    const color = t.value;
+    this.ngZone.runOutsideAngular(() => {
+      this.neuronalApp.previewVizLightColor(key, color);
+    });
+  }
+
+  onLightColorCommit(key: keyof VizLightColorSettings, ev: Event): void {
+    const t = ev.target;
+    if (!(t instanceof HTMLInputElement) || t.type !== 'color') return;
+    this.store.dispatch(
+      NeuronalActions.vizLightColorChanged({ key, color: t.value }),
+    );
+  }
+
+  /** Abbruch ohne Commit: Vorschau verworfen, Szene entspricht wieder dem Store. */
+  onVizColorPickerBlur(): void {
+    this.neuronalApp.cancelPendingVizColorPreviews();
+    const m = this.model();
+    this.neuronalApp.onVizSceneColorsApply(m.sceneColors);
+    this.neuronalApp.onVizLightColorsApply(m.lightColors);
+  }
+
+  ngOnDestroy(): void {
+    this.neuronalApp.cancelPendingVizColorPreviews();
+    const m = this.model();
+    this.neuronalApp.onVizSceneColorsApply(m.sceneColors);
+    this.neuronalApp.onVizLightColorsApply(m.lightColors);
   }
 
   toggleImmersive(): void {
