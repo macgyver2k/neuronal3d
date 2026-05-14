@@ -5,11 +5,10 @@ import {
   HostListener,
   inject,
   OnDestroy,
-  signal,
   ViewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 import { Store } from '@ngrx/store';
 import { filter, firstValueFrom, take } from 'rxjs';
 import type { NeuronalRuntimeMountSurfaces } from '../../neuronal-app';
@@ -25,18 +24,13 @@ import {
 import { EpochTrackListComponent } from '../workspace-ui/epoch-track-list.component';
 import { InferPanelComponent } from '../workspace-ui/infer-panel.component';
 import { NetworkViz3dShellComponent } from '../workspace-ui/network-viz3d-shell.component';
-import { NeuronalModelBarComponent } from '../workspace-ui/neuronal-model-bar.component';
 import { TrainingPanelComponent } from '../workspace-ui/training-panel.component';
-import { WorkspaceBrandComponent } from '../workspace-ui/workspace-brand.component';
 import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.component';
 
 @Component({
   selector: 'app-neuronal-workspace',
   standalone: true,
   imports: [
-    RouterLink,
-    WorkspaceBrandComponent,
-    NeuronalModelBarComponent,
     WorkspaceStatusComponent,
     NetworkViz3dShellComponent,
     TrainingPanelComponent,
@@ -56,6 +50,7 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
           class="border-base-300/60 bg-base-100 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:px-4 sm:py-3"
         >
           <div class="flex flex-col gap-2">
+            <app-training-panel />
             <app-workspace-status />
           </div>
         </div>
@@ -82,59 +77,12 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
 
         @if (!immersive()) {
           <section
-            class="flex min-h-0 flex-col gap-2"
-            aria-label="Training, Epochen und Inferenz"
+            class="flex min-h-0 flex-col gap-3"
+            aria-label="Epochen und Inferenz"
           >
-            <div
-              role="tablist"
-              aria-label="Seitenleiste"
-              class="tabs tabs-boxed bg-base-200/80 p-1"
-            >
-              <button
-                type="button"
-                class="tab flex-1"
-                role="tab"
-                id="tab-sidebar-train"
-                aria-controls="panel-sidebar-train"
-                [attr.aria-selected]="sidebarTab() === 'train'"
-                [class.tab-active]="sidebarTab() === 'train'"
-                (click)="sidebarTab.set('train')"
-              >
-                Training
-              </button>
-              <button
-                type="button"
-                class="tab flex-1"
-                role="tab"
-                id="tab-sidebar-infer"
-                aria-controls="panel-sidebar-infer"
-                [attr.aria-selected]="sidebarTab() === 'infer'"
-                [class.tab-active]="sidebarTab() === 'infer'"
-                (click)="sidebarTab.set('infer')"
-              >
-                Inferenz
-              </button>
-            </div>
-            <div class="relative flex min-h-0 flex-1 flex-col">
-              <div
-                id="panel-sidebar-train"
-                class="grid min-h-0 flex-1 grid-rows-[auto_minmax(12rem,1fr)] gap-3 overflow-hidden"
-                role="tabpanel"
-                aria-labelledby="tab-sidebar-train"
-                [hidden]="sidebarTab() !== 'train'"
-              >
-                <app-training-panel />
-                <app-epoch-track-list />
-              </div>
-              <div
-                id="panel-sidebar-infer"
-                class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-                role="tabpanel"
-                aria-labelledby="tab-sidebar-infer"
-                [hidden]="sidebarTab() !== 'infer'"
-              >
-                <app-infer-panel />
-              </div>
+            <div class="flex flex-col min-h-0  gap-3 overflow-hidden">
+              <app-infer-panel />
+              <app-epoch-track-list />
             </div>
           </section>
         }
@@ -147,7 +95,6 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
   private vizShell?: NetworkViz3dShellComponent;
   @ViewChild(InferPanelComponent) private inferPanel?: InferPanelComponent;
 
-  readonly sidebarTab = signal<'train' | 'infer'>('train');
   private readonly store = inject(Store<AppState>);
   readonly headerModel = toSignal(
     this.store.select(selectShellHeaderActiveModel),

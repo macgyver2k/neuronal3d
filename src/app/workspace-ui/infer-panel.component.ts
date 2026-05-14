@@ -43,16 +43,6 @@ import { TrainInferThumbComponent } from './train-infer-thumb.component';
             Direkt mit dem aktiven Modell testen
           </p>
         </div>
-        <p
-          id="inferModelContext"
-          class="text-info rounded-btn border-info/30 bg-info/10 border p-2 text-xs leading-snug"
-          aria-live="polite"
-        >
-          <span class="font-semibold">{{ inferPanelModel().headline }}</span>
-          <span class="text-base-content/80">
-            — {{ inferPanelModel().detail }}</span
-          >
-        </p>
 
         <div
           role="tablist"

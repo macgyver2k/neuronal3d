@@ -20,199 +20,211 @@ import {
   template: `
     <article
       id="dockTrain"
-      class="card border-base-300 bg-base-200 rounded-box flex shrink-0 flex-col gap-3 border shadow-xl"
+      class="border-base-300 bg-base-200 rounded-box flex w-full min-w-0 shrink-0
+        flex-wrap items-center gap-x-3 gap-y-2 border px-3 py-2 shadow-sm"
+      aria-label="Training"
     >
-      <div class="card-body gap-3 p-5">
-        <div class="shrink-0">
-          <h2 class="card-title text-base">Training</h2>
-          <p class="text-base-content/60 text-xs">
-            Weiterlernen mit dem aktuell gewählten Modell
-          </p>
-        </div>
-        <p
-          class="text-base-content/70 rounded-btn border-base-300/60 bg-base-300/30 border p-2 text-xs leading-snug"
-          aria-live="polite"
-        >
-          {{ datasetRibbon() }}
+      <p
+        class="text-base-content/70 max-w-[11rem] truncate text-xs sm:max-w-[14rem]"
+        aria-live="polite"
+        [attr.title]="datasetRibbon()"
+      >
+        {{ datasetRibbon() }}
+      </p>
+      <div
+        class="border-base-300/50 flex min-w-0 max-w-[14rem] flex-col gap-0.5
+          border-l pl-3 sm:max-w-[18rem]"
+      >
+        <p class="text-base-content truncate text-sm font-semibold">
+          {{ activeTitle() }}
         </p>
-        <div class="flex flex-col gap-2">
-          <p class="text-base-content font-semibold">
-            {{ activeTitle() }}
-          </p>
-          <p class="text-base-content/60 text-xs leading-snug">
-            {{ activeDetail() }}
-          </p>
-          <div class="flex flex-wrap items-center gap-2">
-            <button
-              id="btnSaveModelAs"
-              type="button"
-              class="btn btn-outline btn-sm"
-              [disabled]="ui().saveDisabled"
-              (click)="saveAs()"
-            >
-              Als neuen Stand speichern
-            </button>
-            <button
-              id="btnResetModel"
-              type="button"
-              class="btn btn-ghost btn-sm"
-              [disabled]="ui().resetDisabled"
-              (click)="reset()"
-            >
-              Gewichte zurücksetzen
-            </button>
-          </div>
-        </div>
-        <div class="form-control gap-2">
-          <span
-            class="text-base-content/60 text-[0.65rem] font-semibold uppercase tracking-widest"
-            >Epochen</span
-          >
-          <div class="join join-horizontal flex-wrap" id="epochPresetRow">
-            <button
-              type="button"
-              class="epochPresetBtn btn join-item btn-outline btn-sm"
-              [class.btn-primary]="hp().epochs === 1"
-              [class.btn-outline]="hp().epochs !== 1"
-              [disabled]="ui().trainFormLocked"
-              (click)="epochPreset(1)"
-            >
-              1
-            </button>
-            <button
-              type="button"
-              class="epochPresetBtn btn join-item btn-outline btn-sm"
-              [class.btn-primary]="hp().epochs === 3"
-              [class.btn-outline]="hp().epochs !== 3"
-              [disabled]="ui().trainFormLocked"
-              (click)="epochPreset(3)"
-            >
-              3
-            </button>
-            <button
-              type="button"
-              class="epochPresetBtn btn join-item btn-outline btn-sm"
-              [class.btn-primary]="hp().epochs === 10"
-              [class.btn-outline]="hp().epochs !== 10"
-              [disabled]="ui().trainFormLocked"
-              (click)="epochPreset(10)"
-            >
-              10
-            </button>
-            <button
-              type="button"
-              class="epochPresetBtn btn join-item btn-outline btn-sm"
-              [class.btn-primary]="hp().epochs === 30"
-              [class.btn-outline]="hp().epochs !== 30"
-              [disabled]="ui().trainFormLocked"
-              (click)="epochPreset(30)"
-            >
-              30
-            </button>
-          </div>
-          <label class="label py-0" for="epochsInput">
-            <span class="label-text text-base-content/60 text-xs"
-              >Anzahl (1–200)</span
-            >
-          </label>
-          <input
-            id="epochsInput"
-            type="number"
-            min="1"
-            max="200"
-            step="1"
-            class="input input-bordered w-full"
+        <p
+          class="text-base-content/60 truncate text-xs leading-snug"
+          [attr.title]="activeDetail()"
+        >
+          {{ activeDetail() }}
+        </p>
+      </div>
+      <div
+        class="border-base-300/50 flex flex-wrap items-center gap-2 border-l pl-3"
+      >
+        <button
+          id="btnSaveModelAs"
+          type="button"
+          class="btn btn-outline btn-xs sm:btn-sm"
+          title="Als neuen Stand speichern"
+          [disabled]="ui().saveDisabled"
+          (click)="saveAs()"
+        >
+          Speichern
+        </button>
+        <button
+          id="btnResetModel"
+          type="button"
+          class="btn btn-ghost btn-xs sm:btn-sm"
+          title="Gewichte zurücksetzen"
+          [disabled]="ui().resetDisabled"
+          (click)="reset()"
+        >
+          Zurücksetzen
+        </button>
+      </div>
+      <div
+        class="border-base-300/50 flex flex-wrap items-center gap-2 border-l pl-3"
+        [attr.title]="epochHint()"
+      >
+        <span
+          class="text-base-content/60 text-[0.65rem] font-semibold uppercase
+            tracking-wide"
+          >Epochen</span
+        >
+        <div class="join join-horizontal flex-wrap" id="epochPresetRow">
+          <button
+            type="button"
+            class="epochPresetBtn btn join-item btn-outline btn-xs sm:btn-sm"
+            [class.btn-primary]="hp().epochs === 1"
+            [class.btn-outline]="hp().epochs !== 1"
             [disabled]="ui().trainFormLocked"
-            [value]="hp().epochs"
-            (input)="epochsInput($event)"
-          />
+            (click)="epochPreset(1)"
+          >
+            1
+          </button>
+          <button
+            type="button"
+            class="epochPresetBtn btn join-item btn-outline btn-xs sm:btn-sm"
+            [class.btn-primary]="hp().epochs === 3"
+            [class.btn-outline]="hp().epochs !== 3"
+            [disabled]="ui().trainFormLocked"
+            (click)="epochPreset(3)"
+          >
+            3
+          </button>
+          <button
+            type="button"
+            class="epochPresetBtn btn join-item btn-outline btn-xs sm:btn-sm"
+            [class.btn-primary]="hp().epochs === 10"
+            [class.btn-outline]="hp().epochs !== 10"
+            [disabled]="ui().trainFormLocked"
+            (click)="epochPreset(10)"
+          >
+            10
+          </button>
+          <button
+            type="button"
+            class="epochPresetBtn btn join-item btn-outline btn-xs sm:btn-sm"
+            [class.btn-primary]="hp().epochs === 30"
+            [class.btn-outline]="hp().epochs !== 30"
+            [disabled]="ui().trainFormLocked"
+            (click)="epochPreset(30)"
+          >
+            30
+          </button>
         </div>
-        <p class="text-base-content/60 text-xs" aria-live="polite">
+        <label class="sr-only" for="epochsInput">Anzahl Epochen (1–200)</label>
+        <input
+          id="epochsInput"
+          type="number"
+          min="1"
+          max="200"
+          step="1"
+          class="input input-bordered input-xs w-14 sm:input-sm sm:w-16"
+          [disabled]="ui().trainFormLocked"
+          [value]="hp().epochs"
+          (input)="epochsInput($event)"
+        />
+        <p
+          class="text-base-content/60 hidden max-w-[10rem] truncate text-[0.65rem]
+            lg:block xl:max-w-[14rem]"
+          aria-live="polite"
+          [attr.title]="epochHint()"
+        >
           {{ epochHint() }}
         </p>
-        <div class="flex flex-wrap items-center gap-2 max-sm:flex-col">
-          <button
-            id="btnTrain"
-            type="button"
-            class="btn btn-primary min-w-[8rem] flex-1 sm:flex-none"
-            [disabled]="ui().trainDisabled"
-            (click)="trainStart()"
-          >
-            Training starten
-          </button>
-          <button
-            id="btnPause"
-            type="button"
-            class="btn btn-outline flex-1 sm:flex-none"
-            [disabled]="ui().pauseDisabled"
-            (click)="pauseToggle()"
-          >
-            {{ panel().pause ? 'Fortsetzen' : 'Anhalten' }}
-          </button>
-        </div>
-        <details
-          class="rounded-box border-base-300/60 bg-base-300/30 border"
-          id="trainAdvanced"
-        >
-          <summary
-            class="text-base-content/70 cursor-pointer px-3 py-2.5 text-sm"
-          >
-            Erweitert
-          </summary>
-          <div
-            class="grid grid-cols-2 gap-x-3 gap-y-2 border-base-300/40 border-t px-3 pb-3 pt-2 text-sm"
-          >
-            <label
-              for="lrInput"
-              class="text-base-content/60 self-center text-xs"
-              >Lernrate</label
-            >
-            <input
-              id="lrInput"
-              type="number"
-              min="0.0001"
-              max="1"
-              step="0.0001"
-              class="input input-bordered input-sm w-full"
-              [disabled]="ui().trainFormLocked"
-              [value]="hp().lr"
-              (input)="lrInput($event)"
-            />
-            <label
-              for="batchSizeInput"
-              class="text-base-content/60 self-center text-xs"
-              >Batch</label
-            >
-            <input
-              id="batchSizeInput"
-              type="number"
-              min="1"
-              max="512"
-              step="1"
-              class="input input-bordered input-sm w-full"
-              [disabled]="ui().trainFormLocked"
-              [value]="hp().batchSize"
-              (input)="batchSizeInput($event)"
-            />
-            <label
-              for="vizEveryInput"
-              class="text-base-content/60 self-center text-xs"
-              >3D alle N Batches</label
-            >
-            <input
-              id="vizEveryInput"
-              type="number"
-              min="1"
-              max="1000"
-              step="1"
-              class="input input-bordered input-sm w-full"
-              [disabled]="ui().trainFormLocked"
-              [value]="hp().vizEveryNBatches"
-              (input)="vizEveryInput($event)"
-            />
-          </div>
-        </details>
       </div>
+      <div
+        class="border-base-300/50 flex flex-wrap items-center gap-2 border-l pl-3"
+      >
+        <button
+          id="btnTrain"
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="ui().trainDisabled"
+          (click)="trainStart()"
+        >
+          Starten
+        </button>
+        <button
+          id="btnPause"
+          type="button"
+          class="btn btn-outline btn-sm"
+          [disabled]="ui().pauseDisabled"
+          (click)="pauseToggle()"
+        >
+          {{ panel().pause ? 'Weiter' : 'Pause' }}
+        </button>
+      </div>
+      <details
+        class="border-base-300/60 bg-base-300/30 rounded-btn border"
+        id="trainAdvanced"
+      >
+        <summary
+          class="text-base-content/70 cursor-pointer px-2 py-1.5 text-xs sm:px-3
+            sm:py-2 sm:text-sm"
+        >
+          Erweitert
+        </summary>
+        <div
+          class="border-base-300/40 grid grid-cols-2 gap-x-3 gap-y-2 border-t px-2
+            pb-2 pt-2 text-sm sm:px-3 sm:pb-3"
+        >
+          <label for="lrInput" class="text-base-content/60 self-center text-xs"
+            >Lernrate</label
+          >
+          <input
+            id="lrInput"
+            type="number"
+            min="0.0001"
+            max="1"
+            step="0.0001"
+            class="input input-bordered input-sm w-full"
+            [disabled]="ui().trainFormLocked"
+            [value]="hp().lr"
+            (input)="lrInput($event)"
+          />
+          <label
+            for="batchSizeInput"
+            class="text-base-content/60 self-center text-xs"
+            >Batch</label
+          >
+          <input
+            id="batchSizeInput"
+            type="number"
+            min="1"
+            max="512"
+            step="1"
+            class="input input-bordered input-sm w-full"
+            [disabled]="ui().trainFormLocked"
+            [value]="hp().batchSize"
+            (input)="batchSizeInput($event)"
+          />
+          <label
+            for="vizEveryInput"
+            class="text-base-content/60 self-center text-xs"
+            >3D alle N Batches</label
+          >
+          <input
+            id="vizEveryInput"
+            type="number"
+            min="1"
+            max="1000"
+            step="1"
+            class="input input-bordered input-sm w-full"
+            [disabled]="ui().trainFormLocked"
+            [value]="hp().vizEveryNBatches"
+            (input)="vizEveryInput($event)"
+          />
+        </div>
+      </details>
     </article>
   `,
 })

@@ -11,10 +11,6 @@ import { selectNewModelDisabled } from '../store/neuronal/neuronal.selectors';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex min-w-0 flex-col gap-1.5">
-      <span
-        class="text-base-content/60 text-[0.62rem] font-semibold uppercase tracking-widest"
-        >Aktionen</span
-      >
       <div class="flex min-w-0 flex-wrap items-stretch gap-2">
         <button
           id="btnNewModel"

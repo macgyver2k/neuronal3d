@@ -25,13 +25,15 @@ import { ThemeSwitcherComponent } from '../workspace-ui/theme-switcher.component
     <header
       class="border-base-200 bg-base-100 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2 shadow-sm"
     >
-      <nav class="breadcrumbs text-sm min-w-0 flex-1" aria-label="Brotkrümel">
+      <nav
+        class="breadcrumbs text-sm min-w-0 flex flex-row gap-3"
+        aria-label="Brotkrümel"
+      >
         <ul>
           <li>
-            <a routerLink="/" class="link-hover link font-medium">Neuronal3D</a>
-          </li>
-          <li>
-            <a routerLink="/" class="link-hover link font-medium">Modelle</a>
+            <a routerLink="/" class="link-hover link font-medium text-2xl"
+              >Modelle</a
+            >
           </li>
           <li class="min-w-0 max-w-full sm:max-w-md">
             <select
@@ -63,10 +65,10 @@ import { ThemeSwitcherComponent } from '../workspace-ui/theme-switcher.component
             </select>
           </li>
         </ul>
+        <div class="justify-self-start">
+          <app-neuronal-model-bar />
+        </div>
       </nav>
-      <div>
-        <app-neuronal-model-bar />
-      </div>
       <div class="flex shrink-0 items-center gap-2">
         <app-theme-switcher />
       </div>

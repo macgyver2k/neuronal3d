@@ -38,6 +38,7 @@ type EpochChartModel = {
     `
       :host {
         display: flex;
+        overflow: auto;
       }
     `,
   ],
