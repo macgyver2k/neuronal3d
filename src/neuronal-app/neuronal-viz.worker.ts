@@ -24,6 +24,47 @@ let latestPixelRatio = 1;
 let syncLayoutFromMount: (() => void) | null = null;
 let net3d: Network3D | null = null;
 
+/** DOM-Event-Konstruktoren fehlen im Worker; reicht für Stub + OrbitControls. */
+const createSyntheticEventFromInit = <Init extends object>(
+  eventType: string,
+  init: Init,
+): Event => {
+  const initRecord = init as Record<string, unknown>;
+  const base = new Event(eventType, {
+    bubbles: (initRecord['bubbles'] as boolean | undefined) ?? true,
+    cancelable: (initRecord['cancelable'] as boolean | undefined) ?? true,
+  });
+  return (Object.keys(initRecord) as string[]).reduce(
+    (eventTarget, propertyKey) => {
+      if (propertyKey === 'bubbles' || propertyKey === 'cancelable') {
+        return eventTarget;
+      }
+      const value = initRecord[propertyKey];
+      if (value === undefined) return eventTarget;
+      Object.defineProperty(eventTarget, propertyKey, {
+        value,
+        enumerable: true,
+        configurable: true,
+      });
+      return eventTarget;
+    },
+    base as Event & Record<string, unknown>,
+  ) as unknown as Event;
+};
+
+const createSyntheticKeyboardEvent = (
+  eventType: 'keydown' | 'keyup',
+  code: string,
+): Event => {
+  const base = new Event(eventType, { bubbles: true });
+  Object.defineProperty(base, 'code', {
+    value: code,
+    enumerable: true,
+    configurable: true,
+  });
+  return base;
+};
+
 const dispatchOnSurface = (domEvent: Event): void => {
   orbitSurface?.dispatchForwardedEvent(domEvent);
 };
@@ -143,33 +184,29 @@ const handleMessage = (
       break;
     }
     case 'canvasPointer': {
-      dispatchOnSurface(new PointerEvent(message.eventType, message.initDict));
+      dispatchOnSurface(
+        createSyntheticEventFromInit(message.eventType, message.initDict),
+      );
       break;
     }
     case 'canvasWheel': {
-      dispatchOnSurface(new WheelEvent('wheel', message.initDict));
+      dispatchOnSurface(
+        createSyntheticEventFromInit('wheel', message.initDict),
+      );
       break;
     }
     case 'canvasContextMenu': {
-      dispatchOnSurface(new MouseEvent('contextmenu', message.initDict));
+      dispatchOnSurface(
+        createSyntheticEventFromInit('contextmenu', message.initDict),
+      );
       break;
     }
     case 'navKeyDown': {
-      dispatchOnSurface(
-        new KeyboardEvent('keydown', {
-          code: message.code,
-          bubbles: true,
-        }),
-      );
+      dispatchOnSurface(createSyntheticKeyboardEvent('keydown', message.code));
       break;
     }
     case 'navKeyUp': {
-      dispatchOnSurface(
-        new KeyboardEvent('keyup', {
-          code: message.code,
-          bubbles: true,
-        }),
-      );
+      dispatchOnSurface(createSyntheticKeyboardEvent('keyup', message.code));
       break;
     }
     case 'navKeysClear': {
@@ -184,7 +221,7 @@ const handleMessage = (
         'ArrowRight',
       ];
       codes.forEach((code) =>
-        dispatchOnSurface(new KeyboardEvent('keyup', { code, bubbles: true })),
+        dispatchOnSurface(createSyntheticKeyboardEvent('keyup', code)),
       );
       break;
     }
@@ -201,9 +238,7 @@ const handleMessage = (
           'ArrowRight',
         ];
         codes.forEach((code) =>
-          dispatchOnSurface(
-            new KeyboardEvent('keyup', { code, bubbles: true }),
-          ),
+          dispatchOnSurface(createSyntheticKeyboardEvent('keyup', code)),
         );
       }
       break;
