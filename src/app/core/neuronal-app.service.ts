@@ -78,7 +78,7 @@ export class NeuronalAppService {
   ): Promise<() => void> {
     await this.ensureStoreHydrated();
     this.runtime?.destroy();
-    const next = createNeuronalAppRuntime(
+    const next = await createNeuronalAppRuntime(
       this.store,
       surfaces,
       appInstance,

@@ -2,8 +2,8 @@ import { Store } from '@ngrx/store';
 import type { AppState } from '../app/store/app.state';
 import type { NeuronalState } from '../app/store/neuronal/neuronal.state';
 import type { MLP } from '../nn/network';
-import type { Network3D } from '../viz/network3d';
 import type { ReconcileWorkspaceUrlForModelSelection } from './types';
+import type { NeuronalVizSurface } from './viz-neuronal-surface';
 
 /**
  * Gemeinsamer Laufzeit-Zustand (ein mutierbares Objekt).
@@ -20,7 +20,7 @@ export const RT = {
     | undefined,
   nLatest: null as unknown as NeuronalState,
   net: null as MLP | null,
-  net3d: null as Network3D | null,
+  net3d: null as NeuronalVizSurface | null,
   inferCounter: 0,
   lastInferSampleIndex: -1,
   lastInferActsDebug: null as number[][] | null,

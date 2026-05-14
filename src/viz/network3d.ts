@@ -6,20 +6,20 @@ import {
 } from './viz-appearance';
 
 function createDigitTexture(digit: number): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 128;
-  const g = c.getContext('2d');
-  if (!g) throw new Error('canvas2d');
-  g.clearRect(0, 0, 128, 128);
-  g.fillStyle = '#ffffff';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.font = 'bold 92px system-ui, sans-serif';
-  g.fillText(String(digit), 64, 68);
-  const tex = new THREE.CanvasTexture(c);
-  tex.needsUpdate = true;
-  return tex;
+  const canvas = new OffscreenCanvas(128, 128);
+  const graphics = canvas.getContext('2d');
+  if (!graphics) throw new Error('canvas2d');
+  graphics.clearRect(0, 0, 128, 128);
+  graphics.fillStyle = '#ffffff';
+  graphics.textAlign = 'center';
+  graphics.textBaseline = 'middle';
+  graphics.font = 'bold 92px system-ui, sans-serif';
+  graphics.fillText(String(digit), 64, 68);
+  const texture = new THREE.CanvasTexture(
+    canvas as unknown as HTMLCanvasElement,
+  );
+  texture.needsUpdate = true;
+  return texture;
 }
 
 const OUTPUT_DIGIT_SPRITE_MUL = 4;

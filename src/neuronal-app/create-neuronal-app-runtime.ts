@@ -10,8 +10,6 @@ import { selectNeuronalState } from '../app/store/neuronal/neuronal.selectors';
 import type { NeuronalState } from '../app/store/neuronal/neuronal.state';
 import { MLP } from '../nn/network';
 import { trainLoop } from '../train/trainer';
-import { Network3D } from '../viz/network3d';
-import { animateLoop, createScene } from '../viz/scene';
 import {
   isValidHexColor6,
   type VizLightColorSettings,
@@ -19,7 +17,7 @@ import {
   type VizPostProcessSettings,
   type VizSceneColorSettings,
 } from '../viz/viz-appearance';
-import { HIDDEN, LAYER_SIZES, MNIST_DRAW_GRID } from './constants';
+import { HIDDEN, MNIST_DRAW_GRID } from './constants';
 import { computeDatasetMetrics } from './dataset-metrics';
 import {
   canvasPos,
@@ -46,6 +44,7 @@ import {
 import { loadCsvData } from './mnist-csv-load';
 import { getMnistTestDataRef, getMnistTrainDataRef } from './mnist-data';
 import { loadSelectedModelIntoNet, selectModelById } from './model-selection';
+import { NeuronalVizRenderWorkerHost } from './neuronal-viz-worker-host';
 import { RT } from './runtime-state';
 import {
   applyEpochHistoryToUi,
@@ -69,7 +68,6 @@ import {
   parseInputLayerVizLayout,
   publishVizState,
   reapplyViz3dAfterLayoutChange,
-  tickViz,
   zeroActivationsForLayout,
 } from './viz-sync';
 
@@ -77,12 +75,12 @@ function renderFrame(): void {
   RT.renderDisplayBound();
 }
 
-export function createNeuronalAppRuntime(
+export async function createNeuronalAppRuntime(
   store: Store<AppState>,
   surfaces: NeuronalRuntimeMountSurfaces,
   appInstance: NeuronalAppInstance,
   reconcileWorkspaceUrl?: ReconcileWorkspaceUrlForModelSelection,
-): NeuronalAppRuntime {
+): Promise<NeuronalAppRuntime> {
   RT.appStore = store;
   RT.reconcileWorkspaceUrlForModelSelection = reconcileWorkspaceUrl;
   RT.surfaceVizMount = surfaces.vizMount;
@@ -124,17 +122,16 @@ export function createNeuronalAppRuntime(
     RT.surfaceDrawCanvas.height,
   );
 
+  let neuronalVizHost: NeuronalVizRenderWorkerHost | null = null;
+  neuronalVizHost = new NeuronalVizRenderWorkerHost(RT.surfaceVizMount);
   const {
-    scene,
-    controls,
     render,
     renderDisplay,
-    dispose,
     setVibeCameraMode,
     applyVizSceneColors,
     applyVizLightColors,
     applyVizPostProcess,
-  } = createScene(RT.surfaceVizMount);
+  } = await neuronalVizHost.start();
   applyVizSceneColors(RT.nLatest.viz3d.sceneColors);
   applyVizLightColors(RT.nLatest.viz3d.lightColors);
   applyVizPostProcess(RT.nLatest.viz3d.postProcess);
@@ -223,13 +220,18 @@ export function createNeuronalAppRuntime(
 
   RT.renderSceneBound = render;
   RT.renderDisplayBound = renderDisplay;
-  RT.disposeSceneBound = dispose;
+  RT.disposeSceneBound = (): void => {
+    neuronalVizHost?.destroy();
+    neuronalVizHost = null;
+  };
   setVibeCameraMode(true);
-  const net3dInst = new Network3D(LAYER_SIZES);
-  net3dInst.applyVizNetworkColors(networkColorBaseline);
-  RT.net3d = net3dInst;
-  scene.add(net3dInst.root);
-  RT.stopAnimCleanup = animateLoop(render, controls, tickViz);
+  const vizSurface = neuronalVizHost.vizSurface;
+  RT.net3d = vizSurface;
+  vizSurface.applyVizNetworkColors(networkColorBaseline);
+  if (RT.net) vizSurface.setWeights(RT.net.weights);
+  RT.stopAnimCleanup = (): void => {
+    neuronalVizHost?.stopMainVizTickOnly();
+  };
 
   appInstance.connect({
     newModelFromToolbar: runNewModelFromToolbar,

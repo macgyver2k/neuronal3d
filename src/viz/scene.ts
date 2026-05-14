@@ -16,6 +16,24 @@ import {
   type VizPostProcessSettings,
   type VizSceneColorSettings,
 } from './viz-appearance';
+import { WorkerCanvasDomSurfaceStub } from './worker-canvas-dom-surface-stub';
+
+export type NeuronalGlSceneDomMount = {
+  mode: 'dom';
+  container: HTMLElement;
+};
+
+export type NeuronalGlSceneWorkerMount = {
+  mode: 'worker';
+  offscreenCanvas: OffscreenCanvas;
+  orbitDomSurface: WorkerCanvasDomSurfaceStub;
+  /** Aktuelles Geräte-Pixelverhältnis (vom Hauptthread gespiegelt). */
+  getPixelRatio: () => number;
+};
+
+export type NeuronalGlSceneMount =
+  | NeuronalGlSceneDomMount
+  | NeuronalGlSceneWorkerMount;
 
 function colorFromHex6(hex: string): THREE.Color {
   return new THREE.Color(parseInt(hex.slice(1), 16));
@@ -78,7 +96,7 @@ function intensityScaleForLights(lc: VizLightColorSettings): number {
   return 1 - ((mx - 0.52) / (0.9 - 0.52)) * (1 - 0.32);
 }
 
-export function createScene(container: HTMLElement): {
+export function createScene(mount: NeuronalGlSceneMount): {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
@@ -89,8 +107,33 @@ export function createScene(container: HTMLElement): {
   applyVizSceneColors: (next: VizSceneColorSettings) => void;
   applyVizLightColors: (next: VizLightColorSettings) => void;
   applyVizPostProcess: (next: VizPostProcessSettings) => void;
+  syncLayoutFromMount: () => void;
   dispose: () => void;
 } {
+  const isDom = mount.mode === 'dom';
+  const domContainer = isDom ? mount.container : null;
+  const orbitDomSurface = isDom ? null : mount.orbitDomSurface;
+
+  const drawableSize = (): { w: number; h: number } => {
+    if (isDom && domContainer) {
+      const w = Math.max(1, Math.floor(domContainer.clientWidth));
+      const h = Math.max(1, Math.floor(domContainer.clientHeight));
+      return { w, h };
+    }
+    if (orbitDomSurface) {
+      return {
+        w: Math.max(1, Math.floor(orbitDomSurface.clientWidth)),
+        h: Math.max(1, Math.floor(orbitDomSurface.clientHeight)),
+      };
+    }
+    return { w: 1, h: 1 };
+  };
+
+  const effectivePixelRatio = (): number => {
+    if (isDom) return Math.min(window.devicePixelRatio, 2);
+    return Math.min(mount.getPixelRatio(), 2);
+  };
+
   const scene = new THREE.Scene();
   scene.background = colorFromHex6(DEFAULT_VIZ_SCENE_COLORS.backgroundFog);
   scene.fog = new THREE.Fog(
@@ -98,12 +141,6 @@ export function createScene(container: HTMLElement): {
     12,
     40,
   );
-
-  const drawableSize = (): { w: number; h: number } => {
-    const w = Math.max(1, Math.floor(container.clientWidth));
-    const h = Math.max(1, Math.floor(container.clientHeight));
-    return { w, h };
-  };
 
   const camera = new THREE.PerspectiveCamera(
     55,
@@ -116,11 +153,16 @@ export function createScene(container: HTMLElement): {
   );
   camera.position.set(-8, 4, 4);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const renderer = new THREE.WebGLRenderer(
+    isDom
+      ? { antialias: true, alpha: true }
+      : { antialias: true, alpha: true, canvas: mount.offscreenCanvas },
+  );
+  const updateCanvasDomStyle = isDom;
+  renderer.setPixelRatio(effectivePixelRatio());
   {
     const { w, h } = drawableSize();
-    renderer.setSize(w, h);
+    renderer.setSize(w, h, updateCanvasDomStyle);
   }
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -179,7 +221,10 @@ export function createScene(container: HTMLElement): {
   floor.position.y = -3.2;
   scene.add(floor);
 
-  const controls = new OrbitControls(camera, renderer.domElement);
+  const controlsTarget = isDom
+    ? renderer.domElement
+    : (orbitDomSurface as unknown as HTMLElement);
+  const controls = new OrbitControls(camera, controlsTarget);
   controls.enableDamping = true;
   controls.target.set(4, 0, 0);
 
@@ -293,12 +338,13 @@ export function createScene(container: HTMLElement): {
     }
   };
 
-  const isTypingFocus = (t: EventTarget | null) =>
-    t instanceof HTMLElement &&
-    t.closest("input, textarea, [contenteditable='true']") !== null;
+  const isTypingFocus = (target: EventTarget | null) =>
+    target instanceof HTMLElement &&
+    target.closest("input, textarea, [contenteditable='true']") !== null;
 
   const onKeyNavDown = (event: KeyboardEvent) => {
-    if (!navCodes.has(event.code) || isTypingFocus(event.target)) return;
+    if (!navCodes.has(event.code)) return;
+    if (isDom && isTypingFocus(event.target)) return;
     keysDown.add(event.code);
     event.preventDefault();
   };
@@ -311,17 +357,23 @@ export function createScene(container: HTMLElement): {
     keysDown.clear();
   };
   const onVisibility = () => {
-    if (document.hidden) clearKeys();
+    if (typeof document !== 'undefined' && document.hidden) clearKeys();
   };
   const onPageHide = () => {
     clearKeys();
   };
-  window.addEventListener('keydown', onKeyNavDown);
-  window.addEventListener('keyup', onKeyNavUp);
-  window.addEventListener('blur', clearKeys);
-  window.addEventListener('focus', clearKeys);
-  window.addEventListener('pagehide', onPageHide);
-  document.addEventListener('visibilitychange', onVisibility);
+
+  const navKeyTarget: EventTarget = isDom
+    ? window
+    : (orbitDomSurface as unknown as EventTarget);
+  navKeyTarget.addEventListener('keydown', onKeyNavDown as EventListener);
+  navKeyTarget.addEventListener('keyup', onKeyNavUp as EventListener);
+  if (isDom) {
+    window.addEventListener('blur', clearKeys);
+    window.addEventListener('focus', clearKeys);
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVisibility);
+  }
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -357,17 +409,19 @@ export function createScene(container: HTMLElement): {
   };
   applyVizPostProcess({ ...DEFAULT_VIZ_POST_PROCESS });
 
-  container.appendChild(renderer.domElement);
+  if (isDom && domContainer) {
+    domContainer.appendChild(renderer.domElement);
+  }
 
   const onResize = () => {
+    renderer.setPixelRatio(effectivePixelRatio());
     const { w, h } = drawableSize();
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
+    renderer.setSize(w, h, updateCanvasDomStyle);
     composer.setSize(w, h);
     updateFxaaResolution();
   };
-  window.addEventListener('resize', onResize);
 
   let containerResizeRaf = 0;
   const scheduleResizeFromContainer = () => {
@@ -380,13 +434,21 @@ export function createScene(container: HTMLElement): {
     });
   };
 
-  const resizeObserver =
-    typeof ResizeObserver !== 'undefined'
-      ? new ResizeObserver(() => {
-          scheduleResizeFromContainer();
-        })
-      : null;
-  resizeObserver?.observe(container);
+  let resizeObserver: ResizeObserver | null = null;
+  if (isDom && domContainer) {
+    window.addEventListener('resize', onResize);
+    resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            scheduleResizeFromContainer();
+          })
+        : null;
+    resizeObserver?.observe(domContainer);
+  }
+
+  const syncLayoutFromMount = (): void => {
+    onResize();
+  };
 
   const dispose = () => {
     if (containerResizeRaf !== 0) {
@@ -394,21 +456,28 @@ export function createScene(container: HTMLElement): {
       containerResizeRaf = 0;
     }
     resizeObserver?.disconnect();
-    window.removeEventListener('resize', onResize);
-    window.removeEventListener('keydown', onKeyNavDown);
-    window.removeEventListener('keyup', onKeyNavUp);
-    window.removeEventListener('blur', clearKeys);
-    window.removeEventListener('focus', clearKeys);
-    window.removeEventListener('pagehide', onPageHide);
-    document.removeEventListener('visibilitychange', onVisibility);
+    if (isDom) {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('blur', clearKeys);
+      window.removeEventListener('focus', clearKeys);
+      window.removeEventListener('pagehide', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+    }
+    navKeyTarget.removeEventListener('keydown', onKeyNavDown as EventListener);
+    navKeyTarget.removeEventListener('keyup', onKeyNavUp as EventListener);
+    if (!isDom) orbitDomSurface?.removeAllListeners();
     controls.dispose();
     floor.geometry.dispose();
     (floor.material as THREE.Material).dispose();
     fxaaPass.dispose();
     outputPass.dispose();
     renderer.dispose();
-    if (renderer.domElement.parentElement === container) {
-      container.removeChild(renderer.domElement);
+    if (
+      isDom &&
+      domContainer &&
+      renderer.domElement.parentElement === domContainer
+    ) {
+      domContainer.removeChild(renderer.domElement);
     }
   };
 
@@ -507,6 +576,7 @@ export function createScene(container: HTMLElement): {
     applyVizSceneColors,
     applyVizLightColors,
     applyVizPostProcess,
+    syncLayoutFromMount,
     dispose,
   };
 }
