@@ -27,11 +27,10 @@ import {
       >
       <select
         class="select select-bordered select-sm max-w-[11.5rem] text-sm"
-        [value]="currentTheme()"
         (change)="onThemePick($event)"
       >
         @for (t of themes; track t) {
-          <option [value]="t">{{ t }}</option>
+          <option [value]="t" [selected]="t === currentTheme()">{{ t }}</option>
         }
       </select>
     </label>
