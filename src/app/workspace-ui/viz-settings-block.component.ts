@@ -1,24 +1,34 @@
-import { ChangeDetectionStrategy, Component, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 @Component({
-  selector: "app-viz-settings-block",
+  selector: 'app-viz-settings-block',
   standalone: true,
   template: `
-    <section
-      class="border-base-300/80 bg-base-200/50 min-w-0 rounded-lg border p-2.5 shadow-inner"
+    <div
+      class="collapse collapse-arrow min-w-0 border border-base-300 bg-base-100"
     >
-      <h3
-        class="border-base-300/60 text-base-content/60 mb-2.5 w-full border-b pb-2 text-[0.62rem] font-semibold uppercase tracking-[0.14em]"
+      @if (defaultExpanded()) {
+        <input type="checkbox" class="min-h-0" checked />
+      } @else {
+        <input type="checkbox" class="min-h-0" />
+      }
+      <div
+        class="collapse-title py-2 text-[0.62rem] font-semibold uppercase tracking-[0.14em]"
       >
         {{ heading() }}
-      </h3>
-      <div class="flex flex-col gap-3">
-        <ng-content />
       </div>
-    </section>
+      <div class="collapse-content text-sm">
+        <div class="flex min-w-0 flex-col gap-3 pb-1 pt-0">
+          <ng-content />
+        </div>
+      </div>
+    </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class VizSettingsBlockComponent {
   readonly heading = input.required<string>();
+
+  /** Start offen; ohne [checked]-Binding, damit Klicks nicht von CD überschrieben werden. */
+  readonly defaultExpanded = input(true);
 }
