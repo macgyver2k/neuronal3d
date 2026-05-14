@@ -1,6 +1,6 @@
 import { Store } from '@ngrx/store';
 import { createFreshStoredModelEntry } from '../app/core/create-fresh-model-entry';
-import type { PersistedEpochRow } from '../app/core/model.types';
+import type { PersistedEpochRow, StoredModel } from '../app/core/model.types';
 import { NeuronalAppInstance } from '../app/core/neuronal-app-instance';
 import { NeuronalEpochsIdbService } from '../app/core/neuronal-epochs-idb.service';
 import { NeuronalModelsIdbService } from '../app/core/neuronal-models-idb.service';
@@ -9,7 +9,7 @@ import { NeuronalActions } from '../app/store/neuronal/neuronal.actions';
 import { selectNeuronalState } from '../app/store/neuronal/neuronal.selectors';
 import type { NeuronalState } from '../app/store/neuronal/neuronal.state';
 import { MLP } from '../nn/network';
-import { trainLoop } from '../train/trainer';
+import type { TrainingRunLastBatch } from '../train/trainer';
 import {
   isValidHexColor6,
   type VizLightColorSettings,
@@ -44,6 +44,7 @@ import {
 import { loadCsvData } from './mnist-csv-load';
 import { getMnistTestDataRef, getMnistTrainDataRef } from './mnist-data';
 import { loadSelectedModelIntoNet, selectModelById } from './model-selection';
+import { NeuronalTrainWorkerHost } from './neuronal-train-worker-host';
 import { NeuronalVizRenderWorkerHost } from './neuronal-viz-worker-host';
 import { RT } from './runtime-state';
 import {
@@ -85,10 +86,16 @@ export async function createNeuronalAppRuntime(
   RT.reconcileWorkspaceUrlForModelSelection = reconcileWorkspaceUrl;
   RT.surfaceVizMount = surfaces.vizMount;
   RT.surfaceDrawCanvas = surfaces.inferDrawCanvas;
+  let neuronalTrainWorkerHost: NeuronalTrainWorkerHost | null = null;
+
   const unSubN = RT.appStore
     .select(selectNeuronalState)
     .subscribe((n: NeuronalState) => {
+      const previous = RT.nLatest;
       RT.nLatest = n;
+      if (previous != null) {
+        neuronalTrainWorkerHost?.syncControlFromState(previous, n);
+      }
     });
   const runNewModelFromToolbar = (): void => {
     if (RT.nLatest.training.running) return;
@@ -132,6 +139,8 @@ export async function createNeuronalAppRuntime(
     applyVizLightColors,
     applyVizPostProcess,
   } = await neuronalVizHost.start();
+  neuronalTrainWorkerHost = new NeuronalTrainWorkerHost();
+  await neuronalTrainWorkerHost.whenReady();
   applyVizSceneColors(RT.nLatest.viz3d.sceneColors);
   applyVizLightColors(RT.nLatest.viz3d.lightColors);
   applyVizPostProcess(RT.nLatest.viz3d.postProcess);
@@ -552,38 +561,60 @@ export async function createNeuronalAppRuntime(
         setTimeout(r, 0);
       });
       publishVizState('train', zeroActivationsForLayout());
-      const runMetrics = await trainLoop(
-        RT.net!,
-        trainData,
-        trainCfg,
-        (s) => {
-          setTimeout(() => {
-            if (RT.net) publishVizState('train', s.activations);
-            setStatus(
-              `Ep ${fmtInt(s.epoch + 1, 3)}  Batch ${fmtInt(s.batchIndex, 5)}  loss ${fmtFloat(s.loss, 8, 4)}  acc ${fmtFloat(s.trainAccBatch * 100, 6, 1)}%`,
-            );
-          }, 0);
-        },
-        (ep) => {
-          const row: PersistedEpochRow = {
-            ...ep,
-            run,
-            savedAt: new Date().toISOString(),
-            runStartedAt: t0s,
-            runElapsedMs: Date.now() - t0,
-          };
-          RT.appStore.dispatch(
-            NeuronalActions.trainingEpochAppended({
-              modelId: trainModelId,
-              row,
-            }),
-          );
-        },
-        () => RT.nLatest.training.pause,
-        () => RT.nLatest.training.shouldStop,
-      );
+      let workerOutcome: {
+        runMetrics: TrainingRunLastBatch;
+        storedModel: StoredModel;
+      } | null = null;
+      try {
+        if (!neuronalTrainWorkerHost) {
+          throw new Error('Train-Worker nicht initialisiert');
+        }
+        workerOutcome = await neuronalTrainWorkerHost.runTrain(
+          cloneStoredModel(RT.net!),
+          trainData,
+          trainCfg,
+          {
+            onSnapshot: (snapshot) => {
+              setTimeout(() => {
+                publishVizState(
+                  'train',
+                  snapshot.activations,
+                  snapshot.weights,
+                );
+                setStatus(
+                  `Ep ${fmtInt(snapshot.epoch + 1, 3)}  Batch ${fmtInt(snapshot.batchIndex, 5)}  loss ${fmtFloat(snapshot.loss, 8, 4)}  acc ${fmtFloat(snapshot.trainAccBatch * 100, 6, 1)}%`,
+                );
+              }, 0);
+            },
+            onEpochEnd: (epochSummary) => {
+              const row: PersistedEpochRow = {
+                ...epochSummary,
+                run,
+                savedAt: new Date().toISOString(),
+                runStartedAt: t0s,
+                runElapsedMs: Date.now() - t0,
+              };
+              RT.appStore.dispatch(
+                NeuronalActions.trainingEpochAppended({
+                  modelId: trainModelId,
+                  row,
+                }),
+              );
+            },
+          },
+        );
+      } catch {
+        setStatus('Training-Worker-Fehler');
+      }
+      if (workerOutcome) {
+        RT.net = applyStoredModelToNet(workerOutcome.storedModel);
+      }
+      const runMetrics = workerOutcome?.runMetrics ?? {
+        lastTrainLoss: 0,
+        lastTrainBatchAcc: 0,
+      };
       RT.appStore.dispatch(NeuronalActions.trainingFinished(runMetrics));
-      if (RT.net) {
+      if (RT.net && workerOutcome) {
         const testMetrics = await computeDatasetMetrics(
           RT.net,
           getMnistTestDataRef(),
@@ -683,6 +714,8 @@ export async function createNeuronalAppRuntime(
       RT.stopAnimCleanup?.();
       RT.net3d?.dispose();
       RT.disposeSceneBound?.();
+      neuronalTrainWorkerHost?.dispose();
+      neuronalTrainWorkerHost = null;
       RT.net3d = null;
       RT.stopAnimCleanup = null;
       RT.disposeSceneBound = null;

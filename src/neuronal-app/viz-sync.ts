@@ -13,6 +13,7 @@ type VizState = {
   stamp: number;
   mode: VizMode;
   activations: number[][];
+  weightsForViz?: number[][][];
 };
 
 let vizStampCounter = 0;
@@ -23,15 +24,21 @@ export function zeroActivationsForLayout(): number[][] {
   return LAYER_SIZES.map((n) => new Array<number>(n).fill(0));
 }
 
-export function publishVizState(mode: VizMode, activations: number[][]): void {
+export function publishVizState(
+  mode: VizMode,
+  activations: number[][],
+  weightsForViz?: number[][][],
+): void {
   pendingVizState = {
     stamp: ++vizStampCounter,
     mode,
     activations: activations.map((a) => [...a]),
+    weightsForViz:
+      weightsForViz === undefined
+        ? undefined
+        : weightsForViz.map((matrix) => matrix.map((row) => [...row])),
   };
-  if (flushVizState() && RT.net3d && RT.net) {
-    RT.net3d.setWeights(RT.net.weights);
-  }
+  void flushVizState();
 }
 
 export function flushVizState(): boolean {
@@ -48,6 +55,9 @@ export function flushVizState(): boolean {
     pendingVizState.mode === 'infer' ? pendingVizState.activations : null,
   );
   RT.net3d.setActivations(pendingVizState.activations);
+  const weightMatrices =
+    pendingVizState.weightsForViz ?? RT.net?.weights ?? null;
+  if (weightMatrices) RT.net3d.setWeights(weightMatrices);
   lastAppliedVizStamp = pendingVizState.stamp;
   return true;
 }
@@ -73,7 +83,6 @@ export function reapplyViz3dAfterLayoutChange(): void {
   if (pendingVizState) {
     pendingVizState = { ...pendingVizState, stamp: ++vizStampCounter };
     flushVizState();
-    if (RT.net) RT.net3d.setWeights(RT.net.weights);
   } else {
     publishVizState('idle', zeroActivationsForLayout());
   }
@@ -81,7 +90,5 @@ export function reapplyViz3dAfterLayoutChange(): void {
 }
 
 export function tickViz(): void {
-  if (flushVizState() && RT.net3d && RT.net) {
-    RT.net3d.setWeights(RT.net.weights);
-  }
+  void flushVizState();
 }
