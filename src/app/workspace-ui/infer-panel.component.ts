@@ -19,7 +19,11 @@ import {
 import { NeuronalAppService } from '../core/neuronal-app.service';
 import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
-import { selectTrainingRunning } from '../store/neuronal/neuronal.selectors';
+import {
+  selectInferPanelModel,
+  selectInferUiControls,
+  selectTrainingRunning,
+} from '../store/neuronal/neuronal.selectors';
 import { TrainInferThumbComponent } from './train-infer-thumb.component';
 
 @Component({
@@ -43,7 +47,12 @@ import { TrainInferThumbComponent } from './train-infer-thumb.component';
           id="inferModelContext"
           class="text-info rounded-btn border-info/30 bg-info/10 border p-2 text-xs leading-snug"
           aria-live="polite"
-        ></p>
+        >
+          <span class="font-semibold">{{ inferPanelModel().headline }}</span>
+          <span class="text-base-content/80">
+            — {{ inferPanelModel().detail }}</span
+          >
+        </p>
 
         <div
           role="tablist"
@@ -88,7 +97,7 @@ import { TrainInferThumbComponent } from './train-infer-thumb.component';
                 id="btnInferRandom"
                 type="button"
                 class="btn btn-outline btn-sm"
-                disabled
+                [disabled]="inferCtrl().inferRandomDisabled"
                 (click)="inferRandom()"
               >
                 Zufälliges Testbild
@@ -97,7 +106,7 @@ import { TrainInferThumbComponent } from './train-infer-thumb.component';
                 id="btnTestCarousel"
                 type="button"
                 class="btn btn-outline btn-sm"
-                disabled
+                [disabled]="inferCtrl().carouselDisabled"
                 [attr.aria-pressed]="testCarouselOn()"
                 (click)="toggleTestCarousel()"
               >
@@ -131,6 +140,7 @@ import { TrainInferThumbComponent } from './train-infer-thumb.component';
               />
             </div>
             <canvas
+              #inferDrawCanvas
               id="drawCanvas"
               width="28"
               height="28"
@@ -151,7 +161,7 @@ import { TrainInferThumbComponent } from './train-infer-thumb.component';
                   id="btnInferDraw"
                   type="button"
                   class="btn btn-outline btn-sm"
-                  disabled
+                  [disabled]="inferCtrl().inferDrawDisabled"
                   (click)="inferDraw()"
                 >
                   Zeichnung auswerten
@@ -283,6 +293,15 @@ export class InferPanelComponent implements AfterViewInit, OnDestroy {
   private readonly store = inject(Store<AppState>);
   protected readonly neuronalApp = inject(NeuronalAppService);
 
+  protected readonly inferCtrl = toSignal(
+    this.store.select(selectInferUiControls),
+    { requireSync: true },
+  );
+  protected readonly inferPanelModel = toSignal(
+    this.store.select(selectInferPanelModel),
+    { requireSync: true },
+  );
+
   protected readonly inferUiTab = signal<'draw' | 'train'>('draw');
   protected readonly testCarouselOn = signal(false);
   protected readonly softBrushOn = signal(false);
@@ -308,6 +327,9 @@ export class InferPanelComponent implements AfterViewInit, OnDestroy {
 
   private readonly trainGalleryScrollEl =
     viewChild<ElementRef<HTMLElement>>('trainGalleryScroll');
+
+  readonly inferDrawCanvasEl =
+    viewChild<ElementRef<HTMLCanvasElement>>('inferDrawCanvas');
 
   protected readonly trainOrderedCount = computed(
     () => this.trainOrderedIndices().length,

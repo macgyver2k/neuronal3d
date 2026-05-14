@@ -19,6 +19,7 @@ import type {
   PersistedEpochRow,
   StoredModelEntry,
 } from '../../core/model.types';
+import { normalizeTrainHyperparams } from '../../core/train-hyperparams';
 import {
   DAISYUI_DEFAULT_THEME,
   isDaisyUiThemeName,
@@ -389,5 +390,78 @@ export const neuronalReducer = createReducer<NeuronalState>(
       ...s,
       vizImmersiveUi: !s.vizImmersiveUi,
     }),
+  ),
+  on(
+    NeuronalActions.runtimeStatusPlainSet,
+    (s, { plain }): NeuronalState => ({
+      ...s,
+      runtimeStatusPlain: plain,
+    }),
+  ),
+  on(
+    NeuronalActions.runtimeKernelCapsUpdated,
+    (s, { caps }): NeuronalState => ({
+      ...s,
+      runtimeKernelCaps: { ...caps },
+    }),
+  ),
+  on(
+    NeuronalActions.trainHyperparamsPatch,
+    (s, { patch }): NeuronalState => ({
+      ...s,
+      trainHyperparams: normalizeTrainHyperparams(s.trainHyperparams, patch),
+    }),
+  ),
+  on(
+    NeuronalActions.uiEpochPresetRequested,
+    (s, { epochs }): NeuronalState => ({
+      ...s,
+      trainHyperparams: normalizeTrainHyperparams(s.trainHyperparams, {
+        epochs: Number.isFinite(epochs)
+          ? Math.min(200, Math.max(1, Math.floor(epochs)))
+          : s.trainHyperparams.epochs,
+      }),
+    }),
+  ),
+  on(NeuronalActions.uiEpochsInputChanged, (s, { raw }): NeuronalState => {
+    const n = Number.parseInt(raw, 10);
+    return {
+      ...s,
+      trainHyperparams: normalizeTrainHyperparams(s.trainHyperparams, {
+        epochs: Number.isFinite(n) ? n : s.trainHyperparams.epochs,
+      }),
+    };
+  }),
+  on(NeuronalActions.uiBatchSizeInputChanged, (s, { raw }): NeuronalState => {
+    const n = Number.parseInt(raw, 10);
+    return {
+      ...s,
+      trainHyperparams: normalizeTrainHyperparams(s.trainHyperparams, {
+        batchSize: Number.isFinite(n) ? n : s.trainHyperparams.batchSize,
+      }),
+    };
+  }),
+  on(NeuronalActions.uiTrainLrInputChanged, (s, { raw }): NeuronalState => {
+    const n = Number.parseFloat(raw);
+    return {
+      ...s,
+      trainHyperparams: normalizeTrainHyperparams(s.trainHyperparams, {
+        lr: Number.isFinite(n) ? n : s.trainHyperparams.lr,
+      }),
+    };
+  }),
+  on(
+    NeuronalActions.uiTrainVizEveryInputChanged,
+    (s, { raw }): NeuronalState => {
+      const n = Number.parseInt(raw, 10);
+      return {
+        ...s,
+        trainHyperparams: normalizeTrainHyperparams(s.trainHyperparams, {
+          vizEveryNBatches: Number.isFinite(n)
+            ? n
+            : s.trainHyperparams.vizEveryNBatches,
+        }),
+      };
+    },
   ),
 );

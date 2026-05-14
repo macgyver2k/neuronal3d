@@ -1,8 +1,14 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { Store } from '@ngrx/store';
+import type { AppState } from '../store/app.state';
+import { selectRuntimeStatusPlain } from '../store/neuronal/neuronal.selectors';
+import { NeuronalStatusRichPipe } from './neuronal-status-rich.pipe';
 
 @Component({
   selector: 'app-workspace-status',
   standalone: true,
+  imports: [NeuronalStatusRichPipe],
   template: `
     <div class="flex w-full min-w-0 flex-col gap-2">
       <span
@@ -15,9 +21,17 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
         role="status"
         aria-live="polite"
         aria-atomic="true"
+        [innerHTML]="statusPlain() | neuronalStatusRich"
       ></span>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class WorkspaceStatusComponent {}
+export class WorkspaceStatusComponent {
+  private readonly store = inject(Store<AppState>);
+
+  protected readonly statusPlain = toSignal(
+    this.store.select(selectRuntimeStatusPlain),
+    { requireSync: true },
+  );
+}

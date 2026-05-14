@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Store } from '@ngrx/store';
 import type { AppState } from '../store/app.state';
 import { NeuronalActions } from '../store/neuronal/neuronal.actions';
+import { selectNewModelDisabled } from '../store/neuronal/neuronal.selectors';
 
 @Component({
   selector: 'app-neuronal-model-bar',
@@ -18,6 +20,7 @@ import { NeuronalActions } from '../store/neuronal/neuronal.actions';
           id="btnNewModel"
           type="button"
           class="btn btn-accent shrink-0"
+          [disabled]="newModelDisabled()"
           (click)="newModel()"
         >
           Neues Modell starten
@@ -31,25 +34,19 @@ import { NeuronalActions } from '../store/neuronal/neuronal.actions';
           JSON exportieren
         </button>
       </div>
-      <select
-        id="modelSelect"
-        class="sr-only"
-        tabindex="-1"
-        aria-hidden="true"
-        (change)="modelSelectChanged()"
-      ></select>
     </div>
   `,
 })
 export class NeuronalModelBarComponent {
   private readonly store = inject(Store<AppState>);
 
+  protected readonly newModelDisabled = toSignal(
+    this.store.select(selectNewModelDisabled),
+    { requireSync: true },
+  );
+
   newModel(): void {
     this.store.dispatch(NeuronalActions.newModelFromToolbarRequested());
-  }
-
-  modelSelectChanged(): void {
-    this.store.dispatch(NeuronalActions.uiModelSelectChanged());
   }
 
   exportJson(): void {

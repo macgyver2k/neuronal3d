@@ -43,12 +43,6 @@ import {
 
 const LAYER_SIZES = [784, 64, 32, 10];
 const HIDDEN: number[] = [...EXPECTED_LAYER_HIDDEN];
-const TRAIN_DEFAULTS = {
-  lr: 0.02,
-  batchSize: 32,
-  epochs: 1,
-  vizEveryNBatches: 4,
-} as const;
 const METRICS_YIELD_EVERY = 150;
 const VIZ_DEBUG_INFER =
   typeof globalThis.location !== 'undefined' &&
@@ -58,37 +52,8 @@ const MNIST_TRAIN_CSV = 'data/csv/mnist_train.csv.gz';
 const MNIST_TEST_CSV = 'data/csv/mnist_test.csv.gz';
 const MNIST_LABEL = 'MNIST';
 
-type ElRefs = {
-  app: HTMLElement;
-  dockTrain: HTMLElement;
-  dockInfer: HTMLElement;
-  btnNewModel: HTMLButtonElement;
-  btnTrain: HTMLButtonElement;
-  btnPause: HTMLButtonElement;
-  modelSelect: HTMLSelectElement;
-  modelDropdownButton: HTMLButtonElement;
-  modelDropdownMenu: HTMLDivElement;
-  activeModelTitle: HTMLParagraphElement;
-  activeModelDetail: HTMLParagraphElement;
-  inferModelContext: HTMLParagraphElement;
-  datasetRibbon: HTMLParagraphElement;
-  epochStepHint: HTMLParagraphElement;
-  btnSaveModelAs: HTMLButtonElement;
-  btnResetModel: HTMLButtonElement;
-  epochsInput: HTMLInputElement;
-  lrInput: HTMLInputElement;
-  batchSizeInput: HTMLInputElement;
-  vizEveryInput: HTMLInputElement;
-  btnInferRandom: HTMLButtonElement;
-  btnTestCarousel: HTMLButtonElement;
-  btnInferDraw: HTMLButtonElement;
-  btnClearDraw: HTMLButtonElement;
-  status: HTMLSpanElement;
-  viz: HTMLElement;
-  drawCanvas: HTMLCanvasElement;
-};
-
-let el!: ElRefs;
+let surfaceVizMount!: HTMLElement;
+let surfaceDrawCanvas!: HTMLCanvasElement;
 let ctx2d!: CanvasRenderingContext2D;
 /** Zeichen-Canvas: Bitmap exakt MNIST 28×28 (1 Pixel = 1 Eingabe); Anzeige skaliert per CSS. */
 const MNIST_DRAW_GRID = 28;
@@ -114,7 +79,7 @@ function inferDrawBrushSoftScale(): number {
 }
 
 function drawCanvasMinSide(): number {
-  return Math.min(el.drawCanvas.width, el.drawCanvas.height);
+  return Math.min(surfaceDrawCanvas.width, surfaceDrawCanvas.height);
 }
 
 function softPenDabRadius(): number {
@@ -139,47 +104,6 @@ function softDabStepPx(): number {
 export type InferDrawBrushMode = 'pixels' | 'soft';
 
 let inferDrawBrushMode: InferDrawBrushMode = 'pixels';
-
-function bindFromHost(root: HTMLElement): ElRefs {
-  const m = <T extends HTMLElement>(id: string) => {
-    let e: T | null =
-      root.id === id
-        ? (root as T)
-        : (root.querySelector(`#${CSS.escape(id)}`) as T | null);
-    if (!e) e = document.getElementById(id) as T | null;
-    if (!e) throw new Error(`#${id}`);
-    return e;
-  };
-  return {
-    app: m('app'),
-    dockTrain: m('dockTrain'),
-    dockInfer: m('dockInfer'),
-    btnNewModel: m('btnNewModel'),
-    btnTrain: m('btnTrain'),
-    btnPause: m('btnPause'),
-    modelSelect: m('modelSelect'),
-    modelDropdownButton: m('modelDropdownButton'),
-    modelDropdownMenu: m('modelDropdownMenu'),
-    activeModelTitle: m('activeModelTitle'),
-    activeModelDetail: m('activeModelDetail'),
-    inferModelContext: m('inferModelContext'),
-    datasetRibbon: m('datasetRibbon'),
-    epochStepHint: m('epochStepHint'),
-    btnSaveModelAs: m('btnSaveModelAs'),
-    btnResetModel: m('btnResetModel'),
-    epochsInput: m('epochsInput'),
-    lrInput: m('lrInput'),
-    batchSizeInput: m('batchSizeInput'),
-    vizEveryInput: m('vizEveryInput'),
-    btnInferRandom: m('btnInferRandom'),
-    btnTestCarousel: m('btnTestCarousel'),
-    btnInferDraw: m('btnInferDraw'),
-    btnClearDraw: m('btnClearDraw'),
-    status: m('status'),
-    viz: m('viz'),
-    drawCanvas: m('drawCanvas'),
-  };
-}
 
 let trainData: MnistSample[] = [];
 let testData: MnistSample[] = [];
@@ -218,16 +142,14 @@ type VizState = {
   activations: number[][];
 };
 
-let neuronalUiRaf: number = 0;
-
 let drawing = false;
 let liveCanvasInferRaf: number | null = null;
 let liveInferLastRun = 0;
 const LIVE_INFER_MIN_MS = 48;
 function canvasPos(ev: PointerEvent): { x: number; y: number } {
-  const r = el.drawCanvas.getBoundingClientRect();
-  const sx = el.drawCanvas.width / r.width;
-  const sy = el.drawCanvas.height / r.height;
+  const r = surfaceDrawCanvas.getBoundingClientRect();
+  const sx = surfaceDrawCanvas.width / r.width;
+  const sy = surfaceDrawCanvas.height / r.height;
   return { x: (ev.clientX - r.left) * sx, y: (ev.clientY - r.top) * sy };
 }
 
@@ -334,8 +256,8 @@ function stampSoftBrushAlongSegment(
 }
 
 function drawCanvasCellSize(): { cellW: number; cellH: number } {
-  const cw = el.drawCanvas.width;
-  const ch = el.drawCanvas.height;
+  const cw = surfaceDrawCanvas.width;
+  const ch = surfaceDrawCanvas.height;
   return { cellW: cw / MNIST_DRAW_GRID, cellH: ch / MNIST_DRAW_GRID };
 }
 
@@ -484,19 +406,20 @@ function scheduleLiveCanvasInfer(): void {
   };
   liveCanvasInferRaf = requestAnimationFrame(step);
 }
-function statusPlainToHtml(plain: string): string {
-  const esc = plain
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return esc.replace(
-    /(\d+:\d+:\d+|\d+:\d+|(?:-)?\b\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?%?)/g,
-    '<span class="badge badge-primary badge-sm mx-0.5 font-semibold tabular-nums">$1</span>',
-  );
+function setStatus(t: string): void {
+  appStore.dispatch(NeuronalActions.runtimeStatusPlainSet({ plain: t }));
 }
 
-function setStatus(t: string): void {
-  el.status.innerHTML = statusPlainToHtml(t);
+function publishKernelCaps(): void {
+  appStore.dispatch(
+    NeuronalActions.runtimeKernelCapsUpdated({
+      caps: {
+        hasNet: net !== null,
+        mnistTrainCount: trainData.length,
+        mnistTestCount: testData.length,
+      },
+    }),
+  );
 }
 
 function setModelDropdownOpen(open: boolean): void {
@@ -513,12 +436,6 @@ function selectModelById(id: string, statusPrefix = 'Aktiv'): boolean {
   const entry = nLatest.modelCollection.models.find((m) => m.id === id);
   setStatus(`${statusPrefix}: ${entry?.name ?? id}`);
   return true;
-}
-
-function formatTimeLabel(iso: string): string {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return '--:--:--';
-  return d.toLocaleTimeString('de-DE', { hour12: false });
 }
 
 function nextRunSeq(
@@ -564,86 +481,19 @@ function inferLayerMaxDiffs(prev: number[][], cur: number[][]): string {
   return parts.length ? `  Δmax ${parts.join(' ')}` : '';
 }
 
-function updateButtons(): void {
-  const hasTrain = trainData.length > 0;
-  const hasTest = testData.length > 0;
-  const tr = nLatest.training.running;
-  el.btnTrain.disabled = !hasTrain || tr;
-  el.btnPause.disabled = !tr;
-  el.modelSelect.disabled = tr;
-  if (tr && nLatest.modelDropdownOpen) setModelDropdownOpen(false);
-  el.btnSaveModelAs.disabled = !net || tr;
-  el.btnResetModel.disabled = !net || tr;
-  el.btnInferRandom.disabled = !net || !hasTest;
-  el.btnTestCarousel.disabled = !net || !hasTest || tr;
-  el.btnInferDraw.disabled = !net;
-  el.btnNewModel.disabled = tr || !nLatest.modelStoreHydrated;
-  el.epochsInput.disabled = tr;
-  el.lrInput.disabled = tr;
-  el.batchSizeInput.disabled = tr;
-  el.vizEveryInput.disabled = tr;
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(
-    '.epochPresetBtn',
-  )) {
-    btn.disabled = tr;
-  }
-  syncEpochPresetHighlight();
-  updateRunHint();
-  updateActiveModelPanel();
-}
-
-function parseIntInRange(
-  raw: string,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
-function parseFloatInRange(
-  raw: string,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const n = Number.parseFloat(raw);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
 function getTrainConfig(): {
   lr: number;
   batchSize: number;
   epochs: number;
   vizEveryNBatches: number;
 } {
-  const epochs = parseIntInRange(
-    el.epochsInput.value,
-    TRAIN_DEFAULTS.epochs,
-    1,
-    200,
-  );
-  const lr = parseFloatInRange(el.lrInput.value, TRAIN_DEFAULTS.lr, 0.0001, 1);
-  const batchSize = parseIntInRange(
-    el.batchSizeInput.value,
-    TRAIN_DEFAULTS.batchSize,
-    1,
-    512,
-  );
-  const vizEveryNBatches = parseIntInRange(
-    el.vizEveryInput.value,
-    TRAIN_DEFAULTS.vizEveryNBatches,
-    1,
-    1000,
-  );
-  el.epochsInput.value = String(epochs);
-  el.lrInput.value = String(lr);
-  el.batchSizeInput.value = String(batchSize);
-  el.vizEveryInput.value = String(vizEveryNBatches);
-  return { lr, batchSize, epochs, vizEveryNBatches };
+  const h = nLatest.trainHyperparams;
+  return {
+    lr: h.lr,
+    batchSize: h.batchSize,
+    epochs: h.epochs,
+    vizEveryNBatches: h.vizEveryNBatches,
+  };
 }
 
 function fmtPct(v: number | null): string {
@@ -671,134 +521,6 @@ function applyStoredModelToNet(data: StoredModel): MLP {
   model.weights = data.weights.map((m) => m.map((row) => [...row]));
   model.biases = data.biases.map((m) => m.map((row) => [...row]));
   return model;
-}
-
-function refreshModelSelect(): void {
-  const col = nLatest.modelCollection;
-  const selected = col.activeModelId ?? el.modelSelect.value;
-  el.modelSelect.innerHTML = '';
-  if (!nLatest.modelStoreHydrated) {
-    const loading = document.createElement('option');
-    loading.value = '';
-    loading.textContent = 'Modelle werden geladen …';
-    loading.selected = true;
-    el.modelSelect.append(loading);
-    setModelDropdownOpen(false);
-    updateActiveModelPanel();
-    updateRunHint();
-    syncEpochPresetHighlight();
-    return;
-  }
-  if (col.models.length === 0) {
-    const empty = document.createElement('option');
-    empty.value = '';
-    empty.textContent = 'Kein Modell';
-    empty.selected = true;
-    el.modelSelect.append(empty);
-    setModelDropdownOpen(false);
-    updateActiveModelPanel();
-    updateRunHint();
-    syncEpochPresetHighlight();
-    return;
-  }
-  for (const entry of col.models) {
-    const option = document.createElement('option');
-    option.value = entry.id;
-    option.textContent = `${entry.name} | err ${fmtPct(entry.metrics.errorRate)} | acc ${fmtPct(entry.metrics.testAcc)} | ep ${entry.metrics.epochsTrained}`;
-    el.modelSelect.append(option);
-  }
-  if (selected && col.models.some((m) => m.id === selected)) {
-    el.modelSelect.value = selected;
-  } else if (col.models.length > 0) {
-    el.modelSelect.value = col.models[0].id;
-  }
-  updateActiveModelPanel();
-  updateRunHint();
-  syncEpochPresetHighlight();
-}
-
-function updateActiveModelPanel(): void {
-  if (!net) {
-    el.activeModelTitle.textContent = 'Noch kein Netz geladen';
-    el.activeModelDetail.textContent =
-      'Oben ‚Aktives Modell‘ wählen — oder „Training starten“ ohne vorherigen Stand legt automatisch einen ersten Stand an.';
-    el.inferModelContext.textContent =
-      'Kein aktives Modell — zuerst ein Modell wählen oder anlegen.';
-    return;
-  }
-  const id = nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
-  const entry = id
-    ? nLatest.modelCollection.models.find((m) => m.id === id)
-    : null;
-  if (entry) {
-    el.activeModelTitle.textContent = entry.name;
-    el.activeModelDetail.textContent = `Test ${fmtPct(entry.metrics.testAcc)} · Fehlerquote ${fmtPct(entry.metrics.errorRate)} · ${entry.metrics.epochsTrained} trainierte Epochen (Summe) · zuletzt ${formatTimeLabel(entry.updatedAt)}`;
-    el.inferModelContext.textContent = `Inferenz nutzt: ${entry.name} · ${entry.metrics.epochsTrained} Epochen gesamt · Test ${fmtPct(entry.metrics.testAcc)}`;
-  } else {
-    el.activeModelTitle.textContent = 'Netz im Arbeitsspeicher';
-    el.activeModelDetail.textContent =
-      'Kein passender Eintrag in der Bibliothek gefunden.';
-    el.inferModelContext.textContent =
-      'Inferenz nutzt das Netz im Arbeitsspeicher (ohne Bibliothekseintrag).';
-  }
-}
-
-function updateDatasetRibbon(): void {
-  if (trainData.length === 0 && testData.length === 0) {
-    el.datasetRibbon.textContent = `${MNIST_LABEL}: Train 0 · Test 0 — warten auf erfolgreichen Abruf (Statuszeile).`;
-    return;
-  }
-  if (trainData.length === 0) {
-    el.datasetRibbon.textContent = `${MNIST_LABEL}: Trainingsdaten fehlen · Test ${testData.length}.`;
-    return;
-  }
-  if (testData.length === 0) {
-    el.datasetRibbon.textContent = `${MNIST_LABEL}: Train ${trainData.length} · Testdaten fehlen.`;
-    return;
-  }
-  el.datasetRibbon.textContent = `${MNIST_LABEL}: ${trainData.length} Train-Bilder · ${testData.length} Test-Bilder bereit.`;
-}
-
-function updateRunHint(): void {
-  const bs = parseIntInRange(
-    el.batchSizeInput.value,
-    TRAIN_DEFAULTS.batchSize,
-    1,
-    512,
-  );
-  const ep = parseIntInRange(
-    el.epochsInput.value,
-    TRAIN_DEFAULTS.epochs,
-    1,
-    200,
-  );
-  const n = trainData.length;
-  if (n <= 0) {
-    el.epochStepHint.textContent =
-      'Sobald Trainingsdaten geladen sind, erscheint hier die ungefähre Anzahl Gradientenschritte.';
-    return;
-  }
-  const per = Math.max(1, Math.ceil(n / bs));
-  const total = per * ep;
-  el.epochStepHint.textContent = `Bei Batchgröße ${bs}: rund ${per} Schritte pro Epoche, etwa ${total} für ${ep} Epoche(n).`;
-}
-
-function syncEpochPresetHighlight(): void {
-  const ep = parseIntInRange(
-    el.epochsInput.value,
-    TRAIN_DEFAULTS.epochs,
-    1,
-    200,
-  );
-  const presets = new Set([1, 3, 10, 30]);
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(
-    '.epochPresetBtn',
-  )) {
-    const v = Number.parseInt(btn.dataset['epochs'] ?? '', 10);
-    const active = presets.has(ep) && v === ep;
-    btn.classList.toggle('btn-primary', active);
-    btn.classList.toggle('btn-outline', !active);
-  }
 }
 
 function upsertModelEntry(entry: StoredModelEntry): void {
@@ -846,6 +568,7 @@ function loadSelectedModelIntoNet(id: string): boolean {
     }),
   );
   publishVizState('idle', zeroActivationsForLayout());
+  publishKernelCaps();
   return true;
 }
 
@@ -911,8 +634,7 @@ async function loadCsvData(): Promise<void> {
     testData = [];
   }
   lastInferSampleIndex = -1;
-  updateDatasetRibbon();
-  updateButtons();
+  publishKernelCaps();
 }
 
 let renderSceneBound: () => void = () => {};
@@ -988,8 +710,8 @@ function tickViz(): void {
 }
 
 function canvasToMnistPixels(): number[] {
-  const w = el.drawCanvas.width;
-  const h = el.drawCanvas.height;
+  const w = surfaceDrawCanvas.width;
+  const h = surfaceDrawCanvas.height;
   const img = ctx2d.getImageData(0, 0, w, h);
   const d = img.data;
 
@@ -1064,7 +786,7 @@ function paintMnistPixelsToInferCanvas(pixels: number[]): void {
   if (pixels.length !== MNIST_PIXEL_COUNT) return;
   cancelLiveCanvasInferRaf();
   resetCanvas2dPaintExtras();
-  drawMnistPixelsOntoCanvas(el.drawCanvas, pixels);
+  drawMnistPixelsOntoCanvas(surfaceDrawCanvas, pixels);
 }
 
 function inferWithPixels(
@@ -1133,7 +855,6 @@ export type NeuronalAppRuntime = {
   destroy: () => void;
   onTrain: () => void;
   onPause: () => void;
-  onModelSelectChange: () => void;
   onNewModel: () => void;
   onSaveAs: () => void;
   onReset: () => void;
@@ -1141,10 +862,6 @@ export type NeuronalAppRuntime = {
   onInferTrainSample: (index: number) => void;
   onInferDraw: () => void;
   onClearDraw: () => void;
-  onEpochsInput: () => void;
-  onBatchSizeInput: () => void;
-  onEpochPreset: (n: number) => void;
-  onDocumentPointerDown: (ev: PointerEvent) => void;
   onDrawPointerDown: (e: PointerEvent) => void;
   onDrawPointerMove: (e: PointerEvent) => void;
   onDrawPointerUp: () => void;
@@ -1172,28 +889,25 @@ export type NeuronalAppRuntime = {
   setTestImageCarouselMode: (enabled: boolean) => boolean;
 };
 
+export type NeuronalRuntimeMountSurfaces = {
+  vizMount: HTMLElement;
+  inferDrawCanvas: HTMLCanvasElement;
+};
+
 export function createNeuronalAppRuntime(
   store: Store<AppState>,
-  host: HTMLElement,
+  surfaces: NeuronalRuntimeMountSurfaces,
   appInstance: NeuronalAppInstance,
   reconcileWorkspaceUrl?: ReconcileWorkspaceUrlForModelSelection,
 ): NeuronalAppRuntime {
   appStore = store;
   reconcileWorkspaceUrlForModelSelection = reconcileWorkspaceUrl;
-  el = bindFromHost(host);
+  surfaceVizMount = surfaces.vizMount;
+  surfaceDrawCanvas = surfaces.inferDrawCanvas;
   const unSubN = appStore
     .select(selectNeuronalState)
     .subscribe((n: NeuronalState) => {
       nLatest = n;
-      el.btnPause.textContent = n.training.pause ? 'Fortsetzen' : 'Anhalten';
-      if (neuronalUiRaf !== 0) {
-        cancelAnimationFrame(neuronalUiRaf);
-      }
-      neuronalUiRaf = requestAnimationFrame(() => {
-        neuronalUiRaf = 0;
-        updateButtons();
-        refreshModelSelect();
-      });
     });
   const runNewModelFromToolbar = (): void => {
     if (nLatest.training.running) return;
@@ -1205,6 +919,7 @@ export function createNeuronalAppRuntime(
     applyEpochHistoryToUi(entry.id);
     publishVizState('idle', zeroActivationsForLayout());
     setStatus(`Neues Modell: ${entry.name}`);
+    publishKernelCaps();
   };
   const runActiveModelFromToolbar = (id: string): void => {
     if (nLatest.training.running) return;
@@ -1212,14 +927,14 @@ export function createNeuronalAppRuntime(
     selectModelById(id, 'Aktives Modell');
   };
   setModelDropdownOpen(false);
-  el.drawCanvas.width = MNIST_DRAW_GRID;
-  el.drawCanvas.height = MNIST_DRAW_GRID;
-  const ctxDraw = el.drawCanvas.getContext('2d');
+  surfaceDrawCanvas.width = MNIST_DRAW_GRID;
+  surfaceDrawCanvas.height = MNIST_DRAW_GRID;
+  const ctxDraw = surfaceDrawCanvas.getContext('2d');
   if (!ctxDraw) throw new Error('canvas');
   ctx2d = ctxDraw;
   resetCanvas2dPaintExtras();
   ctx2d.fillStyle = '#000000';
-  ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
+  ctx2d.fillRect(0, 0, surfaceDrawCanvas.width, surfaceDrawCanvas.height);
 
   const {
     scene,
@@ -1231,7 +946,7 @@ export function createNeuronalAppRuntime(
     applyVizSceneColors,
     applyVizLightColors,
     applyVizPostProcess,
-  } = createScene(el.viz);
+  } = createScene(surfaceVizMount);
   applyVizSceneColors(nLatest.viz3d.sceneColors);
   applyVizLightColors(nLatest.viz3d.lightColors);
   applyVizPostProcess(nLatest.viz3d.postProcess);
@@ -1339,7 +1054,7 @@ export function createNeuronalAppRuntime(
     if (e.button !== 0 && e.button !== 2) return;
     if (e.button === 2) e.preventDefault();
     drawing = true;
-    el.drawCanvas.setPointerCapture(e.pointerId);
+    surfaceDrawCanvas.setPointerCapture(e.pointerId);
     if (inferDrawBrushMode === 'soft') {
       resetCanvas2dPaintExtras();
       drawSoftIsPen = e.button === 0;
@@ -1466,7 +1181,7 @@ export function createNeuronalAppRuntime(
   const onClearDraw = (): void => {
     resetCanvas2dPaintExtras();
     ctx2d.fillStyle = '#000000';
-    ctx2d.fillRect(0, 0, el.drawCanvas.width, el.drawCanvas.height);
+    ctx2d.fillRect(0, 0, surfaceDrawCanvas.width, surfaceDrawCanvas.height);
     runLiveCanvasInferNow();
   };
 
@@ -1532,23 +1247,6 @@ export function createNeuronalAppRuntime(
   const onPause = (): void => {
     appStore.dispatch(NeuronalActions.trainingPauseToggled());
   };
-  const onModelSelectChange = (): void => {
-    const id = el.modelSelect.value;
-    if (!id) return;
-    appStore.dispatch(NeuronalActions.activeModelFromToolbarRequested({ id }));
-  };
-  const onDocumentPointerDown = (ev: PointerEvent): void => {
-    const t = ev.target;
-    if (!(t instanceof Node)) return;
-    if (
-      t === el.modelDropdownButton ||
-      el.modelDropdownButton.contains(t) ||
-      el.modelDropdownMenu.contains(t)
-    ) {
-      return;
-    }
-    setModelDropdownOpen(false);
-  };
   const onNewModel = (): void => {
     appStore.dispatch(NeuronalActions.newModelFromToolbarRequested());
   };
@@ -1581,8 +1279,7 @@ export function createNeuronalAppRuntime(
   };
   const onReset = (): void => {
     if (nLatest.training.running) return;
-    const currentId =
-      nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
+    const currentId = nLatest.modelCollection.activeModelId;
     if (!currentId) return;
     const currentEntry = nLatest.modelCollection.models.find(
       (m) => m.id === currentId,
@@ -1608,6 +1305,7 @@ export function createNeuronalAppRuntime(
     applyEpochHistoryToUi(currentId);
     publishVizState('idle', zeroActivationsForLayout());
     setStatus(`Modell neu initialisiert: ${currentEntry.name}`);
+    publishKernelCaps();
   };
   const onTrain = (): void => {
     void (async () => {
@@ -1633,10 +1331,10 @@ export function createNeuronalAppRuntime(
             epochsTrained: 0,
           },
         });
+        publishKernelCaps();
       }
       lastInferActsDebug = null;
-      const trainModelId =
-        nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
+      const trainModelId = nLatest.modelCollection.activeModelId;
       if (!trainModelId) {
         return;
       }
@@ -1652,7 +1350,6 @@ export function createNeuronalAppRuntime(
           runStartedMs: t0,
         }),
       );
-      el.btnPause.textContent = 'Anhalten';
       await new Promise<void>((r) => {
         setTimeout(r, 0);
       });
@@ -1690,8 +1387,7 @@ export function createNeuronalAppRuntime(
       appStore.dispatch(NeuronalActions.trainingFinished(runMetrics));
       if (net) {
         const testMetrics = await computeDatasetMetrics(net, testData);
-        const currentId =
-          nLatest.modelCollection.activeModelId ?? el.modelSelect.value;
+        const currentId = nLatest.modelCollection.activeModelId;
         const currentEntry = currentId
           ? nLatest.modelCollection.models.find((m) => m.id === currentId)
           : null;
@@ -1726,19 +1422,6 @@ export function createNeuronalAppRuntime(
       );
     })();
   };
-  const onEpochsInput = (): void => {
-    syncEpochPresetHighlight();
-    updateRunHint();
-  };
-  const onBatchSizeInput = (): void => {
-    updateRunHint();
-  };
-  const onEpochPreset = (n: number): void => {
-    if (!Number.isFinite(n)) return;
-    el.epochsInput.value = String(Math.min(200, Math.max(1, n)));
-    syncEpochPresetHighlight();
-    updateRunHint();
-  };
 
   const onBeforeUnload = () => {
     void new NeuronalModelsIdbService().saveCollection(nLatest.modelCollection);
@@ -1754,7 +1437,7 @@ export function createNeuronalAppRuntime(
   window.addEventListener('beforeunload', onBeforeUnload);
 
   setStatus('MNIST wird geladen …');
-  updateButtons();
+  publishKernelCaps();
   void loadCsvData();
   try {
     if (nLatest.modelStoreHydrated) {
@@ -1790,10 +1473,6 @@ export function createNeuronalAppRuntime(
       cancelLiveCanvasInferRaf();
       cancelPendingVizColorPreviews();
       clearTestCarouselTimer();
-      if (neuronalUiRaf !== 0) {
-        cancelAnimationFrame(neuronalUiRaf);
-        neuronalUiRaf = 0;
-      }
       appStore.dispatch(NeuronalActions.trainingStopRequested());
       appInstance.disconnect();
       unSubN.unsubscribe();
@@ -1810,7 +1489,6 @@ export function createNeuronalAppRuntime(
     },
     onTrain,
     onPause,
-    onModelSelectChange,
     onNewModel,
     onSaveAs,
     onReset,
@@ -1818,10 +1496,6 @@ export function createNeuronalAppRuntime(
     onInferTrainSample,
     onInferDraw,
     onClearDraw,
-    onEpochsInput,
-    onBatchSizeInput,
-    onEpochPreset,
-    onDocumentPointerDown,
     onDrawPointerDown,
     onDrawPointerMove,
     onDrawPointerUp,

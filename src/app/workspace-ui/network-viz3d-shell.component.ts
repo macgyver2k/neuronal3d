@@ -2,10 +2,12 @@ import { DecimalPipe, DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   inject,
   NgZone,
   OnDestroy,
   signal,
+  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Store } from '@ngrx/store';
@@ -762,6 +764,7 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
         class="relative grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)]"
       >
         <div
+          #vizMount
           id="viz"
           class="col-start-1 row-start-1 min-h-0 min-w-0 size-full max-h-full"
         ></div>
@@ -823,6 +826,9 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
   protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
   protected readonly neuronMulStep = ACTIVE_NEURON_MAX_SCALE_MUL_STEP;
+
+  /** Mount-Punkt für die Three.js-Szene (an neuronal-app übergeben). */
+  readonly vizMountEl = viewChild<ElementRef<HTMLElement>>('vizMount');
 
   onNetworkColorHex(
     key: Exclude<

@@ -173,17 +173,6 @@ export class NeuronalEffects {
     { dispatch: false },
   );
 
-  uiModelSelectChanged$ = createEffect(
-    () =>
-      this.actions$.pipe(
-        ofType(NeuronalActions.uiModelSelectChanged),
-        tap(() => {
-          this.neuronalApp.onModelSelectChange();
-        }),
-      ),
-    { dispatch: false },
-  );
-
   uiTrainStart$ = createEffect(
     () =>
       this.actions$.pipe(
@@ -245,50 +234,6 @@ export class NeuronalEffects {
         ofType(NeuronalActions.uiClearDrawRequested),
         tap(() => {
           this.neuronalApp.onClearDraw();
-        }),
-      ),
-    { dispatch: false },
-  );
-
-  uiEpochPreset$ = createEffect(
-    () =>
-      this.actions$.pipe(
-        ofType(NeuronalActions.uiEpochPresetRequested),
-        tap(({ epochs }) => {
-          this.neuronalApp.onEpochPreset(epochs);
-        }),
-      ),
-    { dispatch: false },
-  );
-
-  uiEpochsInput$ = createEffect(
-    () =>
-      this.actions$.pipe(
-        ofType(NeuronalActions.uiEpochsInputChanged),
-        tap(() => {
-          this.neuronalApp.onEpochsInput();
-        }),
-      ),
-    { dispatch: false },
-  );
-
-  uiBatchSizeInput$ = createEffect(
-    () =>
-      this.actions$.pipe(
-        ofType(NeuronalActions.uiBatchSizeInputChanged),
-        tap(() => {
-          this.neuronalApp.onBatchSizeInput();
-        }),
-      ),
-    { dispatch: false },
-  );
-
-  uiDocumentPointerDown$ = createEffect(
-    () =>
-      this.actions$.pipe(
-        ofType(NeuronalActions.uiDocumentPointerDown),
-        tap(({ event }) => {
-          this.neuronalApp.onDocumentPointerDown(event);
         }),
       ),
     { dispatch: false },

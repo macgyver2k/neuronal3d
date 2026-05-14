@@ -10,7 +10,9 @@ import type {
   StoredModelCollection,
   StoredModelEntry,
 } from '../../core/model.types';
+import type { TrainHyperparams } from '../../core/train-hyperparams';
 import type { DaisyUiThemeName } from '../../workspace-ui/daisy-theme';
+import type { RuntimeKernelCaps } from './neuronal.state';
 
 export const NeuronalActions = createActionGroup({
   source: 'Neuronal',
@@ -50,7 +52,9 @@ export const NeuronalActions = createActionGroup({
     'New Model From Toolbar Requested': emptyProps(),
     'Active Model From Toolbar Requested': props<{ id: string }>(),
     'Ui Model Dropdown Toggle Requested': emptyProps(),
-    'Ui Model Select Changed': emptyProps(),
+    'Runtime Status Plain Set': props<{ plain: string }>(),
+    'Runtime Kernel Caps Updated': props<{ caps: RuntimeKernelCaps }>(),
+    'Train Hyperparams Patch': props<{ patch: Partial<TrainHyperparams> }>(),
     'Ui Train Start Requested': emptyProps(),
     'Ui Export Bundle Requested': emptyProps(),
     'Ui Save As Requested': emptyProps(),
@@ -59,9 +63,10 @@ export const NeuronalActions = createActionGroup({
     'Ui Infer Draw Requested': emptyProps(),
     'Ui Clear Draw Requested': emptyProps(),
     'Ui Epoch Preset Requested': props<{ epochs: number }>(),
-    'Ui Epochs Input Changed': emptyProps(),
-    'Ui Batch Size Input Changed': emptyProps(),
-    'Ui Document Pointer Down': props<{ event: PointerEvent }>(),
+    'Ui Epochs Input Changed': props<{ raw: string }>(),
+    'Ui Batch Size Input Changed': props<{ raw: string }>(),
+    'Ui Train Lr Input Changed': props<{ raw: string }>(),
+    'Ui Train Viz Every Input Changed': props<{ raw: string }>(),
     'Ui Draw Pointer Down': props<{ event: PointerEvent }>(),
     'Ui Draw Pointer Move': props<{ event: PointerEvent }>(),
     'Ui Draw Pointer Up': emptyProps(),

@@ -20,6 +20,10 @@ import type {
   StoredModelCollection,
 } from '../../core/model.types';
 import {
+  TRAIN_HYPERPARAM_DEFAULTS,
+  type TrainHyperparams,
+} from '../../core/train-hyperparams';
+import {
   DAISYUI_DEFAULT_THEME,
   type DaisyUiThemeName,
 } from '../../workspace-ui/daisy-theme';
@@ -67,12 +71,22 @@ export function createInitialViz3dState(): Viz3dState {
   };
 }
 
+export type RuntimeKernelCaps = {
+  hasNet: boolean;
+  mnistTrainCount: number;
+  mnistTestCount: number;
+};
+
 export type NeuronalState = {
   modelCollection: StoredModelCollection;
   modelStoreHydrated: boolean;
   epochByModelId: Record<string, PersistedEpochRow[]>;
   epochDisplayRows: PersistedEpochRow[];
   viz3d: Viz3dState;
+  trainHyperparams: TrainHyperparams;
+  /** Statuszeile (Training, MNIST-Ladefortschritt, Inferenz) — Darstellung in Angular. */
+  runtimeStatusPlain: string;
+  runtimeKernelCaps: RuntimeKernelCaps;
   training: {
     running: boolean;
     pause: boolean;
@@ -106,6 +120,13 @@ export function createInitialNeuronalState(): NeuronalState {
     epochByModelId,
     epochDisplayRows: initialEpochDisplay(epochByModelId, modelCollection),
     viz3d: createInitialViz3dState(),
+    trainHyperparams: { ...TRAIN_HYPERPARAM_DEFAULTS },
+    runtimeStatusPlain: '',
+    runtimeKernelCaps: {
+      hasNet: false,
+      mnistTrainCount: 0,
+      mnistTestCount: 0,
+    },
     training: {
       running: false,
       pause: false,

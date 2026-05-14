@@ -2,7 +2,6 @@ import {
   AfterViewInit,
   Component,
   computed,
-  ElementRef,
   HostListener,
   inject,
   OnDestroy,
@@ -13,6 +12,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { Store } from '@ngrx/store';
 import { filter, firstValueFrom, take } from 'rxjs';
+import type { NeuronalRuntimeMountSurfaces } from '../../neuronal-app';
 import { NeuronalAppInstance } from '../core/neuronal-app-instance';
 import { NeuronalAppService } from '../core/neuronal-app.service';
 import { routerUrlIsModelWorkspace } from '../core/router-model-url';
@@ -46,7 +46,6 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
   styleUrl: './neuronal-workspace.component.scss',
   template: `
     <div
-      #appRoot
       id="app"
       class="bg-base-100 text-base-content flex min-h-0 flex-1 flex-col"
     >
@@ -161,7 +160,10 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
   `,
 })
 export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('appRoot', { read: ElementRef }) appRoot!: ElementRef<HTMLElement>;
+  @ViewChild(NetworkViz3dShellComponent)
+  private vizShell?: NetworkViz3dShellComponent;
+  @ViewChild(InferPanelComponent) private inferPanel?: InferPanelComponent;
+
   readonly sidebarTab = signal<'train' | 'infer'>('train');
   private readonly store = inject(Store<AppState>);
   readonly headerModel = toSignal(
@@ -204,15 +206,17 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  private async waitForModelBarDom(gen: number): Promise<void> {
-    const deadline = performance.now() + 3000;
-    while (gen === this.bindGen && performance.now() < deadline) {
-      if (document.getElementById('btnNewModel')) return;
-      await new Promise<void>((r) =>
-        requestAnimationFrame(() => {
-          r();
-        }),
-      );
+  private async waitForRuntimeSurfaces(
+    gen: number,
+  ): Promise<NeuronalRuntimeMountSurfaces> {
+    const deadline = performance.now() + 8000;
+    for (;;) {
+      if (gen !== this.bindGen) throw new Error('aborted');
+      const viz = this.vizShell?.vizMountEl()?.nativeElement;
+      const canvas = this.inferPanel?.inferDrawCanvasEl()?.nativeElement;
+      if (viz && canvas) return { vizMount: viz, inferDrawCanvas: canvas };
+      if (performance.now() > deadline) throw new Error('surfaces-timeout');
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }
   }
 
@@ -221,12 +225,9 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
     try {
       await this.waitForModelWorkspaceRouterPath(gen);
       if (gen !== this.bindGen) return;
-      await this.waitForModelBarDom(gen);
+      const surfaces = await this.waitForRuntimeSurfaces(gen);
       if (gen !== this.bindGen) return;
-      const td = await this.neuronalApp.bindRuntime(
-        this.appRoot.nativeElement,
-        this.appInstance,
-      );
+      const td = await this.neuronalApp.bindRuntime(surfaces, this.appInstance);
       if (gen !== this.bindGen) {
         td();
         return;
@@ -245,7 +246,14 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('document:pointerdown', ['$event'])
   onDocumentPointerDown(ev: PointerEvent): void {
-    this.store.dispatch(NeuronalActions.uiDocumentPointerDown({ event: ev }));
+    const t = ev.target;
+    if (!(t instanceof Node)) return;
+    const btn = document.getElementById('modelDropdownButton');
+    const menu = document.getElementById('modelDropdownMenu');
+    if (btn && menu && (t === btn || btn.contains(t) || menu.contains(t))) {
+      return;
+    }
+    this.store.dispatch(NeuronalActions.modelDropdownSetOpen({ open: false }));
   }
 
   @HostListener('document:keydown', ['$event'])

@@ -28,6 +28,22 @@ export type {
 } from './selectors/neuronal-model.selectors';
 export { selectNeuronal } from './selectors/neuronal-root.selectors';
 export {
+  selectDatasetRibbonPlain,
+  selectEpochStepHintPlain,
+  selectInferUiControls,
+  selectNewModelDisabled,
+  selectRuntimeKernelCaps,
+  selectRuntimeStatusPlain,
+  selectTrainHyperparams,
+  selectTrainingActiveModelDetail,
+  selectTrainingActiveModelTitle,
+  selectTrainingUiControls,
+} from './selectors/neuronal-runtime.selectors';
+export type {
+  InferUiControls,
+  TrainingUiControls,
+} from './selectors/neuronal-runtime.selectors';
+export {
   selectLastTrainBatchAcc,
   selectLastTrainLoss,
   selectPauseTraining,

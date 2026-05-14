@@ -17,6 +17,7 @@ import {
   setInferDrawBrushSizeGlobal,
   type InferDrawBrushMode,
   type NeuronalAppRuntime,
+  type NeuronalRuntimeMountSurfaces,
 } from '../../neuronal-app';
 import type {
   VizLightColorSettings,
@@ -72,14 +73,14 @@ export class NeuronalAppService {
   }
 
   async bindRuntime(
-    root: HTMLElement,
+    surfaces: NeuronalRuntimeMountSurfaces,
     appInstance: NeuronalAppInstance,
   ): Promise<() => void> {
     await this.ensureStoreHydrated();
     this.runtime?.destroy();
     const next = createNeuronalAppRuntime(
       this.store,
-      root,
+      surfaces,
       appInstance,
       (selectedModelId) => {
         const before = routerUrlModelIdFromPath(this.router.url);
@@ -112,9 +113,6 @@ export class NeuronalAppService {
   onPause = (): void => {
     this.runtime?.onPause();
   };
-  onModelSelectChange = (): void => {
-    this.runtime?.onModelSelectChange();
-  };
   onActiveModelFromMenu = (id: string): void => {
     this.store.dispatch(
       NeuronalActions.activeModelFromToolbarRequested({ id }),
@@ -140,18 +138,6 @@ export class NeuronalAppService {
   };
   onClearDraw = (): void => {
     this.runtime?.onClearDraw();
-  };
-  onEpochsInput = (): void => {
-    this.runtime?.onEpochsInput();
-  };
-  onBatchSizeInput = (): void => {
-    this.runtime?.onBatchSizeInput();
-  };
-  onEpochPreset = (n: number): void => {
-    this.runtime?.onEpochPreset(n);
-  };
-  onDocumentPointerDown = (ev: PointerEvent): void => {
-    this.runtime?.onDocumentPointerDown(ev);
   };
   onDrawPointerDown = (e: PointerEvent): void => {
     this.runtime?.onDrawPointerDown(e);
