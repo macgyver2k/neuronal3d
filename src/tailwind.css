@@ -8,4 +8,16 @@
     background-color: var(--color-base-100);
     color: var(--color-base-content);
   }
+
+  /* Theme-Wechsel: Variablen springen, aber berechnete Farben können interpolieren */
+  @media (prefers-reduced-motion: no-preference) {
+    :root,
+    *,
+    *::before,
+    *::after {
+      transition-property: background-color;
+      transition-duration: 0.45s;
+      transition-timing-function: ease;
+    }
+  }
 }

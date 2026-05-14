@@ -15,7 +15,9 @@ import { NeuronalActions } from './app/store/neuronal/neuronal.actions';
 import { selectNeuronalState } from './app/store/neuronal/neuronal.selectors';
 import type { NeuronalState } from './app/store/neuronal/neuronal.state';
 import {
+  drawMnistPixelsOntoCanvas,
   fetchCsvText,
+  MNIST_PIXEL_COUNT,
   parseMnistCsvAsync,
   yieldToMain,
   type MnistSample,
@@ -181,6 +183,17 @@ function bindFromHost(root: HTMLElement): ElRefs {
 
 let trainData: MnistSample[] = [];
 let testData: MnistSample[] = [];
+
+export function getMnistTrainSampleCount(): number {
+  return trainData.length;
+}
+
+export function getMnistTrainSampleAt(index: number): MnistSample | null {
+  if (!Number.isFinite(index)) return null;
+  const i = Math.floor(index);
+  if (i < 0 || i >= trainData.length) return null;
+  return trainData[i]!;
+}
 let appStore!: Store<AppState>;
 
 export type ReconcileWorkspaceUrlForModelSelection = (
@@ -1048,41 +1061,10 @@ function canvasToMnistPixels(): number[] {
 
 /** MNIST 28×28 (0…1) direkt aufs Zeichen-Canvas (Bitmap 28×28 = kein Hochskalieren nötig). */
 function paintMnistPixelsToInferCanvas(pixels: number[]): void {
-  if (pixels.length !== 784) return;
+  if (pixels.length !== MNIST_PIXEL_COUNT) return;
   cancelLiveCanvasInferRaf();
   resetCanvas2dPaintExtras();
-  const canvas = el.drawCanvas;
-  const ctx = ctx2d;
-  const cw = canvas.width;
-  const ch = canvas.height;
-  const img = ctx.createImageData(MNIST_DRAW_GRID, MNIST_DRAW_GRID);
-  const d = img.data;
-  for (let gy = 0; gy < MNIST_DRAW_GRID; gy++) {
-    for (let gx = 0; gx < MNIST_DRAW_GRID; gx++) {
-      const v = Math.round(
-        Math.max(0, Math.min(1, pixels[gy * MNIST_DRAW_GRID + gx]!)) * 255,
-      );
-      const j = (gy * MNIST_DRAW_GRID + gx) * 4;
-      d[j] = v;
-      d[j + 1] = v;
-      d[j + 2] = v;
-      d[j + 3] = 255;
-    }
-  }
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, cw, ch);
-  if (cw === MNIST_DRAW_GRID && ch === MNIST_DRAW_GRID) {
-    ctx.putImageData(img, 0, 0);
-    return;
-  }
-  const tmp = document.createElement('canvas');
-  tmp.width = MNIST_DRAW_GRID;
-  tmp.height = MNIST_DRAW_GRID;
-  const tctx = tmp.getContext('2d');
-  if (!tctx) return;
-  tctx.putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(tmp, 0, 0, cw, ch);
+  drawMnistPixelsOntoCanvas(el.drawCanvas, pixels);
 }
 
 function inferWithPixels(
@@ -1156,6 +1138,7 @@ export type NeuronalAppRuntime = {
   onSaveAs: () => void;
   onReset: () => void;
   onInferRandom: () => void;
+  onInferTrainSample: (index: number) => void;
   onInferDraw: () => void;
   onClearDraw: () => void;
   onEpochsInput: () => void;
@@ -1498,6 +1481,15 @@ export function createNeuronalAppRuntime(
     inferWithPixels(s.pixels, s.label, idx);
   };
 
+  const onInferTrainSample = (index: number): void => {
+    clearTestCarouselTimer();
+    if (!net || trainData.length === 0) return;
+    const idx = Math.max(0, Math.min(trainData.length - 1, Math.floor(index)));
+    lastInferSampleIndex = idx;
+    const s = trainData[idx]!;
+    inferWithPixels(s.pixels, s.label, idx);
+  };
+
   let testCarouselTimer: number | null = null;
   let testCarouselIndex = 0;
   const TEST_CAROUSEL_MS = 2800;
@@ -1823,6 +1815,7 @@ export function createNeuronalAppRuntime(
     onSaveAs,
     onReset,
     onInferRandom,
+    onInferTrainSample,
     onInferDraw,
     onClearDraw,
     onEpochsInput,

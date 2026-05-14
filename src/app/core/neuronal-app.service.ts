@@ -132,6 +132,9 @@ export class NeuronalAppService {
   onInferRandom = (): void => {
     this.runtime?.onInferRandom();
   };
+  onInferTrainSample(index: number): void {
+    this.runtime?.onInferTrainSample(index);
+  }
   onInferDraw = (): void => {
     this.runtime?.onInferDraw();
   };

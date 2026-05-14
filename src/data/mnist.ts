@@ -4,7 +4,7 @@ export type MnistSample = {
 };
 
 function parseCsvLine(line: string): number[] {
-  const parts = line.split(",");
+  const parts = line.split(',');
   const nums: number[] = [];
   for (const p of parts) {
     const t = p.trim();
@@ -31,7 +31,7 @@ const PARSE_YIELD_EVERY = 200;
 
 export function yieldToMain(): Promise<void> {
   const w = globalThis as { scheduler?: { yield?: () => Promise<void> } };
-  if (typeof w.scheduler?.yield === "function") {
+  if (typeof w.scheduler?.yield === 'function') {
     return w.scheduler.yield()!;
   }
   return new Promise((resolve) => {
@@ -56,7 +56,7 @@ export async function fetchCsvText(url: string): Promise<string> {
   const buf = await resp.arrayBuffer();
   const u8 = new Uint8Array(buf);
   if (u8.length >= 2 && u8[0] === 0x1f && u8[1] === 0x8b) {
-    const ds = new DecompressionStream("gzip");
+    const ds = new DecompressionStream('gzip');
     return await new Response(new Blob([buf]).stream().pipeThrough(ds)).text();
   }
   return new TextDecoder().decode(buf);
@@ -82,7 +82,10 @@ export function oneHot(label: number, dim = 10): number[] {
   return v;
 }
 
-export function shuffleInPlace<T>(arr: T[], rng: () => number = Math.random): void {
+export function shuffleInPlace<T>(
+  arr: T[],
+  rng: () => number = Math.random,
+): void {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     const t = arr[i];
@@ -99,4 +102,48 @@ export function batchIndices(n: number, batchSize: number): number[][] {
     out.push(row);
   }
   return out;
+}
+
+/** MNIST-Eingabe: 28×28 Pixel, Werte 0…1 (wie in {@link MnistSample}). */
+export const MNIST_PIXEL_SIDE = 28;
+export const MNIST_PIXEL_COUNT = MNIST_PIXEL_SIDE * MNIST_PIXEL_SIDE;
+
+/** Zeichnet Graustufen-MNIST-Pixel auf ein Canvas (beliebige Zielgröße, pixelig skaliert). */
+export function drawMnistPixelsOntoCanvas(
+  canvas: HTMLCanvasElement,
+  pixels: number[],
+): void {
+  if (pixels.length !== MNIST_PIXEL_COUNT) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const cw = canvas.width;
+  const ch = canvas.height;
+  const img = ctx.createImageData(MNIST_PIXEL_SIDE, MNIST_PIXEL_SIDE);
+  const d = img.data;
+  for (let gy = 0; gy < MNIST_PIXEL_SIDE; gy++) {
+    for (let gx = 0; gx < MNIST_PIXEL_SIDE; gx++) {
+      const v = Math.round(
+        Math.max(0, Math.min(1, pixels[gy * MNIST_PIXEL_SIDE + gx]!)) * 255,
+      );
+      const j = (gy * MNIST_PIXEL_SIDE + gx) * 4;
+      d[j] = v;
+      d[j + 1] = v;
+      d[j + 2] = v;
+      d[j + 3] = 255;
+    }
+  }
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, cw, ch);
+  if (cw === MNIST_PIXEL_SIDE && ch === MNIST_PIXEL_SIDE) {
+    ctx.putImageData(img, 0, 0);
+    return;
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = MNIST_PIXEL_SIDE;
+  tmp.height = MNIST_PIXEL_SIDE;
+  const tctx = tmp.getContext('2d');
+  if (!tctx) return;
+  tctx.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, cw, ch);
 }
