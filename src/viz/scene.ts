@@ -21,6 +21,33 @@ function colorFromHex6(hex: string): THREE.Color {
   return new THREE.Color(parseInt(hex.slice(1), 16));
 }
 
+/** Deterministischer PRNG für Vibe-Kamera-Parameter pro Aktivierung */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function rollVibeCameraParams(): {
+  tScale: number;
+  tShift: number;
+  ph: number[];
+} {
+  const seed = ((Math.random() * 0xffffffff) ^ (Date.now() & 0xffffffff)) >>> 0;
+  const rnd = mulberry32(seed);
+  const ph = Array.from({ length: 32 }, () => rnd() * Math.PI * 2);
+  return {
+    tScale: 0.88 + rnd() * 0.24,
+    tShift: rnd() * 900,
+    ph,
+  };
+}
+
 /** Referenz-Intensitäten (dunkle Szene); bei hellen Lichtfarben runterskalieren */
 const LIGHT_INTENSITY_BASE = {
   hemi: 1.7,
@@ -178,45 +205,48 @@ export function createScene(container: HTMLElement): {
   const vibeSavedCam = new THREE.Vector3();
   const vibeSavedTarget = new THREE.Vector3();
   let vibeSavedEnableDamping = true;
+  let vibeCamParams = rollVibeCameraParams();
 
   const applyVibeCamera = () => {
     if (!vibeCameraMode) return;
-    const t = vibeClock.getElapsedTime();
+    const rawT = vibeClock.getElapsedTime();
+    const t = rawT * vibeCamParams.tScale + vibeCamParams.tShift;
+    const ph = vibeCamParams.ph;
     const tx =
       4 +
-      2.6 * Math.sin(t * 0.14) +
-      1.15 * Math.sin(t * 0.33 + 0.4) +
-      0.65 * Math.sin(t * 0.52 + 0.2) +
-      0.4 * Math.sin(t * 0.71);
+      2.6 * Math.sin(t * 0.14 + ph[0]!) +
+      1.15 * Math.sin(t * 0.33 + ph[1]!) +
+      0.65 * Math.sin(t * 0.52 + ph[2]!) +
+      0.4 * Math.sin(t * 0.71 + ph[3]!);
     const ty =
       0.55 +
-      1.55 * Math.sin(t * 0.18) +
-      0.95 * Math.sin(t * 0.31 + 0.9) +
-      0.45 * Math.cos(t * 0.47) +
-      0.28 * Math.sin(t * 0.63 + 0.4);
+      1.55 * Math.sin(t * 0.18 + ph[4]!) +
+      0.95 * Math.sin(t * 0.31 + ph[5]!) +
+      0.45 * Math.cos(t * 0.47 + ph[6]!) +
+      0.28 * Math.sin(t * 0.63 + ph[7]!);
     const tz =
       0.4 +
-      2.35 * Math.cos(t * 0.12) +
-      1.05 * Math.sin(t * 0.26 + 1.1) +
-      0.55 * Math.sin(t * 0.44);
+      2.35 * Math.cos(t * 0.12 + ph[8]!) +
+      1.05 * Math.sin(t * 0.26 + ph[9]!) +
+      0.55 * Math.sin(t * 0.44 + ph[10]!);
     controls.target.set(tx, ty, tz);
 
     const theta =
       t * 0.175 +
-      0.95 * Math.sin(t * 0.055) +
-      0.52 * Math.sin(t * 0.1 + 0.3) +
-      0.28 * Math.sin(t * 0.17 + 0.8);
+      0.95 * Math.sin(t * 0.055 + ph[11]!) +
+      0.52 * Math.sin(t * 0.1 + ph[12]!) +
+      0.28 * Math.sin(t * 0.17 + ph[13]!);
     const phi =
       Math.PI * 0.36 +
-      0.52 * Math.sin(t * 0.075 + 0.6) +
-      0.28 * Math.sin(t * 0.13) +
-      0.14 * Math.sin(t * 0.21 + 1.2);
+      0.52 * Math.sin(t * 0.075 + ph[14]!) +
+      0.28 * Math.sin(t * 0.13 + ph[15]!) +
+      0.14 * Math.sin(t * 0.21 + ph[16]!);
     const r =
       12.5 +
-      4.8 * Math.sin(t * 0.042) +
-      2.4 * Math.sin(t * 0.095 + 0.8) +
-      1.35 * Math.sin(t * 0.16) +
-      0.85 * Math.sin(t * 0.24 + 0.3);
+      4.8 * Math.sin(t * 0.042 + ph[17]!) +
+      2.4 * Math.sin(t * 0.095 + ph[18]!) +
+      1.35 * Math.sin(t * 0.16 + ph[19]!) +
+      0.85 * Math.sin(t * 0.24 + ph[20]!);
 
     const sinPhi = Math.sin(phi);
     camera.position.set(
@@ -226,11 +256,17 @@ export function createScene(container: HTMLElement): {
     );
 
     const jx =
-      0.62 * Math.sin(t * 0.22 + 0.2) + 0.28 * Math.sin(t * 0.51 + 0.6);
-    const jy = 0.52 * Math.sin(t * 0.28 + 0.5) + 0.22 * Math.cos(t * 0.46);
-    const jz = 0.48 * Math.cos(t * 0.25) + 0.26 * Math.sin(t * 0.39 + 1.0);
+      0.62 * Math.sin(t * 0.22 + ph[21]!) + 0.28 * Math.sin(t * 0.51 + ph[22]!);
+    const jy =
+      0.52 * Math.sin(t * 0.28 + ph[23]!) + 0.22 * Math.cos(t * 0.46 + ph[24]!);
+    const jz =
+      0.48 * Math.cos(t * 0.25 + ph[25]!) + 0.26 * Math.sin(t * 0.39 + ph[26]!);
     camera.up
-      .set(0.32 * Math.sin(t * 0.19 + 0.35), 1, 0.28 * Math.cos(t * 0.17 + 0.2))
+      .set(
+        0.32 * Math.sin(t * 0.19 + ph[27]!),
+        1,
+        0.28 * Math.cos(t * 0.17 + ph[28]!),
+      )
       .normalize();
     camera.lookAt(tx + jx, ty + jy, tz + jz);
   };
@@ -238,6 +274,7 @@ export function createScene(container: HTMLElement): {
   const setVibeCameraMode = (enabled: boolean) => {
     if (enabled === vibeCameraMode) return;
     if (enabled) {
+      vibeCamParams = rollVibeCameraParams();
       vibeSavedCam.copy(camera.position);
       vibeSavedTarget.copy(controls.target);
       vibeSavedEnableDamping = controls.enableDamping;
