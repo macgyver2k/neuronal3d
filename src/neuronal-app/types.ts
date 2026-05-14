@@ -47,6 +47,10 @@ export type NeuronalAppRuntime = {
   cancelPendingVizColorPreviews: () => void;
   setVibeCameraMode: (enabled: boolean) => void;
   setTestImageCarouselMode: (enabled: boolean) => boolean;
+  setVizFpsOverlay: (
+    enabled: boolean,
+    onSample: ((framesPerSecond: number) => void) | null,
+  ) => void;
 };
 
 export type NeuronalRuntimeMountSurfaces = {

@@ -2,6 +2,7 @@ import { DecimalPipe, DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  effect,
   ElementRef,
   inject,
   NgZone,
@@ -769,32 +770,63 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
           class="col-start-1 row-start-1 min-h-0 min-w-0 size-full max-h-full"
         ></div>
         <div
-          class="pointer-events-none col-start-1 row-start-1 z-10 flex flex-col items-end gap-2 p-2"
+          class="pointer-events-none col-start-1 row-start-1 z-10 relative size-full"
         >
-          <button
-            type="button"
-            class="pointer-events-auto btn btn-outline btn-sm shadow-lg"
-            [attr.aria-pressed]="immersive()"
-            (click)="toggleImmersive()"
+          <div
+            class="pointer-events-auto absolute right-2 top-2 flex flex-col items-end gap-2"
           >
-            {{ immersive() ? 'Leisten anzeigen' : 'Nur 3D' }}
-          </button>
-          <button
-            type="button"
-            class="pointer-events-auto btn btn-secondary btn-sm shadow-lg"
-            [attr.aria-pressed]="vibeCameraOn()"
-            (click)="toggleVibeCamera()"
-          >
-            {{ vibeCameraOn() ? 'Kamera-Vibe aus' : 'Kamera-Vibe' }}
-          </button>
-          <button
-            type="button"
-            class="pointer-events-auto btn btn-accent btn-sm shadow-lg"
-            [attr.aria-pressed]="themeRotateOn()"
-            (click)="toggleThemeRotate()"
-          >
-            {{ themeRotateOn() ? 'Theme-Rotation aus' : 'Theme-Rotation' }}
-          </button>
+            <button
+              type="button"
+              class="btn btn-outline btn-sm shadow-lg"
+              [attr.aria-pressed]="immersive()"
+              (click)="toggleImmersive()"
+            >
+              {{ immersive() ? 'Leisten anzeigen' : 'Nur 3D' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm shadow-lg"
+              [attr.aria-pressed]="vibeCameraOn()"
+              (click)="toggleVibeCamera()"
+            >
+              {{ vibeCameraOn() ? 'Kamera-Vibe aus' : 'Kamera-Vibe' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-accent btn-sm shadow-lg"
+              [attr.aria-pressed]="themeRotateOn()"
+              (click)="toggleThemeRotate()"
+            >
+              {{ themeRotateOn() ? 'Theme-Rotation aus' : 'Theme-Rotation' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm border border-base-300/80 bg-base-100/70 shadow-lg backdrop-blur-sm"
+              [attr.aria-pressed]="fpsOverlayOn()"
+              (click)="toggleFpsOverlay()"
+            >
+              {{ fpsOverlayOn() ? 'FPS aus' : 'FPS an' }}
+            </button>
+          </div>
+          @if (fpsOverlayOn()) {
+            <div
+              class="absolute bottom-2 left-2 flex max-w-[min(100%,12rem)] flex-col gap-1 rounded-box border border-base-300/60 bg-base-100/75 px-2 py-1.5 text-[0.68rem] shadow-lg backdrop-blur-md"
+              aria-live="polite"
+            >
+              <div
+                class="text-base-content/90 font-medium tabular-nums leading-none"
+              >
+                {{ fpsDisplay() }} FPS
+              </div>
+              <canvas
+                #fpsSparkline
+                class="block h-8 w-28 max-w-full rounded-sm"
+                width="112"
+                height="32"
+                aria-hidden="true"
+              ></canvas>
+            </div>
+          }
         </div>
       </div>
     </div>
@@ -812,8 +844,24 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected readonly daisyThemeNames = [...DAISYUI_THEMES];
   protected readonly vibeCameraOn = signal(true);
   protected readonly themeRotateOn = signal(false);
+  protected readonly fpsOverlayOn = signal(false);
+  protected readonly fpsDisplay = signal(0);
+  protected readonly fpsHistory = signal<number[]>([]);
   private themeRotateTimer: number | null = null;
   private themeRotateIndex = 0;
+  private fpsSmoothingAnimationFrame = 0;
+  private pendingFramesPerSecond = 0;
+  private readonly fpsSparklineCanvasRef =
+    viewChild<ElementRef<HTMLCanvasElement>>('fpsSparkline');
+
+  private readonly redrawFpsSparklineEffect = effect(() => {
+    const samples = this.fpsHistory();
+    const canvasReference = this.fpsSparklineCanvasRef();
+    if (!canvasReference) return;
+    queueMicrotask(() =>
+      this.drawFpsSparkline(canvasReference.nativeElement, samples),
+    );
+  });
   protected readonly scaleMin = HIDDEN_LAYER_VIZ_SCALE_MIN;
   protected readonly scaleMax = HIDDEN_LAYER_VIZ_SCALE_MAX;
   protected readonly scaleStep = HIDDEN_LAYER_VIZ_SCALE_STEP;
@@ -829,6 +877,25 @@ export class NetworkViz3dShellComponent implements OnDestroy {
 
   /** Mount-Punkt für die Three.js-Szene (an neuronal-app übergeben). */
   readonly vizMountEl = viewChild<ElementRef<HTMLElement>>('vizMount');
+
+  private readonly onVizFramesPerSecondSample = (
+    framesPerSecond: number,
+  ): void => {
+    this.pendingFramesPerSecond = framesPerSecond;
+    if (this.fpsSmoothingAnimationFrame !== 0) return;
+    this.fpsSmoothingAnimationFrame = requestAnimationFrame(() => {
+      this.fpsSmoothingAnimationFrame = 0;
+      const nextValue = this.pendingFramesPerSecond;
+      this.ngZone.run(() => {
+        if (!this.fpsOverlayOn()) return;
+        this.fpsDisplay.set(Math.round(nextValue));
+        this.fpsHistory.update((priorSamples) => {
+          const merged = [...priorSamples, nextValue];
+          return merged.length > 96 ? merged.slice(-96) : merged;
+        });
+      });
+    });
+  };
 
   onNetworkColorHex(
     key: Exclude<
@@ -1001,6 +1068,7 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearFpsOverlayState();
     this.clearThemeRotateTimer();
     this.neuronalApp.cancelPendingVizColorPreviews();
     const m = this.model();
@@ -1016,6 +1084,82 @@ export class NetworkViz3dShellComponent implements OnDestroy {
     const next = this.neuronalApp.toggleVibeCameraState(this.vibeCameraOn());
     if (next === null) return;
     this.vibeCameraOn.set(next);
+  }
+
+  toggleFpsOverlay(): void {
+    if (this.fpsOverlayOn()) {
+      this.clearFpsOverlayState();
+      return;
+    }
+    this.fpsOverlayOn.set(true);
+    this.fpsHistory.set([]);
+    this.fpsDisplay.set(0);
+    this.neuronalApp.setVizFpsOverlay(true, this.onVizFramesPerSecondSample);
+  }
+
+  private clearFpsOverlayState(): void {
+    this.neuronalApp.setVizFpsOverlay(false, null);
+    this.fpsOverlayOn.set(false);
+    if (this.fpsSmoothingAnimationFrame !== 0) {
+      cancelAnimationFrame(this.fpsSmoothingAnimationFrame);
+      this.fpsSmoothingAnimationFrame = 0;
+    }
+    this.fpsHistory.set([]);
+  }
+
+  private drawFpsSparkline(
+    canvas: HTMLCanvasElement,
+    samples: readonly number[],
+  ): void {
+    const pixelRatio = Math.min(window.devicePixelRatio, 2);
+    const cssWidth = 112;
+    const cssHeight = 32;
+    canvas.width = Math.round(cssWidth * pixelRatio);
+    canvas.height = Math.round(cssHeight * pixelRatio);
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${cssHeight}px`;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    context.clearRect(0, 0, cssWidth, cssHeight);
+    const pad = 2;
+    const innerWidth = cssWidth - pad * 2;
+    const innerHeight = cssHeight - pad * 2;
+    if (samples.length < 2) {
+      context.fillStyle = 'rgba(148, 163, 184, 0.15)';
+      context.fillRect(pad, pad, innerWidth, innerHeight);
+      return;
+    }
+    const peakFramesPerSecond = samples.reduce(
+      (maximumSoFar, value) => (value > maximumSoFar ? value : maximumSoFar),
+      48,
+    );
+    const scaleMaximum = Math.max(peakFramesPerSecond * 1.08, 50);
+    const xStep = innerWidth / Math.max(1, samples.length - 1);
+    const toY = (framesPerSecond: number): number =>
+      pad +
+      innerHeight -
+      (Math.min(scaleMaximum, Math.max(0, framesPerSecond)) / scaleMaximum) *
+        innerHeight;
+    context.beginPath();
+    context.moveTo(pad, toY(samples[0] ?? 0));
+    samples.forEach((value, index) => {
+      context.lineTo(pad + index * xStep, toY(value));
+    });
+    context.strokeStyle = 'rgba(148, 163, 184, 0.95)';
+    context.lineWidth = 1;
+    context.lineJoin = 'round';
+    context.stroke();
+    context.beginPath();
+    context.moveTo(pad, toY(samples[0] ?? 0));
+    samples.forEach((value, index) => {
+      context.lineTo(pad + index * xStep, toY(value));
+    });
+    context.lineTo(pad + innerWidth, pad + innerHeight);
+    context.lineTo(pad, pad + innerHeight);
+    context.closePath();
+    context.fillStyle = 'rgba(148, 163, 184, 0.14)';
+    context.fill();
   }
 
   toggleThemeRotate(): void {

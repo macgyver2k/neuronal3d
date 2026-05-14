@@ -57,9 +57,11 @@ export type VizWorkerHostToWorkerMessage =
   | { type: 'navKeyDown'; code: string }
   | { type: 'navKeyUp'; code: string }
   | { type: 'navKeysClear' }
-  | { type: 'documentVisibilityHidden'; hidden: boolean };
+  | { type: 'documentVisibilityHidden'; hidden: boolean }
+  | { type: 'setFpsOverlayEnabled'; enabled: boolean };
 
 export type VizWorkerWorkerToHostMessage =
   | { type: 'vizWorkerReady' }
   | { type: 'vizWorkerGlReady' }
-  | { type: 'vizWorkerDisposed' };
+  | { type: 'vizWorkerDisposed' }
+  | { type: 'vizWorkerFpsSample'; fps: number };

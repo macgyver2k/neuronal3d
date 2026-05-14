@@ -164,6 +164,13 @@ class NeuronalVizWorkerSurfaceBridge implements NeuronalVizSurface {
 export class NeuronalVizRenderWorkerHost {
   readonly vizSurface: NeuronalVizSurface;
 
+  private readonly onWorkerSideMessage = (
+    event: MessageEvent<VizWorkerWorkerToHostMessage>,
+  ): void => {
+    if (event.data?.type !== 'vizWorkerFpsSample') return;
+    this.fpsSampleListener?.(event.data.fps);
+  };
+
   private worker: Worker | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -172,6 +179,7 @@ export class NeuronalVizRenderWorkerHost {
   private detachCanvasListeners: (() => void) | null = null;
   private readonly surfaceBridge: NeuronalVizWorkerSurfaceBridge;
   private latestPixelRatio = 1;
+  private fpsSampleListener: ((framesPerSecond: number) => void) | null = null;
 
   constructor(private readonly container: HTMLElement) {
     this.surfaceBridge = new NeuronalVizWorkerSurfaceBridge((message) =>
@@ -230,6 +238,7 @@ export class NeuronalVizRenderWorkerHost {
       { type: 'module', name: 'neuronal-viz' },
     );
     this.worker = worker;
+    worker.addEventListener('message', this.onWorkerSideMessage);
     await new Promise<void>((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         reject(new Error('3D-Render-Worker: Timeout beim Start'));
@@ -424,6 +433,17 @@ export class NeuronalVizRenderWorkerHost {
     };
   }
 
+  setFpsReporting(
+    enabled: boolean,
+    onSample: ((framesPerSecond: number) => void) | null,
+  ): void {
+    this.fpsSampleListener = enabled && onSample ? onSample : null;
+    this.postToWorker({
+      type: 'setFpsOverlayEnabled',
+      enabled,
+    } satisfies VizWorkerHostToWorkerMessage);
+  }
+
   private onWindowResize = (): void => {
     this.pushResize();
   };
@@ -434,6 +454,7 @@ export class NeuronalVizRenderWorkerHost {
   }
 
   destroy(): void {
+    this.setFpsReporting(false, null);
     this.stopMainVizTickOnly();
     window.removeEventListener('resize', this.onWindowResize);
     if (this.resizeObserverRaf !== 0) {
@@ -447,6 +468,7 @@ export class NeuronalVizRenderWorkerHost {
 
     const worker = this.worker;
     this.worker = null;
+    worker?.removeEventListener('message', this.onWorkerSideMessage);
     if (worker) {
       const done = new Promise<void>((resolve) => {
         const onDisposed = (

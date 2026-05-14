@@ -23,6 +23,8 @@ let orbitSurface: WorkerCanvasDomSurfaceStub | null = null;
 let latestPixelRatio = 1;
 let syncLayoutFromMount: (() => void) | null = null;
 let net3d: Network3D | null = null;
+let fpsOverlayEnabled = false;
+let lastFpsSampleTimeMs = 0;
 
 /** DOM-Event-Konstruktoren fehlen im Worker; reicht für Stub + OrbitControls. */
 const createSyntheticEventFromInit = <Init extends object>(
@@ -94,7 +96,22 @@ const handleMessage = (
       syncLayoutFromMount = created.syncLayoutFromMount;
       net3d = new Network3D([...message.layerSizes]);
       created.scene.add(net3d.root);
-      stopAnimCleanup = animateLoop(created.render, created.controls, () => {});
+      stopAnimCleanup = animateLoop(created.render, created.controls, () => {
+        if (!fpsOverlayEnabled) {
+          lastFpsSampleTimeMs = 0;
+          return;
+        }
+        const nowMs = performance.now();
+        if (lastFpsSampleTimeMs > 0) {
+          const deltaMs = Math.max(1e-6, nowMs - lastFpsSampleTimeMs);
+          const framesPerSecond = 1000 / deltaMs;
+          workerScope.postMessage({
+            type: 'vizWorkerFpsSample',
+            fps: framesPerSecond,
+          } satisfies VizWorkerWorkerToHostMessage);
+        }
+        lastFpsSampleTimeMs = nowMs;
+      });
       syncLayoutFromMount();
       workerScope.postMessage({
         type: 'vizWorkerGlReady',
@@ -223,6 +240,11 @@ const handleMessage = (
       codes.forEach((code) =>
         dispatchOnSurface(createSyntheticKeyboardEvent('keyup', code)),
       );
+      break;
+    }
+    case 'setFpsOverlayEnabled': {
+      fpsOverlayEnabled = message.enabled;
+      if (!fpsOverlayEnabled) lastFpsSampleTimeMs = 0;
       break;
     }
     case 'documentVisibilityHidden': {

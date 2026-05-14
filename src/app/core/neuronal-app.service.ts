@@ -133,6 +133,12 @@ export class NeuronalAppService {
   onInferTrainSample(index: number): void {
     this.runtime?.onInferTrainSample(index);
   }
+  setVizFpsOverlay(
+    enabled: boolean,
+    onSample: ((framesPerSecond: number) => void) | null,
+  ): void {
+    this.runtime?.setVizFpsOverlay(enabled, onSample);
+  }
   onInferDraw = (): void => {
     this.runtime?.onInferDraw();
   };

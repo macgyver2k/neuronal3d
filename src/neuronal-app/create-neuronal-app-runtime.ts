@@ -718,5 +718,11 @@ export async function createNeuronalAppRuntime(
     cancelPendingVizColorPreviews,
     setVibeCameraMode,
     setTestImageCarouselMode,
+    setVizFpsOverlay: (
+      enabled: boolean,
+      onSample: ((framesPerSecond: number) => void) | null,
+    ): void => {
+      neuronalVizHost?.setFpsReporting(enabled, onSample);
+    },
   };
 }
