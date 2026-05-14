@@ -26,7 +26,7 @@ const runTrainJob = async (
     const net = applyStoredModelToNet(message.storedModel);
     const runMetrics = await trainLoop(
       net,
-      message.samples,
+      message.trainingRows,
       message.trainConfig,
       (snapshot) => {
         workerScope.postMessage({

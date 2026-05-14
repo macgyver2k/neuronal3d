@@ -1,7 +1,7 @@
 import type { StoredModel } from '../app/core/model.types';
 import type { NeuronalState } from '../app/store/neuronal/neuronal.state';
-import type { MnistSample } from '../data/mnist';
 import type {
+  MnistTrainingRowMajor,
   TrainConfig,
   TrainEpochSummary,
   TrainingRunLastBatch,
@@ -117,9 +117,10 @@ export class NeuronalTrainWorkerHost {
 
   runTrain(
     storedModel: StoredModel,
-    samples: MnistSample[],
+    trainingRows: MnistTrainingRowMajor,
     trainConfig: TrainConfig,
     callbacks: NeuronalTrainWorkerRunCallbacks,
+    transferables: Transferable[],
   ): Promise<NeuronalTrainWorkerRunOutcome> {
     if (!this.worker || this.busy) {
       return Promise.reject(new Error('Train-Worker nicht bereit'));
@@ -129,12 +130,15 @@ export class NeuronalTrainWorkerHost {
     this.callbacks = callbacks;
     return new Promise((resolve, reject) => {
       this.pending = { resolve, reject };
-      this.worker!.postMessage({
-        type: 'trainRun',
-        storedModel,
-        samples,
-        trainConfig,
-      } satisfies NeuronalTrainWorkerHostToWorkerMessage);
+      this.worker!.postMessage(
+        {
+          type: 'trainRun',
+          storedModel,
+          trainingRows,
+          trainConfig,
+        } satisfies NeuronalTrainWorkerHostToWorkerMessage,
+        transferables,
+      );
     });
   }
 

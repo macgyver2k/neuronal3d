@@ -96,6 +96,11 @@ const handleMessage = (
       syncLayoutFromMount = created.syncLayoutFromMount;
       net3d = new Network3D([...message.layerSizes]);
       created.scene.add(net3d.root);
+      created.setVibeNetworkLookFocus({
+        fillLayoutCentroid: (out) => {
+          net3d!.fillLayoutCentroid(out);
+        },
+      });
       stopAnimCleanup = animateLoop(created.render, created.controls, () => {
         if (!fpsOverlayEnabled) {
           lastFpsSampleTimeMs = 0;

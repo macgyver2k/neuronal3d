@@ -43,6 +43,7 @@ import {
 } from './infer-canvas-pipeline';
 import { loadCsvData } from './mnist-csv-load';
 import { getMnistTestDataRef, getMnistTrainDataRef } from './mnist-data';
+import { packMnistTrainForTransfer } from './mnist-train-pack';
 import { loadSelectedModelIntoNet, selectModelById } from './model-selection';
 import { NeuronalTrainWorkerHost } from './neuronal-train-worker-host';
 import { NeuronalVizRenderWorkerHost } from './neuronal-viz-worker-host';
@@ -569,9 +570,13 @@ export async function createNeuronalAppRuntime(
         if (!neuronalTrainWorkerHost) {
           throw new Error('Train-Worker nicht initialisiert');
         }
+        const packedTrain = packMnistTrainForTransfer(
+          trainData,
+          RT.net!.inputDim,
+        );
         workerOutcome = await neuronalTrainWorkerHost.runTrain(
           cloneStoredModel(RT.net!),
-          trainData,
+          packedTrain.trainingRows,
           trainCfg,
           {
             onSnapshot: (snapshot) => {
@@ -602,6 +607,7 @@ export async function createNeuronalAppRuntime(
               );
             },
           },
+          packedTrain.transferables,
         );
       } catch {
         setStatus('Training-Worker-Fehler');

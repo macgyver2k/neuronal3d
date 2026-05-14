@@ -1,6 +1,6 @@
 import type { StoredModel } from '../app/core/model.types';
-import type { MnistSample } from '../data/mnist';
 import type {
+  MnistTrainingRowMajor,
   TrainConfig,
   TrainEpochSummary,
   TrainingRunLastBatch,
@@ -11,7 +11,7 @@ export type NeuronalTrainWorkerHostToWorkerMessage =
   | {
       type: 'trainRun';
       storedModel: StoredModel;
-      samples: MnistSample[];
+      trainingRows: MnistTrainingRowMajor;
       trainConfig: TrainConfig;
     }
   | { type: 'trainControl'; pause: boolean; stop: boolean };

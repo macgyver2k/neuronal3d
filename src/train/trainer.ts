@@ -1,7 +1,7 @@
-import type { MnistSample } from "../data/mnist";
-import { batchIndices, shuffleInPlace } from "../data/mnist";
-import { zeros } from "../nn/matrix";
-import { activationSlices, MLP } from "../nn/network";
+import type { MnistSample } from '../data/mnist';
+import { batchIndices, shuffleInPlace } from '../data/mnist';
+import { zeros } from '../nn/matrix';
+import { activationSlices, MLP } from '../nn/network';
 
 export type TrainSnapshot = {
   epoch: number;
@@ -29,28 +29,43 @@ export type TrainingRunLastBatch = {
   lastTrainBatchAcc: number;
 };
 
+/** Zeilenweise Pixel: `pixels[zeile * inputDim + i]` */
+export type MnistTrainingRowMajor = {
+  kind: 'rowMajor';
+  rowCount: number;
+  inputDim: number;
+  labels: Uint8Array;
+  pixels: Float32Array;
+};
+
+export type MnistTrainingData = MnistSample[] | MnistTrainingRowMajor;
+
+export const mnistTrainRowCount = (data: MnistTrainingData): number =>
+  Array.isArray(data) ? data.length : data.rowCount;
+
 export async function trainLoop(
   net: MLP,
-  data: MnistSample[],
+  data: MnistTrainingData,
   cfg: TrainConfig,
-  onSnapshot: (s: TrainSnapshot) => void,
-  onEpochEnd: (s: TrainEpochSummary) => void,
+  onSnapshot: (snapshot: TrainSnapshot) => void,
+  onEpochEnd: (summary: TrainEpochSummary) => void,
   isPaused: () => boolean,
   shouldStop: () => boolean,
 ): Promise<TrainingRunLastBatch> {
-  const idx = data.map((_, i) => i);
+  const rowCount = mnistTrainRowCount(data);
+  const idx = Array.from({ length: rowCount }, (_, index) => index);
   let lastTrainLoss = 0;
   let lastTrainBatchAcc = 0;
   await sleep(0);
-  for (let e = 0; e < cfg.epochs; e++) {
+  for (let epoch = 0; epoch < cfg.epochs; epoch++) {
     await sleep(0);
     shuffleInPlace(idx);
-    const batches = batchIndices(data.length, cfg.batchSize);
+    const batches = batchIndices(rowCount, cfg.batchSize);
     let batchCounter = 0;
     let epochLossSum = 0;
     let epochCorrect = 0;
     let epochSeen = 0;
-    for (const bi of batches) {
+    for (const batchIndexRow of batches) {
       await sleep(0);
       while (isPaused() && !shouldStop()) {
         await sleep(50);
@@ -58,32 +73,49 @@ export async function trainLoop(
       if (shouldStop()) {
         return { lastTrainLoss, lastTrainBatchAcc };
       }
-      const bs = bi.length;
-      const X = zeros(net.inputDim, bs);
-      const Y = zeros(net.outputDim, bs);
-      const labels: number[] = new Array(bs);
-      for (let k = 0; k < bs; k++) {
-        const s = data[idx[bi[k]!]];
-        labels[k] = s.label;
-        for (let i = 0; i < net.inputDim; i++) X[i][k] = s.pixels[i];
-        Y[s.label][k] = 1;
+      const batchSize = batchIndexRow.length;
+      const inputDim = net.inputDim;
+      const X = zeros(inputDim, batchSize);
+      const Y = zeros(net.outputDim, batchSize);
+      const labels: number[] = new Array(batchSize);
+      for (let column = 0; column < batchSize; column++) {
+        const sampleIndex = idx[batchIndexRow[column]!]!;
+        if (Array.isArray(data)) {
+          const sample = data[sampleIndex]!;
+          labels[column] = sample.label;
+          for (let row = 0; row < inputDim; row++) {
+            X[row][column] = sample.pixels[row]!;
+          }
+          Y[sample.label][column] = 1;
+        } else {
+          if (data.inputDim !== inputDim) {
+            throw new Error('MNIST rowMajor: inputDim passt nicht zum Netz');
+          }
+          const label = data.labels[sampleIndex]!;
+          labels[column] = label;
+          const offset = sampleIndex * inputDim;
+          for (let row = 0; row < inputDim; row++) {
+            X[row][column] = data.pixels[offset + row]!;
+          }
+          Y[label][column] = 1;
+        }
       }
       const fwd = net.forward(X);
       const meanBatchLoss = net.crossEntropyLoss(fwd.prob, Y);
       const loss = meanBatchLoss;
       const correct = net.countCorrectInBatch(fwd.prob, labels);
       const { dW, db } = net.backward(X, Y, fwd);
-      const lastActs = activationSlices(X, fwd, bs - 1);
-      net.applyGradients(dW, db, cfg.lr, bs);
-      const trainAccBatch = correct / bs;
+      const lastActs = activationSlices(X, fwd, batchSize - 1);
+      net.applyGradients(dW, db, cfg.lr, batchSize);
+      const trainAccBatch = correct / batchSize;
       lastTrainLoss = loss;
       lastTrainBatchAcc = trainAccBatch;
-      epochLossSum += meanBatchLoss * bs;
+      epochLossSum += meanBatchLoss * batchSize;
       epochCorrect += correct;
-      epochSeen += bs;
+      epochSeen += batchSize;
       if (batchCounter % cfg.vizEveryNBatches === 0) {
         onSnapshot({
-          epoch: e,
+          epoch,
           batchIndex: batchCounter,
           loss,
           trainAccBatch,
@@ -93,7 +125,7 @@ export async function trainLoop(
       batchCounter += 1;
     }
     onEpochEnd({
-      epoch: e,
+      epoch,
       loss: epochLossSum / Math.max(1, epochSeen),
       trainAcc: epochCorrect / Math.max(1, epochSeen),
     });
@@ -102,6 +134,7 @@ export async function trainLoop(
   return { lastTrainLoss, lastTrainBatchAcc };
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
+const sleep = (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });

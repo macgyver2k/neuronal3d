@@ -738,6 +738,24 @@ export class Network3D {
     }
   }
 
+  /** Schwerpunkt aller Neuron-Positionen (Layout-Weltkoordinaten) — Blickziel für Vibe-Kamera. */
+  fillLayoutCentroid(out: THREE.Vector3): void {
+    let n = 0;
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    for (const layer of this.positions) {
+      for (const p of layer) {
+        sx += p.x;
+        sy += p.y;
+        sz += p.z;
+        n++;
+      }
+    }
+    if (n === 0) out.set(4, 0, 0);
+    else out.set(sx / n, sy / n, sz / n);
+  }
+
   setWeights(weights: number[][][]): void {
     for (let L = 0; L < this.edgeLines.length; L++) {
       const layerW = weights[L];
