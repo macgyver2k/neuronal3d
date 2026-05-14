@@ -55,24 +55,7 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
           aria-label="Modell-Arbeitsbereich"
           class="border-base-300/60 bg-base-100 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:px-4 sm:py-3"
         >
-          <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-            <a
-              routerLink="/"
-              class="link link-hover shrink-0 self-center text-sm font-medium"
-              >Modelle</a
-            >
-            @if (headerModel(); as hm) {
-              <app-workspace-brand
-                class="min-w-0 shrink-0 max-sm:basis-full"
-                [title]="hm.title"
-                [subtitle]="hm.subtitle"
-              />
-            } @else {
-              <app-workspace-brand class="min-w-0" />
-            }
-          </div>
           <div class="flex flex-col gap-2">
-            <app-neuronal-model-bar />
             <app-workspace-status />
           </div>
         </div>

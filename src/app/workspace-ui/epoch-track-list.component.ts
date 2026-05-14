@@ -34,12 +34,23 @@ type EpochChartModel = {
   selector: 'app-epoch-track-list',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [
+    `
+      :host {
+        display: flex;
+      }
+    `,
+  ],
   template: `
     <article
       class="card border-base-300 bg-base-200 rounded-box flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border shadow-xl"
     >
       <div class="card-body flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-4">
-        <div role="tablist" aria-label="Epoch-Ansicht" class="tabs tabs-boxed bg-base-300/30 p-1">
+        <div
+          role="tablist"
+          aria-label="Epoch-Ansicht"
+          class="tabs tabs-boxed bg-base-300/30 p-1"
+        >
           <button
             type="button"
             class="tab flex-1 text-xs"
@@ -65,10 +76,14 @@ type EpochChartModel = {
             Diagramm
           </button>
         </div>
-        <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden pt-1">
-          <p class="text-success/90 m-0 text-[0.68rem] font-bold uppercase tracking-widest">
+        <div
+          class="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden pt-1"
+        >
+          <div
+            class="text-success/90 m-0 text-[0.68rem] font-bold uppercase tracking-widest"
+          >
             Epochs ({{ view().epochsTotal }})
-          </p>
+          </div>
           @if (epochTab() === 'list') {
             <div
               id="panel-epoch-list"
@@ -76,7 +91,9 @@ type EpochChartModel = {
               aria-labelledby="tab-epoch-list"
               class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
-              <ul class="flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto overflow-x-hidden p-0">
+              <ul
+                class="flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto overflow-x-hidden p-0"
+              >
                 @if (view().rows.length === 0) {
                   <li
                     class="text-base-content/60 rounded-btn border-base-300/60 border border-dashed p-3 text-xs"
@@ -88,7 +105,9 @@ type EpochChartModel = {
                     <li
                       class="border-base-300/80 bg-base-100/40 rounded-btn grid grid-cols-[3.2rem_4rem_1fr_auto] items-center gap-2 border p-2 font-mono text-[0.68rem] tabular-nums"
                     >
-                      <span class="text-base-content/60">R{{ runLabel(r.run) }}</span>
+                      <span class="text-base-content/60"
+                        >R{{ runLabel(r.run) }}</span
+                      >
                       <span>Ep {{ r.epoch + 1 }}</span>
                       <span>loss {{ r.loss.toFixed(4) }}</span>
                       <span>{{ (r.trainAcc * 100).toFixed(2) }}%</span>
@@ -237,15 +256,19 @@ type EpochChartModel = {
                   class="text-base-content/60 flex flex-wrap gap-x-4 gap-y-1 text-[0.65rem]"
                   aria-hidden="true"
                 >
-                  <span class="inline-flex items-center gap-1.5 before:h-0.5 before:w-2.5 before:rounded-sm before:bg-primary before:content-['']"
+                  <span
+                    class="inline-flex items-center gap-1.5 before:h-0.5 before:w-2.5 before:rounded-sm before:bg-primary before:content-['']"
                     >Loss</span
                   >
-                  <span class="inline-flex items-center gap-1.5 before:h-0.5 before:w-2.5 before:rounded-sm before:bg-info before:content-['']"
+                  <span
+                    class="inline-flex items-center gap-1.5 before:h-0.5 before:w-2.5 before:rounded-sm before:bg-info before:content-['']"
                     >Train-Acc</span
                   >
                 </div>
               } @else {
-                <p class="text-base-content/60 rounded-btn border-base-300/60 border border-dashed p-3 text-xs">
+                <p
+                  class="text-base-content/60 rounded-btn border-base-300/60 border border-dashed p-3 text-xs"
+                >
                   Noch kein Training
                 </p>
               }
