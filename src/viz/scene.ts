@@ -304,6 +304,37 @@ export function createScene(mount: NeuronalGlSceneMount): {
     else out.normalize();
   }
 
+  /** Seg-Endpunkt leicht nach außen ziehen (Weitwinkel, moderat). */
+  function vibeBiasP3AwayFromFocus(
+    p3: THREE.Vector3,
+    focus: THREE.Vector3,
+  ): void {
+    vibeScratchDir.copy(p3).sub(focus);
+    const d0 = vibeScratchDir.length();
+    if (d0 < 1e-5) {
+      vibeRandomUnit(vibeScratchDir);
+      p3.addScaledVector(vibeScratchDir, 3.2 + Math.random() * 5.5);
+      return;
+    }
+    vibeScratchDir.multiplyScalar(1 / d0);
+    if (Math.random() < 0.45) {
+      p3.addScaledVector(vibeScratchDir, 1.2 + Math.random() * 4.2);
+    }
+    if (Math.random() < 0.12) {
+      p3.addScaledVector(vibeScratchDir, 2.2 + Math.random() * 4.8);
+    }
+    if (d0 < 8.8 && Math.random() < 0.28) {
+      p3.addScaledVector(
+        vibeScratchDir,
+        (9.2 - d0) * (0.2 + Math.random() * 0.32),
+      );
+    }
+    if (Math.random() < 0.16) {
+      const k = 1.05 + Math.random() * 0.14;
+      p3.sub(focus).multiplyScalar(k).add(focus);
+    }
+  }
+
   const vibeSegQueue: VibeCamCurveSeg[] = [];
   let vibeSegElapsed = 0;
   let vibeLastRawT = -1;
@@ -350,7 +381,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     look: THREE.Vector3,
   ): VibeCamCurveSeg {
     const seg: VibeCamCurveSeg = {
-      dur: 2.5 + Math.random() * 4.8,
+      dur: 2.85 + Math.random() * 5.6,
       p0: new THREE.Vector3().copy(cam),
       p1: new THREE.Vector3(),
       p2: new THREE.Vector3(),
@@ -376,6 +407,13 @@ export function createScene(mount: NeuronalGlSceneMount): {
       .copy(seg.p3)
       .addScaledVector(vibeScratchDir, -(2 + Math.random() * 4.5));
     seg.p2.lerp(seg.p1, 0.1 + Math.random() * 0.42);
+
+    vibeBiasP3AwayFromFocus(seg.p3, look);
+
+    if (Math.random() < 0.22) {
+      seg.dur *= 1.05 + Math.random() * 0.18;
+      seg.dur = Math.min(seg.dur, 10.8);
+    }
 
     seg.l3.copy(seg.p3);
     seg.l3.x += (Math.random() - 0.5) * 2.6;
@@ -425,6 +463,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
       .addScaledVector(vibeScratchDir, -(2.1 + Math.random() * 4.8));
     seg.p2.lerp(seg.p1, 0.12 + Math.random() * 0.4);
 
+    vibeBiasP3AwayFromFocus(seg.p3, vibeNetFocus);
+
     seg.l1.copy(prev.l3).add(vibeScratchLerp.copy(prev.l3).sub(prev.l2));
     seg.l3.copy(seg.p3);
     seg.l3.x += (Math.random() - 0.5) * 2.8;
@@ -439,15 +479,22 @@ export function createScene(mount: NeuronalGlSceneMount): {
       .set((Math.random() - 0.5) * 0.52, 1, (Math.random() - 0.5) * 0.52)
       .normalize();
 
-    const chordPrev = prev.p0.distanceTo(prev.p3);
+    const chordPrev = Math.max(0.52, prev.p0.distanceTo(prev.p3));
     const chordNew = seg.p0.distanceTo(seg.p3);
-    const legato = 0.93 + Math.random() * 0.14;
-    const ratio = chordNew / Math.max(0.45, chordPrev);
-    seg.dur = THREE.MathUtils.clamp(prev.dur * ratio * legato, 2.0, 9.2);
+    const legato = 0.97 + Math.random() * 0.06;
+    let ratio = chordNew / chordPrev;
+    ratio = THREE.MathUtils.clamp(ratio, 0.84, 1.22);
+    const targetDur = prev.dur * ratio * legato;
+    seg.dur = THREE.MathUtils.clamp(
+      THREE.MathUtils.clamp(targetDur, prev.dur * 0.86, prev.dur * 1.15),
+      2.25,
+      11.8,
+    );
     return seg;
   }
 
   function refillVibeSegQueue(cam: THREE.Vector3, look: THREE.Vector3): void {
+    if (vibeNetLookFill) vibeNetLookFill(vibeNetFocus, 0);
     vibeSegQueue.length = 0;
     vibeSegElapsed = 0;
     const s0 = createFirstVibeSeg(cam, look);
