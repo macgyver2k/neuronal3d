@@ -7,6 +7,13 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import {
+  DEFAULT_VIBE_CAMERA_TUNING,
+  normalizeVibeCameraTuning,
+  resolveVibeCameraParams,
+  type ResolvedVibeCameraParams,
+  type VibeCameraTuning,
+} from './vibe-camera-settings';
+import {
   DEFAULT_VIZ_LIGHT_COLORS,
   DEFAULT_VIZ_POST_PROCESS,
   DEFAULT_VIZ_SCENE_COLORS,
@@ -86,6 +93,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
   render: () => void;
   renderDisplay: () => void;
   setVibeCameraMode: (enabled: boolean) => void;
+  applyVibeCameraSettings: (tuning: VibeCameraTuning) => void;
   setVibeNetworkLookFocus: (
     sampler: VibeNetworkLookFocusSampler | null,
   ) => void;
@@ -206,29 +214,93 @@ export function createScene(mount: NeuronalGlSceneMount): {
   floor.position.y = -3.2;
   scene.add(floor);
 
-  const VIBE_QUEUE_MIN = 6;
   const VIBE_PATH_SAMPLES_FULL = 26;
   const VIBE_PATH_SAMPLES_CURRENT = 32;
 
-  const vibePathGeom = new THREE.BufferGeometry();
-  const vibePathPosAttr = new THREE.BufferAttribute(new Float32Array(1400), 3);
-  vibePathGeom.setAttribute('position', vibePathPosAttr);
-  vibePathGeom.setDrawRange(0, 0);
-  const vibePathLine = new THREE.Line(
-    vibePathGeom,
-    new THREE.LineBasicMaterial({
-      color: 0x6bdbff,
-      transparent: true,
-      opacity: 0.55,
-      depthTest: true,
-      depthWrite: false,
-    }),
-  );
-  vibePathLine.visible = false;
-  vibePathLine.frustumCulled = false;
-  scene.add(vibePathLine);
+  const VIBE_PATH_SEG_PALETTE = [
+    0x5ec8ff, 0xff935f, 0x92f06a, 0xca7dff, 0xffe45c, 0x5ff5d1, 0xff6b9d,
+  ];
+  const vibePathPreviewRoot = new THREE.Group();
+  vibePathPreviewRoot.visible = false;
+  vibePathPreviewRoot.frustumCulled = false;
+  scene.add(vibePathPreviewRoot);
+  const vibePathLinePool: THREE.Line[] = [];
+  const vibePathMarkerPool: THREE.Mesh[] = [];
+  const vibePathMarkerGeometry = new THREE.SphereGeometry(1, 12, 10);
+  const vibePathScratchColor = new THREE.Color();
 
   const vibePathEval = new THREE.Vector3();
+
+  function vibePathSegColorHex(segIndex: number): number {
+    return VIBE_PATH_SEG_PALETTE[segIndex % VIBE_PATH_SEG_PALETTE.length]!;
+  }
+
+  function acquireVibePathLine(lineIndex: number): THREE.Line {
+    while (vibePathLinePool.length <= lineIndex) {
+      const positions = new Float32Array((VIBE_PATH_SAMPLES_CURRENT + 1) * 3);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      );
+      const line = new THREE.Line(
+        geometry,
+        new THREE.LineBasicMaterial({
+          transparent: true,
+          opacity: 0.58,
+          depthTest: true,
+          depthWrite: false,
+        }),
+      );
+      line.frustumCulled = false;
+      vibePathPreviewRoot.add(line);
+      vibePathLinePool.push(line);
+    }
+    return vibePathLinePool[lineIndex]!;
+  }
+
+  function acquireVibePathMarker(markerIndex: number): THREE.Mesh {
+    while (vibePathMarkerPool.length <= markerIndex) {
+      const marker = new THREE.Mesh(
+        vibePathMarkerGeometry,
+        new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0.9,
+          depthTest: true,
+          depthWrite: false,
+        }),
+      );
+      marker.frustumCulled = false;
+      vibePathPreviewRoot.add(marker);
+      vibePathMarkerPool.push(marker);
+    }
+    return vibePathMarkerPool[markerIndex]!;
+  }
+
+  function hideUnusedVibePathPreview(
+    lineCount: number,
+    markerCount: number,
+  ): void {
+    for (let index = lineCount; index < vibePathLinePool.length; index++) {
+      vibePathLinePool[index]!.visible = false;
+    }
+    for (let index = markerCount; index < vibePathMarkerPool.length; index++) {
+      vibePathMarkerPool[index]!.visible = false;
+    }
+  }
+
+  function disposeVibePathPreviewPools(): void {
+    vibePathLinePool.forEach((line) => {
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    });
+    vibePathLinePool.length = 0;
+    vibePathMarkerPool.forEach((marker) => {
+      (marker.material as THREE.Material).dispose();
+    });
+    vibePathMarkerPool.length = 0;
+    vibePathMarkerGeometry.dispose();
+  }
 
   const controlsTarget = isDom
     ? renderer.domElement
@@ -260,9 +332,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const vibeSavedTarget = new THREE.Vector3();
   let vibeSavedEnableDamping = true;
 
-  /** Untergrenze Segmentdauer — verhindert kurze „Ras“-Phasen. */
-  const VIBE_SEG_DUR_MIN = 3.65;
-  const VIBE_SEG_DUR_MAX = 12.9;
+  let vibeCamParams = resolveVibeCameraParams(DEFAULT_VIBE_CAMERA_TUNING);
 
   type VibeCamCurveSeg = {
     dur: number;
@@ -313,30 +383,59 @@ export function createScene(mount: NeuronalGlSceneMount): {
     p3: THREE.Vector3,
     focus: THREE.Vector3,
   ): void {
+    const params = vibeCamParams;
     vibeScratchDir.copy(p3).sub(focus);
     const d0 = vibeScratchDir.length();
     if (d0 < 1e-5) {
       vibeRandomUnit(vibeScratchDir);
-      p3.addScaledVector(vibeScratchDir, 3.2 + Math.random() * 5.5);
+      p3.addScaledVector(
+        vibeScratchDir,
+        params.pullOutFallbackMin + Math.random() * params.pullOutFallbackSpan,
+      );
       return;
     }
     vibeScratchDir.multiplyScalar(1 / d0);
-    if (Math.random() < 0.45) {
-      p3.addScaledVector(vibeScratchDir, 1.2 + Math.random() * 4.2);
-    }
-    if (Math.random() < 0.12) {
-      p3.addScaledVector(vibeScratchDir, 2.2 + Math.random() * 4.8);
-    }
-    if (d0 < 8.8 && Math.random() < 0.28) {
+    if (Math.random() < params.pullOutChanceMain) {
       p3.addScaledVector(
         vibeScratchDir,
-        (9.2 - d0) * (0.2 + Math.random() * 0.32),
+        params.pullOutPushMainMin + Math.random() * params.pullOutPushMainSpan,
       );
     }
-    if (Math.random() < 0.16) {
-      const k = 1.05 + Math.random() * 0.14;
+    if (Math.random() < params.pullOutChanceBoost) {
+      p3.addScaledVector(
+        vibeScratchDir,
+        params.pullOutPushBoostMin +
+          Math.random() * params.pullOutPushBoostSpan,
+      );
+    }
+    if (
+      d0 < params.pullOutNearDist &&
+      Math.random() < params.pullOutNearChance
+    ) {
+      p3.addScaledVector(
+        vibeScratchDir,
+        (params.pullOutNearRefDist - d0) *
+          (params.pullOutNearFactorMin +
+            Math.random() * params.pullOutNearFactorSpan),
+      );
+    }
+    if (Math.random() < params.pullOutScaleChance) {
+      const k =
+        params.pullOutScaleMin + Math.random() * params.pullOutScaleSpan;
       p3.sub(focus).multiplyScalar(k).add(focus);
     }
+  }
+
+  function clampVibeSegmentEndToMaxChord(
+    start: THREE.Vector3,
+    end: THREE.Vector3,
+  ): void {
+    const maxChord = vibeCamParams.maxSegmentChord;
+    vibeScratchDir.copy(end).sub(start);
+    const distance = vibeScratchDir.length();
+    if (distance <= maxChord || distance < 1e-5) return;
+    vibeScratchDir.multiplyScalar(maxChord / distance);
+    end.copy(start).add(vibeScratchDir);
   }
 
   const vibeSegQueue: VibeCamCurveSeg[] = [];
@@ -384,8 +483,10 @@ export function createScene(mount: NeuronalGlSceneMount): {
     cam: THREE.Vector3,
     look: THREE.Vector3,
   ): VibeCamCurveSeg {
+    const params = vibeCamParams;
+    const wild = params.pathWildnessMul;
     const seg: VibeCamCurveSeg = {
-      dur: 3.85 + Math.random() * 5.45,
+      dur: params.firstDurBase + Math.random() * params.firstDurSpan,
       p0: new THREE.Vector3().copy(cam),
       p1: new THREE.Vector3(),
       p2: new THREE.Vector3(),
@@ -397,36 +498,46 @@ export function createScene(mount: NeuronalGlSceneMount): {
       u0: new THREE.Vector3(),
       u3: new THREE.Vector3(),
     };
+    const jitter = params.p3Jitter;
     seg.p3.set(
-      0.65 + Math.random() * 8,
-      -1.35 + Math.random() * 4.4,
-      -3.85 + Math.random() * 7.7,
+      0.65 + Math.random() * 8 * jitter,
+      -1.35 + Math.random() * 4.4 * jitter,
+      -3.85 + Math.random() * 7.7 * jitter,
     );
     vibeRandomUnit(vibeScratchDir);
     seg.p1
       .copy(cam)
-      .addScaledVector(vibeScratchDir, 1.45 + Math.random() * 3.4);
+      .addScaledVector(
+        vibeScratchDir,
+        (params.handleOutMin + Math.random() * params.handleOutSpan) * wild,
+      );
     vibeRandomUnit(vibeScratchDir);
     seg.p2
       .copy(seg.p3)
-      .addScaledVector(vibeScratchDir, -(2 + Math.random() * 4.5));
-    seg.p2.lerp(seg.p1, 0.1 + Math.random() * 0.42);
+      .addScaledVector(
+        vibeScratchDir,
+        -(params.handleInNegMin + Math.random() * params.handleInNegSpan) *
+          wild,
+      );
+    seg.p2.lerp(seg.p1, params.p2LerpMin + Math.random() * params.p2LerpSpan);
 
     vibeBiasP3AwayFromFocus(seg.p3, look);
+    clampVibeSegmentEndToMaxChord(seg.p0, seg.p3);
 
-    if (Math.random() < 0.22) {
-      seg.dur *= 1.05 + Math.random() * 0.18;
+    if (Math.random() < params.firstDurBoostChance) {
+      seg.dur *=
+        params.firstDurBoostMin + Math.random() * params.firstDurBoostSpan;
     }
     seg.dur = THREE.MathUtils.clamp(
       seg.dur,
-      VIBE_SEG_DUR_MIN,
-      VIBE_SEG_DUR_MAX,
+      params.segDurMin,
+      params.segDurMax,
     );
 
     seg.l3.copy(seg.p3);
-    seg.l3.x += (Math.random() - 0.5) * 2.6;
-    seg.l3.y += (Math.random() - 0.5) * 2.1;
-    seg.l3.z += (Math.random() - 0.5) * 2.6;
+    seg.l3.x += (Math.random() - 0.5) * 2.6 * jitter;
+    seg.l3.y += (Math.random() - 0.5) * 2.1 * jitter;
+    seg.l3.z += (Math.random() - 0.5) * 2.6 * jitter;
     vibeRandomUnit(vibeScratchDir);
     seg.l1
       .copy(look)
@@ -446,6 +557,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
   }
 
   function createChainedVibeSeg(prev: VibeCamCurveSeg): VibeCamCurveSeg {
+    const params = vibeCamParams;
+    const wild = params.pathWildnessMul;
     const seg: VibeCamCurveSeg = {
       dur: prev.dur,
       p0: new THREE.Vector3().copy(prev.p3),
@@ -460,24 +573,30 @@ export function createScene(mount: NeuronalGlSceneMount): {
       u3: new THREE.Vector3(),
     };
     seg.p1.copy(prev.p3).add(vibeScratchDir.copy(prev.p3).sub(prev.p2));
+    const jitter = params.p3Jitter;
     seg.p3.set(
-      0.55 + Math.random() * 8.2,
-      -1.45 + Math.random() * 4.5,
-      -3.9 + Math.random() * 7.8,
+      0.55 + Math.random() * 8.2 * jitter,
+      -1.45 + Math.random() * 4.5 * jitter,
+      -3.9 + Math.random() * 7.8 * jitter,
     );
     vibeRandomUnit(vibeScratchDir);
     seg.p2
       .copy(seg.p3)
-      .addScaledVector(vibeScratchDir, -(2.1 + Math.random() * 4.8));
-    seg.p2.lerp(seg.p1, 0.12 + Math.random() * 0.4);
+      .addScaledVector(
+        vibeScratchDir,
+        -(params.handleInNegMin + Math.random() * params.handleInNegSpan) *
+          wild,
+      );
+    seg.p2.lerp(seg.p1, params.p2LerpMin + Math.random() * params.p2LerpSpan);
 
     vibeBiasP3AwayFromFocus(seg.p3, vibeNetFocus);
+    clampVibeSegmentEndToMaxChord(seg.p0, seg.p3);
 
     seg.l1.copy(prev.l3).add(vibeScratchLerp.copy(prev.l3).sub(prev.l2));
     seg.l3.copy(seg.p3);
-    seg.l3.x += (Math.random() - 0.5) * 2.8;
-    seg.l3.y += (Math.random() - 0.5) * 2.2;
-    seg.l3.z += (Math.random() - 0.5) * 2.8;
+    seg.l3.x += (Math.random() - 0.5) * 2.8 * jitter;
+    seg.l3.y += (Math.random() - 0.5) * 2.2 * jitter;
+    seg.l3.z += (Math.random() - 0.5) * 2.8 * jitter;
     vibeRandomUnit(vibeScratchDir);
     seg.l2
       .copy(seg.l3)
@@ -489,17 +608,32 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
     const chordPrev = Math.max(0.52, prev.p0.distanceTo(prev.p3));
     const chordNew = seg.p0.distanceTo(seg.p3);
-    const legato = 1.0 + Math.random() * 0.055;
+    const legato =
+      params.legatoMin + Math.random() * (params.legatoMax - params.legatoMin);
     let ratio = chordNew / chordPrev;
-    ratio = THREE.MathUtils.clamp(ratio, 0.9, 1.18);
-    const targetDur = prev.dur * ratio * legato * 1.06;
-    seg.dur = THREE.MathUtils.clamp(
-      THREE.MathUtils.clamp(targetDur, prev.dur * 0.92, prev.dur * 1.14),
-      VIBE_SEG_DUR_MIN,
-      VIBE_SEG_DUR_MAX,
+    ratio = THREE.MathUtils.clamp(
+      ratio,
+      params.chordRatioMin,
+      params.chordRatioMax,
     );
-    seg.dur = Math.max(seg.dur, Math.min(7.35, chordNew * 0.36 + 2.05));
-    seg.dur = Math.min(seg.dur, VIBE_SEG_DUR_MAX);
+    const targetDur = prev.dur * ratio * legato * params.chainDurMul;
+    seg.dur = THREE.MathUtils.clamp(
+      THREE.MathUtils.clamp(
+        targetDur,
+        prev.dur * params.durRelLow,
+        prev.dur * params.durRelHigh,
+      ),
+      params.segDurMin,
+      params.segDurMax,
+    );
+    seg.dur = Math.max(
+      seg.dur,
+      Math.min(
+        params.chordDurFloorCap,
+        chordNew * params.chordDurFloorMul + params.chordDurFloorAdd,
+      ),
+    );
+    seg.dur = Math.min(seg.dur, params.segDurMax);
     return seg;
   }
 
@@ -509,65 +643,149 @@ export function createScene(mount: NeuronalGlSceneMount): {
     vibeSegElapsed = 0;
     const s0 = createFirstVibeSeg(cam, look);
     vibeSegQueue.push(s0, createChainedVibeSeg(s0));
-    topUpVibeQueue();
+    syncVibeSegQueueLength();
   }
 
-  function topUpVibeQueue(): void {
-    while (vibeSegQueue.length < VIBE_QUEUE_MIN && vibeSegQueue.length > 0) {
+  function syncVibeSegQueueLength(): void {
+    const targetLength = vibeCamParams.queueMin;
+    while (vibeSegQueue.length < targetLength && vibeSegQueue.length > 0) {
       vibeSegQueue.push(
         createChainedVibeSeg(vibeSegQueue[vibeSegQueue.length - 1]!),
       );
     }
+    while (vibeSegQueue.length > targetLength) vibeSegQueue.pop();
   }
 
-  function updateVibePathPreview(): void {
-    if (!vibeCameraMode || vibeSegQueue.length === 0) {
-      vibePathLine.visible = false;
+  /** Nur ab dem nächsten Segment neu planen — laufendes Segment + Fortschritt bleiben. */
+  function replenishVibeSegQueueTail(): void {
+    const head = vibeSegQueue[0];
+    if (!head) return;
+    vibeSegQueue.length = 1;
+    vibeSegQueue.push(createChainedVibeSeg(head));
+    syncVibeSegQueueLength();
+  }
+
+  const vibePreviewOnlyParamKeys: ReadonlySet<keyof ResolvedVibeCameraParams> =
+    new Set([
+      'pathPreview',
+      'pathPreviewMaxSegments',
+      'pathPreviewMarkers',
+      'pathPreviewMarkerRadius',
+    ]);
+
+  const vibeResolvedParamsAffectPathPlan = (
+    previous: ResolvedVibeCameraParams,
+    next: ResolvedVibeCameraParams,
+  ): boolean =>
+    (Object.keys(previous) as (keyof ResolvedVibeCameraParams)[]).some(
+      (key) =>
+        !vibePreviewOnlyParamKeys.has(key) && previous[key] !== next[key],
+    );
+
+  const applyVibeCameraSettings = (tuning: VibeCameraTuning): void => {
+    const previousParams = vibeCamParams;
+    vibeCamParams = resolveVibeCameraParams(normalizeVibeCameraTuning(tuning));
+    if (!vibeCameraMode) {
+      vibePathPreviewRoot.visible = vibeCamParams.pathPreview;
       return;
     }
-    const arr = vibePathPosAttr.array as Float32Array;
-    let o = 0;
-    const pushEval = (seg: VibeCamCurveSeg, s: number): boolean => {
-      if (o + 3 > arr.length) return false;
-      vibeBezierEvalPoint(seg.p0, seg.p1, seg.p2, seg.p3, s, vibePathEval);
-      arr[o++] = vibePathEval.x;
-      arr[o++] = vibePathEval.y;
-      arr[o++] = vibePathEval.z;
-      return true;
-    };
-    for (let qi = 0; qi < vibeSegQueue.length; qi++) {
-      const seg = vibeSegQueue[qi]!;
+    if (vibeEntranceBlend.active || vibeSegQueue.length === 0) {
+      refillVibeSegQueue(camera.position, controls.target);
+    } else if (
+      vibeResolvedParamsAffectPathPlan(previousParams, vibeCamParams)
+    ) {
+      replenishVibeSegQueueTail();
+    }
+    updateVibePathPreview();
+  };
+
+  function updateVibePathPreview(): void {
+    if (
+      !vibeCameraMode ||
+      !vibeCamParams.pathPreview ||
+      vibeSegQueue.length === 0
+    ) {
+      vibePathPreviewRoot.visible = false;
+      hideUnusedVibePathPreview(0, 0);
+      return;
+    }
+
+    let lineCount = 0;
+    let markerCount = 0;
+    const previewSegmentCount = Math.min(
+      vibeSegQueue.length,
+      vibeCamParams.pathPreviewMaxSegments,
+    );
+
+    for (let segIndex = 0; segIndex < previewSegmentCount; segIndex++) {
+      const seg = vibeSegQueue[segIndex]!;
+      const isCurrent = segIndex === 0;
       let s0 = 0;
       let s1 = 1;
       let steps = VIBE_PATH_SAMPLES_FULL;
-      if (qi === 0) {
+      if (isCurrent) {
         if (vibeEntranceBlend.active) {
           s0 = 0;
           s1 = 1;
-          steps = VIBE_PATH_SAMPLES_CURRENT;
         } else {
           let w = vibeSegElapsed / seg.dur;
           if (w > 1) w = 1;
           s0 = w;
           s1 = 1;
-          steps = VIBE_PATH_SAMPLES_CURRENT;
         }
+        steps = VIBE_PATH_SAMPLES_CURRENT;
       }
-      for (let i = 0; i <= steps; i++) {
-        const t = steps <= 0 ? 0 : i / steps;
+
+      const colorHex = vibePathSegColorHex(segIndex);
+      vibePathScratchColor.setHex(colorHex);
+
+      const line = acquireVibePathLine(lineCount);
+      const lineMaterial = line.material as THREE.LineBasicMaterial;
+      lineMaterial.color.copy(vibePathScratchColor);
+      lineMaterial.opacity = isCurrent ? 0.82 : 0.48;
+
+      const positionAttribute = line.geometry.getAttribute(
+        'position',
+      ) as THREE.BufferAttribute;
+      const positionArray = positionAttribute.array as Float32Array;
+      let vertexCount = 0;
+      for (let sampleIndex = 0; sampleIndex <= steps; sampleIndex++) {
+        const t = steps <= 0 ? 0 : sampleIndex / steps;
         const s = s0 + (s1 - s0) * t;
-        if (!pushEval(seg, s)) break;
+        vibeBezierEvalPoint(seg.p0, seg.p1, seg.p2, seg.p3, s, vibePathEval);
+        const offset = vertexCount * 3;
+        if (offset + 3 > positionArray.length) break;
+        positionArray[offset] = vibePathEval.x;
+        positionArray[offset + 1] = vibePathEval.y;
+        positionArray[offset + 2] = vibePathEval.z;
+        vertexCount++;
+      }
+      if (vertexCount < 2) {
+        line.visible = false;
+      } else {
+        positionAttribute.needsUpdate = true;
+        line.geometry.setDrawRange(0, vertexCount);
+        line.geometry.computeBoundingSphere();
+        line.visible = true;
+        lineCount++;
+      }
+
+      if (vibeCamParams.pathPreviewMarkers) {
+        const marker = acquireVibePathMarker(markerCount);
+        marker.position.copy(seg.p0);
+        const markerMaterial = marker.material as THREE.MeshBasicMaterial;
+        markerMaterial.color.copy(vibePathScratchColor);
+        markerMaterial.opacity = isCurrent ? 1 : 0.88;
+        const markerScale =
+          vibeCamParams.pathPreviewMarkerRadius * (isCurrent ? 1.15 : 1);
+        marker.scale.setScalar(markerScale);
+        marker.visible = true;
+        markerCount++;
       }
     }
-    const n = Math.floor(o / 3);
-    if (n < 2) {
-      vibePathLine.visible = false;
-      return;
-    }
-    vibePathPosAttr.needsUpdate = true;
-    vibePathGeom.setDrawRange(0, n);
-    vibePathGeom.computeBoundingSphere();
-    vibePathLine.visible = true;
+
+    hideUnusedVibePathPreview(lineCount, markerCount);
+    vibePathPreviewRoot.visible = lineCount > 0;
   }
 
   const applyVibeCamera = () => {
@@ -593,7 +811,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       if (vibeSegQueue.length === 0) {
         refillVibeSegQueue(camera.position, controls.target);
       }
-      topUpVibeQueue();
+      syncVibeSegQueueLength();
     }
 
     const head = vibeSegQueue[0];
@@ -665,8 +883,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
       vibeEntranceBlend.active = false;
       vibeSegQueue.length = 0;
       vibeLastRawT = -1;
-      vibePathLine.visible = false;
-      vibePathGeom.setDrawRange(0, 0);
+      vibePathPreviewRoot.visible = false;
+      hideUnusedVibePathPreview(0, 0);
       camera.position.copy(vibeSavedCam);
       controls.target.copy(vibeSavedTarget);
       camera.up.set(0, 1, 0);
@@ -806,9 +1024,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
     navKeyTarget.removeEventListener('keyup', onKeyNavUp as EventListener);
     if (!isDom) orbitDomSurface?.removeAllListeners();
     controls.dispose();
-    scene.remove(vibePathLine);
-    vibePathGeom.dispose();
-    (vibePathLine.material as THREE.Material).dispose();
+    scene.remove(vibePathPreviewRoot);
+    disposeVibePathPreviewPools();
     floor.geometry.dispose();
     (floor.material as THREE.Material).dispose();
     fxaaPass.dispose();
@@ -915,6 +1132,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     render,
     renderDisplay,
     setVibeCameraMode,
+    applyVibeCameraSettings,
     setVibeNetworkLookFocus,
     applyVizSceneColors,
     applyVizLightColors,

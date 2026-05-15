@@ -57,6 +57,7 @@ export { selectInferPanelModel } from './selectors/neuronal-ui.selectors';
 export type { InferPanelModel } from './selectors/neuronal-ui.selectors';
 export {
   model,
+  selectVibeCameraTuning,
   selectVizImmersiveUi,
 } from './selectors/neuronal-viz.selectors';
 

@@ -2,6 +2,7 @@ import type {
   HiddenLayerVizLayout,
   InputLayerVizLayout,
 } from '../viz/network3d';
+import type { VibeCameraTuning } from '../viz/vibe-camera-settings';
 import type {
   VizLightColorSettings,
   VizNetworkColorSettings,
@@ -229,6 +230,7 @@ export class NeuronalVizRenderWorkerHost {
     render: () => void;
     renderDisplay: () => void;
     setVibeCameraMode: (enabled: boolean) => void;
+    applyVibeCameraSettings: (tuning: VibeCameraTuning) => void;
     applyVizSceneColors: (next: VizSceneColorSettings) => void;
     applyVizLightColors: (next: VizLightColorSettings) => void;
     applyVizPostProcess: (next: VizPostProcessSettings) => void;
@@ -411,6 +413,10 @@ export class NeuronalVizRenderWorkerHost {
       this.postToWorker({ type: 'setVibeCameraMode', enabled });
     };
 
+    const applyVibeCameraSettings = (tuning: VibeCameraTuning): void => {
+      this.postToWorker({ type: 'applyVibeCameraSettings', tuning });
+    };
+
     const applyVizSceneColors = (next: VizSceneColorSettings): void => {
       this.postToWorker({ type: 'applyVizSceneColors', colors: next });
     };
@@ -427,6 +433,7 @@ export class NeuronalVizRenderWorkerHost {
       render,
       renderDisplay,
       setVibeCameraMode,
+      applyVibeCameraSettings,
       applyVizSceneColors,
       applyVizLightColors,
       applyVizPostProcess,

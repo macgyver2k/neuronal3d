@@ -19,6 +19,7 @@ import {
   type NeuronalAppRuntime,
   type NeuronalRuntimeMountSurfaces,
 } from '../../neuronal-app';
+import type { VibeCameraTuning } from '../../viz/vibe-camera-settings';
 import type {
   VizLightColorSettings,
   VizNetworkColorSettings,
@@ -186,6 +187,9 @@ export class NeuronalAppService {
   };
   onVizPostProcessApply = (pp: VizPostProcessSettings): void => {
     this.runtime?.onVizPostProcessApply(pp);
+  };
+  onVibeCameraSettingsApply = (tuning: VibeCameraTuning): void => {
+    this.runtime?.onVibeCameraSettingsApply(tuning);
   };
   previewVizSceneColor = (
     key: keyof VizSceneColorSettings,

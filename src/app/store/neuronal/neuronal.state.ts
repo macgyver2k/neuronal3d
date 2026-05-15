@@ -6,6 +6,10 @@ import {
   type InputLayerVizLayout,
 } from '../../../viz/network3d';
 import {
+  DEFAULT_VIBE_CAMERA_TUNING,
+  type VibeCameraTuning,
+} from '../../../viz/vibe-camera-settings';
+import {
   DEFAULT_VIZ_LIGHT_COLORS,
   DEFAULT_VIZ_NETWORK_COLORS,
   DEFAULT_VIZ_POST_PROCESS,
@@ -50,6 +54,7 @@ export type Viz3dState = {
   lightColors: VizLightColorSettings;
   networkColors: VizNetworkColorSettings;
   postProcess: VizPostProcessSettings;
+  vibeCamera: VibeCameraTuning;
 };
 
 export function createInitialViz3dState(): Viz3dState {
@@ -68,6 +73,7 @@ export function createInitialViz3dState(): Viz3dState {
     lightColors: { ...DEFAULT_VIZ_LIGHT_COLORS },
     networkColors: { ...DEFAULT_VIZ_NETWORK_COLORS },
     postProcess: { ...DEFAULT_VIZ_POST_PROCESS },
+    vibeCamera: { ...DEFAULT_VIBE_CAMERA_TUNING },
   };
 }
 

@@ -35,6 +35,7 @@ import {
   selectEpochByModelId,
   selectNeuronalState,
   selectTrainingRunning,
+  selectVibeCameraTuning,
 } from './neuronal.selectors';
 
 @Injectable()
@@ -399,6 +400,23 @@ export class NeuronalEffects {
         tap(([, n]) => {
           this.zone.runOutsideAngular(() => {
             this.neuronalApp.onVizPostProcessApply(n.viz3d.postProcess);
+          });
+        }),
+      ),
+    { dispatch: false },
+  );
+
+  vizVibeCamera$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(
+          NeuronalActions.vizVibeCameraProfileChanged,
+          NeuronalActions.vizVibeCameraTuningPatch,
+        ),
+        withLatestFrom(this.store.select(selectVibeCameraTuning)),
+        tap(([, tuning]) => {
+          this.zone.runOutsideAngular(() => {
+            this.neuronalApp.onVibeCameraSettingsApply(tuning);
           });
         }),
       ),

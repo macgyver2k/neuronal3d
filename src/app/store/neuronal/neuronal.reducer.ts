@@ -8,6 +8,12 @@ import {
   type InputLayerVizLayout,
 } from '../../../viz/network3d';
 import {
+  DEFAULT_VIBE_CAMERA_TUNING,
+  vibeCameraProfileMatchesTuning,
+  vibeCameraTuningFromProfile,
+  type VibeCameraProfileId,
+} from '../../../viz/vibe-camera-settings';
+import {
   DEFAULT_VIZ_LIGHT_COLORS,
   isValidHexColor6,
   mergeVizNetworkColors,
@@ -383,6 +389,40 @@ export const neuronalReducer = createReducer<NeuronalState>(
         postProcess: mergeVizPostProcess(s.viz3d.postProcess, patch),
       },
     }),
+  ),
+  on(
+    NeuronalActions.vizVibeCameraProfileChanged,
+    (s, { profile }): NeuronalState => ({
+      ...s,
+      viz3d: {
+        ...s.viz3d,
+        vibeCamera: vibeCameraTuningFromProfile(profile),
+      },
+    }),
+  ),
+  on(
+    NeuronalActions.vizVibeCameraTuningPatch,
+    (s, { patch }): NeuronalState => {
+      const merged = {
+        ...(s.viz3d.vibeCamera ?? DEFAULT_VIBE_CAMERA_TUNING),
+        ...patch,
+      };
+      const profileMode =
+        merged.profileMode !== 'custom' &&
+        vibeCameraProfileMatchesTuning(
+          merged.profileMode as VibeCameraProfileId,
+          merged,
+        )
+          ? merged.profileMode
+          : 'custom';
+      return {
+        ...s,
+        viz3d: {
+          ...s.viz3d,
+          vibeCamera: { ...merged, profileMode },
+        },
+      };
+    },
   ),
   on(
     NeuronalActions.uiVizImmersiveToggled,

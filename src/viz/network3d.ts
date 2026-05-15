@@ -256,6 +256,8 @@ export class Network3D {
   private readonly scratchV3a = new THREE.Vector3();
   private readonly scratchV3b = new THREE.Vector3();
   private readonly scratchV3c = new THREE.Vector3();
+  private vibeLookWanderSpeed = 0.055;
+  private vibeLookEqualLayerBlend = 0.34;
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -808,6 +810,11 @@ export class Network3D {
     return true;
   }
 
+  setVibeLookTuning(wanderSpeed: number, equalLayerBlend: number): void {
+    this.vibeLookWanderSpeed = wanderSpeed;
+    this.vibeLookEqualLayerBlend = equalLayerBlend;
+  }
+
   /**
    * Blickziel für Vibe-Kamera: gleich gewichtete Schichten plus langsames Mitwandern
    * entlang der Schicht-Schwerpunkte, damit die Kamera nicht dauernd „ins erste Layer“ starrt.
@@ -823,8 +830,7 @@ export class Network3D {
       out.copy(this.scratchV3c);
       return;
     }
-    const speed = 0.055;
-    let u = timeSec * speed;
+    let u = timeSec * this.vibeLookWanderSpeed;
     u %= n;
     if (u < 0) u += n;
     const L0 = Math.floor(u) % n;
@@ -833,7 +839,7 @@ export class Network3D {
     this.fillLayerCentroid(L0, this.scratchV3a);
     this.fillLayerCentroid(L1, this.scratchV3b);
     out.lerpVectors(this.scratchV3a, this.scratchV3b, f);
-    out.lerp(this.scratchV3c, 0.34);
+    out.lerp(this.scratchV3c, this.vibeLookEqualLayerBlend);
   }
 
   setWeights(weights: number[][][]): void {

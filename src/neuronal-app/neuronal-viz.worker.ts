@@ -2,6 +2,10 @@
 
 import { Network3D } from '../viz/network3d';
 import { animateLoop, createScene } from '../viz/scene';
+import {
+  normalizeVibeCameraTuning,
+  resolveVibeCameraParams,
+} from '../viz/vibe-camera-settings';
 import { WorkerCanvasDomSurfaceStub } from '../viz/worker-canvas-dom-surface-stub';
 import type {
   VizWorkerHostToWorkerMessage,
@@ -147,6 +151,16 @@ const handleMessage = (
     }
     case 'setVibeCameraMode': {
       sceneBundle?.setVibeCameraMode(message.enabled);
+      break;
+    }
+    case 'applyVibeCameraSettings': {
+      const tuning = normalizeVibeCameraTuning(message.tuning);
+      const resolved = resolveVibeCameraParams(tuning);
+      sceneBundle?.applyVibeCameraSettings(tuning);
+      net3d?.setVibeLookTuning(
+        resolved.lookWanderSpeed,
+        resolved.lookEqualLayerBlend,
+      );
       break;
     }
     case 'applyVizSceneColors': {

@@ -1,3 +1,4 @@
+import type { VibeCameraTuning } from '../viz/vibe-camera-settings';
 import type {
   VizLightColorSettings,
   VizNetworkColorSettings,
@@ -36,6 +37,7 @@ export type NeuronalAppRuntime = {
   onVizLightColorsApply: (colors: VizLightColorSettings) => void;
   onVizNetworkColorsApply: (colors: VizNetworkColorSettings) => void;
   onVizPostProcessApply: (pp: VizPostProcessSettings) => void;
+  onVibeCameraSettingsApply: (tuning: VibeCameraTuning) => void;
   previewVizSceneColor: (
     key: keyof VizSceneColorSettings,
     color: string,

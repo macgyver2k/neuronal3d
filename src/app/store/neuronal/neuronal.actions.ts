@@ -1,5 +1,9 @@
 import { createActionGroup, emptyProps, props } from '@ngrx/store';
 import type {
+  VibeCameraProfileId,
+  VibeCameraTuning,
+} from '../../../viz/vibe-camera-settings';
+import type {
   VizLightColorSettings,
   VizNetworkColorSettings,
   VizPostProcessSettings,
@@ -90,6 +94,12 @@ export const NeuronalActions = createActionGroup({
     }>(),
     'Viz Post Process Patch': props<{
       patch: Partial<VizPostProcessSettings>;
+    }>(),
+    'Viz Vibe Camera Profile Changed': props<{
+      profile: VibeCameraProfileId;
+    }>(),
+    'Viz Vibe Camera Tuning Patch': props<{
+      patch: Partial<Omit<VibeCameraTuning, 'profileMode'>>;
     }>(),
     'Ui Viz Immersive Toggled': emptyProps(),
     'Daisy Ui App Theme Changed': props<{ theme: DaisyUiThemeName }>(),

@@ -11,6 +11,10 @@ import type { NeuronalState } from '../app/store/neuronal/neuronal.state';
 import { MLP } from '../nn/network';
 import type { TrainingRunLastBatch } from '../train/trainer';
 import {
+  normalizeVibeCameraTuning,
+  type VibeCameraTuning,
+} from '../viz/vibe-camera-settings';
+import {
   isValidHexColor6,
   type VizLightColorSettings,
   type VizNetworkColorSettings,
@@ -136,6 +140,7 @@ export async function createNeuronalAppRuntime(
     render,
     renderDisplay,
     setVibeCameraMode,
+    applyVibeCameraSettings,
     applyVizSceneColors,
     applyVizLightColors,
     applyVizPostProcess,
@@ -145,6 +150,9 @@ export async function createNeuronalAppRuntime(
   applyVizSceneColors(RT.nLatest.viz3d.sceneColors);
   applyVizLightColors(RT.nLatest.viz3d.lightColors);
   applyVizPostProcess(RT.nLatest.viz3d.postProcess);
+  applyVibeCameraSettings(
+    normalizeVibeCameraTuning(RT.nLatest.viz3d.vibeCamera),
+  );
   let sceneColorBaseline: VizSceneColorSettings = {
     ...RT.nLatest.viz3d.sceneColors,
   };
@@ -374,6 +382,10 @@ export async function createNeuronalAppRuntime(
   const onVizPostProcessApply = (pp: VizPostProcessSettings): void => {
     postProcessBaseline = { ...pp };
     applyVizPostProcess(postProcessBaseline);
+    renderFrame();
+  };
+  const onVibeCameraSettingsApply = (tuning: VibeCameraTuning): void => {
+    applyVibeCameraSettings(normalizeVibeCameraTuning(tuning));
     renderFrame();
   };
   const onClearDraw = (): void => {
@@ -752,6 +764,7 @@ export async function createNeuronalAppRuntime(
     onVizLightColorsApply,
     onVizNetworkColorsApply,
     onVizPostProcessApply,
+    onVibeCameraSettingsApply,
     previewVizSceneColor,
     previewVizLightColor,
     cancelPendingVizColorPreviews,

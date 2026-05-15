@@ -2,6 +2,7 @@ import type {
   HiddenLayerVizLayout,
   InputLayerVizLayout,
 } from '../viz/network3d';
+import type { VibeCameraTuning } from '../viz/vibe-camera-settings';
 import type {
   VizLightColorSettings,
   VizNetworkColorSettings,
@@ -21,6 +22,7 @@ export type VizWorkerHostToWorkerMessage =
   | { type: 'resize'; width: number; height: number; pixelRatio: number }
   | { type: 'dispose' }
   | { type: 'setVibeCameraMode'; enabled: boolean }
+  | { type: 'applyVibeCameraSettings'; tuning: VibeCameraTuning }
   | { type: 'applyVizSceneColors'; colors: VizSceneColorSettings }
   | { type: 'applyVizLightColors'; colors: VizLightColorSettings }
   | { type: 'applyVizPostProcess'; settings: VizPostProcessSettings }

@@ -20,6 +20,13 @@ import {
   HIDDEN_LAYER_VIZ_SCALE_MIN,
   HIDDEN_LAYER_VIZ_SCALE_STEP,
 } from '../../viz/network3d';
+import {
+  normalizeVibeCameraTuning,
+  VIBE_CAMERA_PROFILE_LABELS,
+  vibeCameraTuningFromProfile,
+  type VibeCameraProfileId,
+  type VibeCameraTuning,
+} from '../../viz/vibe-camera-settings';
 import type {
   VizLightColorSettings,
   VizNetworkColorSettings,
@@ -209,6 +216,232 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
                   class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
                   >{{ model().activeNeuronMaxScaleMul | number: '1.0-2' }}</span
                 >
+              </div>
+            </div>
+          </app-viz-settings-block>
+          <app-viz-settings-block heading="Kamera-Vibe">
+            <div class="flex flex-col gap-3">
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraProfile"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Stil</label
+                >
+                <select
+                  id="vibeCameraProfile"
+                  class="select select-bordered select-sm w-full"
+                  [value]="vibeCameraProfileSelectValue()"
+                  (change)="onVibeCameraProfile($event)"
+                >
+                  @if (model().vibeCamera.profileMode === 'custom') {
+                    <option value="__custom__" disabled>
+                      Benutzerdefiniert
+                    </option>
+                  }
+                  @for (entry of vibeCameraProfileEntries; track entry.id) {
+                    <option [value]="entry.id">{{ entry.label }}</option>
+                  }
+                </select>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraSpeed"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Tempo</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraSpeed"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    [value]="model().vibeCamera.speed"
+                    (input)="onVibeCameraTuning('speed', $event)"
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-9 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{ model().vibeCamera.speed | number: '1.0-0' }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraPullOut"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Weitwinkel</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraPullOut"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    [value]="model().vibeCamera.pullOut"
+                    (input)="onVibeCameraTuning('pullOut', $event)"
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{ model().vibeCamera.pullOut | number: '1.0-2' }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraWildness"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Pfad-Wildheit</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraWildness"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    [value]="model().vibeCamera.pathWildness"
+                    (input)="onVibeCameraTuning('pathWildness', $event)"
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().vibeCamera.pathWildness | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraLookWander"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Blick-Wanderung</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraLookWander"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    [value]="model().vibeCamera.lookWander"
+                    (input)="onVibeCameraTuning('lookWander', $event)"
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{ model().vibeCamera.lookWander | number: '1.0-2' }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraPathQueueSize"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Pfad-Segmente voraus</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraPathQueueSize"
+                    type="range"
+                    min="1"
+                    max="1000"
+                    step="1"
+                    [value]="model().vibeCamera.pathQueueSize"
+                    (input)="onVibeCameraPlanning('pathQueueSize', $event)"
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-10 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{ model().vibeCamera.pathQueueSize }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraMaxSegmentChord"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Max. Segmentlänge</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraMaxSegmentChord"
+                    type="range"
+                    min="2"
+                    max="80"
+                    step="0.5"
+                    [value]="model().vibeCamera.maxSegmentChord"
+                    (input)="onVibeCameraPlanning('maxSegmentChord', $event)"
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-10 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().vibeCamera.maxSegmentChord | number: '1.0-1'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <label
+                class="flex cursor-pointer items-center justify-between gap-2"
+              >
+                <span class="text-[0.68rem] font-medium text-base-content"
+                  >Pfad-Vorschau</span
+                >
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  [checked]="model().vibeCamera.pathPreview"
+                  (change)="onVibeCameraPathPreview($event)"
+                />
+              </label>
+              <label
+                class="flex cursor-pointer items-center justify-between gap-2"
+              >
+                <span class="text-[0.68rem] font-medium text-base-content"
+                  >Pfad-Kugeln</span
+                >
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  [checked]="model().vibeCamera.pathPreviewMarkers"
+                  [disabled]="!model().vibeCamera.pathPreview"
+                  (change)="onVibeCameraPathPreviewMarkers($event)"
+                />
+              </label>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraPathMarkerSize"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Kugelgröße</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraPathMarkerSize"
+                    type="range"
+                    min="0.04"
+                    max="0.8"
+                    step="0.01"
+                    [value]="model().vibeCamera.pathPreviewMarkerSize"
+                    [disabled]="
+                      !model().vibeCamera.pathPreview ||
+                      !model().vibeCamera.pathPreviewMarkers
+                    "
+                    (input)="
+                      onVibeCameraPlanning('pathPreviewMarkerSize', $event)
+                    "
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-10 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().vibeCamera.pathPreviewMarkerSize | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
               </div>
             </div>
           </app-viz-settings-block>
@@ -874,6 +1107,9 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected readonly neuronMulMin = ACTIVE_NEURON_MAX_SCALE_MUL_MIN;
   protected readonly neuronMulMax = ACTIVE_NEURON_MAX_SCALE_MUL_MAX;
   protected readonly neuronMulStep = ACTIVE_NEURON_MAX_SCALE_MUL_STEP;
+  protected readonly vibeCameraProfileEntries = (
+    Object.keys(VIBE_CAMERA_PROFILE_LABELS) as VibeCameraProfileId[]
+  ).map((id) => ({ id, label: VIBE_CAMERA_PROFILE_LABELS[id] }));
 
   /** Mount-Punkt für die Three.js-Szene (an neuronal-app übergeben). */
   readonly vizMountEl = viewChild<ElementRef<HTMLElement>>('vizMount');
@@ -1023,6 +1259,125 @@ export class NetworkViz3dShellComponent implements OnDestroy {
     this.store.dispatch(
       NeuronalActions.vizActiveNeuronMaxScaleMulChanged({ mul: v }),
     );
+  }
+
+  protected vibeCameraProfileSelectValue(): string {
+    const mode = this.model().vibeCamera.profileMode;
+    return mode === 'custom' ? '__custom__' : mode;
+  }
+
+  onVibeCameraProfile(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const value = target.value;
+    if (value === '__custom__') return;
+    if (
+      value === 'smooth' ||
+      value === 'balanced' ||
+      value === 'funky' ||
+      value === 'rocket'
+    ) {
+      const tuning = vibeCameraTuningFromProfile(value);
+      this.store.dispatch(
+        NeuronalActions.vizVibeCameraProfileChanged({
+          profile: value,
+        }),
+      );
+      this.pushVibeCameraTuningToRuntime(tuning);
+    }
+  }
+
+  onVibeCameraTuning(
+    key: 'speed' | 'pullOut' | 'pathWildness' | 'lookWander',
+    ev: Event,
+  ): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'range') {
+      return;
+    }
+    const value = parseFloat(target.value);
+    if (!Number.isFinite(value)) return;
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      [key]: value,
+    });
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({ patch: { [key]: value } }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
+  }
+
+  onVibeCameraPlanning(
+    key: 'pathQueueSize' | 'maxSegmentChord' | 'pathPreviewMarkerSize',
+    ev: Event,
+  ): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'range') {
+      return;
+    }
+    const raw =
+      key === 'pathQueueSize'
+        ? parseInt(target.value, 10)
+        : parseFloat(target.value);
+    if (!Number.isFinite(raw)) return;
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      [key]: raw,
+    });
+    const value =
+      key === 'pathQueueSize'
+        ? tuning.pathQueueSize
+        : key === 'maxSegmentChord'
+          ? tuning.maxSegmentChord
+          : tuning.pathPreviewMarkerSize;
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({ patch: { [key]: value } }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
+  }
+
+  onVibeCameraPathPreviewMarkers(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
+      return;
+    }
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      pathPreviewMarkers: target.checked,
+    });
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({
+        patch: { pathPreviewMarkers: tuning.pathPreviewMarkers },
+      }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
+  }
+
+  onVibeCameraPathPreview(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
+      return;
+    }
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      pathPreview: target.checked,
+    });
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({
+        patch: { pathPreview: target.checked },
+      }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
+  }
+
+  private pushVibeCameraTuningToRuntime(tuning: VibeCameraTuning): void {
+    this.ngZone.runOutsideAngular(() => {
+      this.neuronalApp.onVibeCameraSettingsApply(tuning);
+    });
   }
 
   onSceneColorInput(key: keyof VizSceneColorSettings, ev: Event): void {
