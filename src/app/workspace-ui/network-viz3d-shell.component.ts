@@ -22,8 +22,10 @@ import {
 } from '../../viz/network3d';
 import {
   normalizeVibeCameraTuning,
+  VIBE_CAMERA_CONTROL_MODE_LABELS,
   VIBE_CAMERA_PROFILE_LABELS,
   vibeCameraTuningFromProfile,
+  type VibeCameraControlMode,
   type VibeCameraProfileId,
   type VibeCameraTuning,
 } from '../../viz/vibe-camera-settings';
@@ -221,6 +223,23 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
           </app-viz-settings-block>
           <app-viz-settings-block heading="Kamera-Vibe">
             <div class="flex flex-col gap-3">
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraControlMode"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Steuerung</label
+                >
+                <select
+                  id="vibeCameraControlMode"
+                  class="select select-bordered select-sm w-full"
+                  [value]="model().vibeCamera.controlMode"
+                  (change)="onVibeCameraControlMode($event)"
+                >
+                  @for (entry of vibeCameraControlModeEntries; track entry.id) {
+                    <option [value]="entry.id">{{ entry.label }}</option>
+                  }
+                </select>
+              </div>
               <div class="min-w-0">
                 <label
                   for="vibeCameraProfile"
@@ -1110,6 +1129,9 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected readonly vibeCameraProfileEntries = (
     Object.keys(VIBE_CAMERA_PROFILE_LABELS) as VibeCameraProfileId[]
   ).map((id) => ({ id, label: VIBE_CAMERA_PROFILE_LABELS[id] }));
+  protected readonly vibeCameraControlModeEntries = (
+    Object.keys(VIBE_CAMERA_CONTROL_MODE_LABELS) as VibeCameraControlMode[]
+  ).map((id) => ({ id, label: VIBE_CAMERA_CONTROL_MODE_LABELS[id] }));
 
   /** Mount-Punkt für die Three.js-Szene (an neuronal-app übergeben). */
   readonly vizMountEl = viewChild<ElementRef<HTMLElement>>('vizMount');
@@ -1264,6 +1286,24 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected vibeCameraProfileSelectValue(): string {
     const mode = this.model().vibeCamera.profileMode;
     return mode === 'custom' ? '__custom__' : mode;
+  }
+
+  onVibeCameraControlMode(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const value = target.value;
+    if (value !== 'followPath' && value !== 'freeLook') return;
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      controlMode: value,
+    });
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({
+        patch: { controlMode: tuning.controlMode },
+      }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
   }
 
   onVibeCameraProfile(ev: Event): void {

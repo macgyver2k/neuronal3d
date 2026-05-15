@@ -11,6 +11,7 @@ import {
   normalizeVibeCameraTuning,
   resolveVibeCameraParams,
   type ResolvedVibeCameraParams,
+  type VibeCameraControlMode,
   type VibeCameraTuning,
 } from './vibe-camera-settings';
 import {
@@ -224,6 +225,34 @@ export function createScene(mount: NeuronalGlSceneMount): {
   vibePathPreviewRoot.visible = false;
   vibePathPreviewRoot.frustumCulled = false;
   scene.add(vibePathPreviewRoot);
+
+  const vibePathCameraRig = new THREE.Group();
+  vibePathCameraRig.visible = false;
+  vibePathCameraRig.frustumCulled = false;
+  const vibePathCameraBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 0.24, 0.52),
+    new THREE.MeshBasicMaterial({
+      color: 0x6a8aaa,
+      transparent: true,
+      opacity: 0.88,
+      depthTest: true,
+      depthWrite: false,
+    }),
+  );
+  vibePathCameraBody.position.set(0, 0, -0.12);
+  const vibePathCameraLens = new THREE.Mesh(
+    new THREE.BoxGeometry(0.22, 0.18, 0.2),
+    new THREE.MeshBasicMaterial({
+      color: 0xa8c8ee,
+      transparent: true,
+      opacity: 0.92,
+      depthTest: true,
+      depthWrite: false,
+    }),
+  );
+  vibePathCameraLens.position.set(0, 0, 0.3);
+  vibePathCameraRig.add(vibePathCameraBody, vibePathCameraLens);
+  scene.add(vibePathCameraRig);
   const vibePathLinePool: THREE.Line[] = [];
   const vibePathMarkerPool: THREE.Mesh[] = [];
   const vibePathMarkerGeometry = new THREE.SphereGeometry(1, 12, 10);
@@ -327,12 +356,28 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const moveSpeed = 12;
 
   let vibeCameraMode = false;
+  let vibeCamControlMode: VibeCameraControlMode =
+    DEFAULT_VIBE_CAMERA_TUNING.controlMode;
   const vibeClock = new THREE.Clock();
   const vibeSavedCam = new THREE.Vector3();
   const vibeSavedTarget = new THREE.Vector3();
   let vibeSavedEnableDamping = true;
 
   let vibeCamParams = resolveVibeCameraParams(DEFAULT_VIBE_CAMERA_TUNING);
+
+  const syncVibeCameraControls = (): void => {
+    if (!vibeCameraMode) return;
+    const freeLook = vibeCamControlMode === 'freeLook';
+    controls.enabled = freeLook;
+    controls.enableDamping = freeLook ? vibeSavedEnableDamping : false;
+    vibePathCameraRig.visible = freeLook;
+  };
+
+  const updateVibePathCameraRig = (): void => {
+    vibePathCameraRig.position.copy(vibeIdealCam);
+    vibePathCameraRig.up.copy(vibeIdealUp).normalize();
+    vibePathCameraRig.lookAt(vibeNetFocus);
+  };
 
   type VibeCamCurveSeg = {
     dur: number;
@@ -464,10 +509,11 @@ export function createScene(mount: NeuronalGlSceneMount): {
     firstSegment: boolean,
   ): void {
     const params = vibeCamParams;
-    const chaotic = params.pathIntraCurve;
+    const wild = params.pathIntraCurve;
     const jitter = params.p3Jitter;
-    const chord =
-      params.pathTangentChordMin + Math.random() * params.pathTangentChordSpan;
+    const maxChord = params.maxSegmentChord;
+    const targetChord =
+      maxChord * (0.55 + Math.random() * (0.45 - wild * 0.12));
 
     vibeIdealCam.set(
       start.x + 0.55 + Math.random() * 8.2 * jitter,
@@ -501,8 +547,15 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (vibeScratchDir.lengthSq() < 1e-8) vibeScratchDir.copy(vibeIdealUp);
     vibeScratchDir.normalize();
 
-    end.copy(start).addScaledVector(vibeScratchDir, chord);
-    end.lerp(vibeIdealCam, chaotic);
+    end.copy(start).addScaledVector(vibeScratchDir, targetChord);
+    if (wild > 0.02) {
+      vibeScratchLerp.copy(vibeIdealCam).sub(start);
+      if (vibeScratchLerp.lengthSq() > 1e-8) {
+        vibeScratchLerp.normalize();
+        vibeScratchDir.lerp(vibeScratchLerp, wild * 0.55).normalize();
+        end.copy(start).addScaledVector(vibeScratchDir, targetChord);
+      }
+    }
     vibeBiasP3AwayFromFocus(end, focus);
     clampVibeSegmentEndToMaxChord(start, end);
   }
@@ -772,6 +825,43 @@ export function createScene(mount: NeuronalGlSceneMount): {
     syncVibeSegQueueLength();
   }
 
+  function currentVibePathCameraPosition(out: THREE.Vector3): void {
+    const head = vibeSegQueue[0];
+    if (!head) {
+      out.copy(camera.position);
+      return;
+    }
+    if (vibeEntranceBlend.active) {
+      out.copy(head.p0);
+      return;
+    }
+    let progress = vibeSegElapsed / head.dur;
+    if (progress > 1) progress = 1;
+    vibeBezierEvalPoint(head.p0, head.p1, head.p2, head.p3, progress, out);
+  }
+
+  const refillVibeSegQueueFromScene = (): void => {
+    if (vibeCamControlMode === 'freeLook' && vibeSegQueue.length > 0) {
+      currentVibePathCameraPosition(vibeScratchDir);
+      refillVibeSegQueue(vibeScratchDir, vibeNetFocus);
+      return;
+    }
+    refillVibeSegQueue(camera.position, controls.target);
+  };
+
+  const replanVibeSegQueuePreservingProgress = (): void => {
+    const progressRatio =
+      vibeSegQueue.length > 0 &&
+      !vibeEntranceBlend.active &&
+      vibeSegQueue[0]!.dur > 1e-6
+        ? Math.min(1, vibeSegElapsed / vibeSegQueue[0]!.dur)
+        : 0;
+    refillVibeSegQueueFromScene();
+    if (vibeSegQueue.length > 0 && progressRatio > 0) {
+      vibeSegElapsed = progressRatio * vibeSegQueue[0]!.dur;
+    }
+  };
+
   function syncVibeSegQueueLength(): void {
     const targetLength = vibeCamParams.queueMin;
     while (vibeSegQueue.length < targetLength && vibeSegQueue.length > 0) {
@@ -799,28 +889,54 @@ export function createScene(mount: NeuronalGlSceneMount): {
       'pathPreviewMarkerRadius',
     ]);
 
-  const vibeResolvedParamsAffectPathPlan = (
+  const vibeResolvedParamsAffectPathPlanExceptQueueSize = (
     previous: ResolvedVibeCameraParams,
     next: ResolvedVibeCameraParams,
   ): boolean =>
     (Object.keys(previous) as (keyof ResolvedVibeCameraParams)[]).some(
       (key) =>
-        !vibePreviewOnlyParamKeys.has(key) && previous[key] !== next[key],
+        key !== 'queueMin' &&
+        !vibePreviewOnlyParamKeys.has(key) &&
+        previous[key] !== next[key],
     );
 
   const applyVibeCameraSettings = (tuning: VibeCameraTuning): void => {
+    const normalized = normalizeVibeCameraTuning(tuning);
+    const previousControlMode = vibeCamControlMode;
     const previousParams = vibeCamParams;
-    vibeCamParams = resolveVibeCameraParams(normalizeVibeCameraTuning(tuning));
+    vibeCamControlMode = normalized.controlMode;
+    vibeCamParams = resolveVibeCameraParams(normalized);
     if (!vibeCameraMode) {
       vibePathPreviewRoot.visible = vibeCamParams.pathPreview;
       return;
     }
+    if (previousControlMode !== vibeCamControlMode) {
+      syncVibeCameraControls();
+      if (vibeCamControlMode === 'followPath') {
+        startVibeEntranceBlend(
+          vibeClock.getElapsedTime(),
+          0.85 + Math.random() * 0.45,
+        );
+      } else {
+        vibeEntranceBlend.active = false;
+      }
+    }
+    const maxSegmentChordChanged =
+      previousParams.maxSegmentChord !== vibeCamParams.maxSegmentChord;
+
     if (vibeEntranceBlend.active || vibeSegQueue.length === 0) {
-      refillVibeSegQueue(camera.position, controls.target);
+      refillVibeSegQueueFromScene();
+    } else if (maxSegmentChordChanged) {
+      replanVibeSegQueuePreservingProgress();
     } else if (
-      vibeResolvedParamsAffectPathPlan(previousParams, vibeCamParams)
+      vibeResolvedParamsAffectPathPlanExceptQueueSize(
+        previousParams,
+        vibeCamParams,
+      )
     ) {
       replenishVibeSegQueueTail();
+    } else if (previousParams.queueMin !== vibeCamParams.queueMin) {
+      syncVibeSegQueueLength();
     }
     updateVibePathPreview();
   };
@@ -935,14 +1051,14 @@ export function createScene(mount: NeuronalGlSceneMount): {
         vibeSegQueue.shift();
       }
       if (vibeSegQueue.length === 0) {
-        refillVibeSegQueue(camera.position, controls.target);
+        refillVibeSegQueueFromScene();
       }
       syncVibeSegQueueLength();
     }
 
     const head = vibeSegQueue[0];
     if (!head) {
-      refillVibeSegQueue(camera.position, controls.target);
+      refillVibeSegQueueFromScene();
       updateVibePathPreview();
       return;
     }
@@ -956,6 +1072,12 @@ export function createScene(mount: NeuronalGlSceneMount): {
       const s = w;
       vibeBezierEvalPoint(head.p0, head.p1, head.p2, head.p3, s, vibeIdealCam);
       vibeIdealUp.copy(head.u0).lerp(head.u3, s).normalize();
+    }
+
+    if (vibeCamControlMode === 'freeLook') {
+      updateVibePathCameraRig();
+      updateVibePathPreview();
+      return;
     }
 
     if (vibeEntranceBlend.active) {
@@ -999,13 +1121,17 @@ export function createScene(mount: NeuronalGlSceneMount): {
       vibeSavedCam.copy(camera.position);
       vibeSavedTarget.copy(controls.target);
       vibeSavedEnableDamping = controls.enableDamping;
-      controls.enableDamping = false;
-      controls.enabled = false;
       vibeClock.start();
       vibeCameraMode = true;
-      startVibeEntranceBlend(0, 1.02 + Math.random() * 0.58);
+      syncVibeCameraControls();
+      if (vibeCamControlMode === 'followPath') {
+        startVibeEntranceBlend(0, 1.02 + Math.random() * 0.58);
+      } else {
+        vibeEntranceBlend.active = false;
+      }
     } else {
       vibeCameraMode = false;
+      vibePathCameraRig.visible = false;
       vibeEntranceBlend.active = false;
       vibeSegQueue.length = 0;
       vibeLastRawT = -1;
@@ -1151,6 +1277,11 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (!isDom) orbitDomSurface?.removeAllListeners();
     controls.dispose();
     scene.remove(vibePathPreviewRoot);
+    scene.remove(vibePathCameraRig);
+    vibePathCameraBody.geometry.dispose();
+    (vibePathCameraBody.material as THREE.Material).dispose();
+    vibePathCameraLens.geometry.dispose();
+    (vibePathCameraLens.material as THREE.Material).dispose();
     disposeVibePathPreviewPools();
     floor.geometry.dispose();
     (floor.material as THREE.Material).dispose();
@@ -1168,7 +1299,9 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   const applyCameraRelativePan = () => {
     const dt = inputClock.getDelta();
-    if (vibeCameraMode || dt <= 0) return;
+    if ((vibeCameraMode && vibeCamControlMode !== 'freeLook') || dt <= 0) {
+      return;
+    }
     const w = keysDown.has('KeyW') || keysDown.has('ArrowUp');
     const s = keysDown.has('KeyS') || keysDown.has('ArrowDown');
     const a = keysDown.has('KeyA') || keysDown.has('ArrowLeft');

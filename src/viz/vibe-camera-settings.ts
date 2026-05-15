@@ -2,8 +2,12 @@ export type VibeCameraProfileId = 'smooth' | 'balanced' | 'funky' | 'rocket';
 
 export type VibeCameraProfileMode = VibeCameraProfileId | 'custom';
 
+/** `followPath`: Ansicht folgt dem Vibe-Pfad; `freeLook`: frei steuern, Pfad-Kamera als Modell. */
+export type VibeCameraControlMode = 'followPath' | 'freeLook';
+
 export type VibeCameraTuning = {
   profileMode: VibeCameraProfileMode;
+  controlMode: VibeCameraControlMode;
   /** 0 = langsam, {@link VIBE_SPEED_MAX} = schnell */
   speed: number;
   /** 0 = nah, 1 = weiter raus */
@@ -28,8 +32,17 @@ export const VIBE_SPEED_MAX = 100;
 /** Bis hier entspricht das Tempo dem früheren Maximum (Slider 0–10). */
 export const VIBE_SPEED_REFERENCE = 10;
 
+export const VIBE_CAMERA_CONTROL_MODE_LABELS: Record<
+  VibeCameraControlMode,
+  string
+> = {
+  followPath: 'Pfad folgen',
+  freeLook: 'Frei bewegen',
+};
+
 export const DEFAULT_VIBE_CAMERA_TUNING: VibeCameraTuning = {
   profileMode: 'balanced',
+  controlMode: 'followPath',
   speed: 50,
   pullOut: 0.5,
   pathWildness: 0.5,
@@ -46,6 +59,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
   Omit<VibeCameraTuning, 'profileMode'>
 > = {
   smooth: {
+    controlMode: 'followPath',
     speed: 25,
     pullOut: 0.4,
     pathWildness: 0.2,
@@ -57,6 +71,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
     pathPreviewMarkerSize: 0.16,
   },
   balanced: {
+    controlMode: 'followPath',
     speed: 50,
     pullOut: 0.5,
     pathWildness: 0.5,
@@ -68,6 +83,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
     pathPreviewMarkerSize: 0.16,
   },
   funky: {
+    controlMode: 'followPath',
     speed: 55,
     pullOut: 0.52,
     pathWildness: 0.75,
@@ -79,6 +95,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
     pathPreviewMarkerSize: 0.16,
   },
   rocket: {
+    controlMode: 'followPath',
     speed: 100,
     pullOut: 0.38,
     pathWildness: 0.65,
@@ -244,8 +261,11 @@ export function normalizeVibeCameraTuning(
   tuning: Partial<VibeCameraTuning> | null | undefined,
 ): VibeCameraTuning {
   const base = tuning ?? {};
+  const controlMode =
+    base.controlMode ?? DEFAULT_VIBE_CAMERA_TUNING.controlMode;
   return {
     profileMode: base.profileMode ?? DEFAULT_VIBE_CAMERA_TUNING.profileMode,
+    controlMode: controlMode === 'freeLook' ? 'freeLook' : 'followPath',
     speed: clampVibeSpeed(base.speed ?? DEFAULT_VIBE_CAMERA_TUNING.speed),
     pullOut: clamp01(base.pullOut ?? DEFAULT_VIBE_CAMERA_TUNING.pullOut),
     pathWildness: clamp01(
@@ -287,6 +307,7 @@ export function vibeCameraProfileMatchesTuning(
   const eps = 0.6;
   const near = (a: number, b: number) => Math.abs(a - b) < eps;
   return (
+    tuning.controlMode === base.controlMode &&
     near(tuning.speed, base.speed) &&
     near(tuning.pullOut, base.pullOut) &&
     near(tuning.pathWildness, base.pathWildness) &&
