@@ -97,8 +97,8 @@ const handleMessage = (
       net3d = new Network3D([...message.layerSizes]);
       created.scene.add(net3d.root);
       created.setVibeNetworkLookFocus({
-        fillLayoutCentroid: (out) => {
-          net3d!.fillLayoutCentroid(out);
+        fillLayoutCentroid: (out, elapsedSec = 0) => {
+          net3d!.fillVibeLookTarget(out, elapsedSec);
         },
       });
       stopAnimCleanup = animateLoop(created.render, created.controls, () => {

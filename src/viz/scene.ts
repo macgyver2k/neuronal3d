@@ -69,9 +69,13 @@ function intensityScaleForLights(lc: VizLightColorSettings): number {
   return 1 - ((mx - 0.52) / (0.9 - 0.52)) * (1 - 0.32);
 }
 
-/** Optional: Netz-Schwerpunkt für Vibe-Blickrichtung (Viz-Worker / Network3D). */
+/** Optional: Netz-Blickziel für Vibe-Kamera (Viz-Worker / Network3D). */
 export type VibeNetworkLookFocusSampler = {
-  fillLayoutCentroid: (out: THREE.Vector3) => void;
+  /**
+   * @param out Zielvektor
+   * @param elapsedSec Zeit seit Vibe-Start (Three.js-Clock), z. B. für wandernde Foci
+   */
+  fillLayoutCentroid: (out: THREE.Vector3, elapsedSec?: number) => void;
 };
 
 export function createScene(mount: NeuronalGlSceneMount): {
@@ -309,11 +313,15 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const vibeIdealCam = new THREE.Vector3();
   const vibeIdealUp = new THREE.Vector3();
   const vibeNetFocus = new THREE.Vector3(4, 0, 0);
-  let vibeNetLookFill: ((out: THREE.Vector3) => void) | null = null;
+  let vibeNetLookFill:
+    | ((out: THREE.Vector3, elapsedSec: number) => void)
+    | null = null;
   function setVibeNetworkLookFocus(
     sampler: VibeNetworkLookFocusSampler | null,
   ): void {
-    vibeNetLookFill = sampler?.fillLayoutCentroid ?? null;
+    vibeNetLookFill = sampler
+      ? (out, elapsedSec) => sampler.fillLayoutCentroid(out, elapsedSec)
+      : null;
   }
 
   const vibeEntranceBlend = {
@@ -507,10 +515,10 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   const applyVibeCamera = () => {
     if (!vibeCameraMode) return;
-    if (vibeNetLookFill) vibeNetLookFill(vibeNetFocus);
+    const rawT = vibeClock.getElapsedTime();
+    if (vibeNetLookFill) vibeNetLookFill(vibeNetFocus, rawT);
     else vibeNetFocus.set(4, 0, 0);
 
-    const rawT = vibeClock.getElapsedTime();
     let dt = vibeLastRawT < 0 ? 0.016 : rawT - vibeLastRawT;
     if (dt > 0.085) dt = 0.016;
     if (dt < 0) dt = 0;

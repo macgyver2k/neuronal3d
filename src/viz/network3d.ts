@@ -253,6 +253,9 @@ export class Network3D {
   private readonly colEdgeTrainRecent = new THREE.Color();
   private readonly colNeuronEmissive = new THREE.Color();
   private readonly scratchNeuronColor = new THREE.Color();
+  private readonly scratchV3a = new THREE.Vector3();
+  private readonly scratchV3b = new THREE.Vector3();
+  private readonly scratchV3c = new THREE.Vector3();
 
   constructor(layerSizes: number[]) {
     this.layerSizes = [...layerSizes];
@@ -738,7 +741,7 @@ export class Network3D {
     }
   }
 
-  /** Schwerpunkt aller Neuron-Positionen (Layout-Weltkoordinaten) — Blickziel für Vibe-Kamera. */
+  /** Schwerpunkt aller Neuron-Positionen (Layout-Weltkoordinaten). */
   fillLayoutCentroid(out: THREE.Vector3): void {
     let n = 0;
     let sx = 0;
@@ -754,6 +757,83 @@ export class Network3D {
     }
     if (n === 0) out.set(4, 0, 0);
     else out.set(sx / n, sy / n, sz / n);
+  }
+
+  /**
+   * Mittelpunkt des Layouts mit gleichem Gewicht pro Schicht (nicht pro Neuron).
+   * Verhindert, dass große Eingangsschichten den Blick-Schwerpunkt dominieren.
+   */
+  fillLayoutCentroidEqualLayers(out: THREE.Vector3): void {
+    let lx = 0;
+    let ly = 0;
+    let lz = 0;
+    let layerCount = 0;
+    for (const layer of this.positions) {
+      if (layer.length === 0) continue;
+      let sx = 0;
+      let sy = 0;
+      let sz = 0;
+      for (const p of layer) {
+        sx += p.x;
+        sy += p.y;
+        sz += p.z;
+      }
+      const inv = 1 / layer.length;
+      lx += sx * inv;
+      ly += sy * inv;
+      lz += sz * inv;
+      layerCount++;
+    }
+    if (layerCount === 0) out.set(4, 0, 0);
+    else {
+      const invL = 1 / layerCount;
+      out.set(lx * invL, ly * invL, lz * invL);
+    }
+  }
+
+  /** Schicht-Schwerpunkt; `false` nur bei leerer Schicht. */
+  fillLayerCentroid(layerIndex: number, out: THREE.Vector3): boolean {
+    const layer = this.positions[layerIndex];
+    if (!layer || layer.length === 0) return false;
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    for (const p of layer) {
+      sx += p.x;
+      sy += p.y;
+      sz += p.z;
+    }
+    const inv = 1 / layer.length;
+    out.set(sx * inv, sy * inv, sz * inv);
+    return true;
+  }
+
+  /**
+   * Blickziel für Vibe-Kamera: gleich gewichtete Schichten plus langsames Mitwandern
+   * entlang der Schicht-Schwerpunkte, damit die Kamera nicht dauernd „ins erste Layer“ starrt.
+   */
+  fillVibeLookTarget(out: THREE.Vector3, timeSec: number): void {
+    const n = this.positions.length;
+    if (n === 0) {
+      out.set(4, 0, 0);
+      return;
+    }
+    this.fillLayoutCentroidEqualLayers(this.scratchV3c);
+    if (n === 1) {
+      out.copy(this.scratchV3c);
+      return;
+    }
+    const speed = 0.055;
+    let u = timeSec * speed;
+    u %= n;
+    if (u < 0) u += n;
+    const L0 = Math.floor(u) % n;
+    const L1 = (L0 + 1) % n;
+    const f = u - Math.floor(u);
+    this.fillLayerCentroid(L0, this.scratchV3a);
+    this.fillLayerCentroid(L1, this.scratchV3b);
+    out.lerpVectors(this.scratchV3a, this.scratchV3b, f);
+    out.lerp(this.scratchV3c, 0.34);
   }
 
   setWeights(weights: number[][][]): void {
