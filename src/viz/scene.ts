@@ -384,13 +384,16 @@ export function createScene(mount: NeuronalGlSceneMount): {
     focus: THREE.Vector3,
   ): void {
     const params = vibeCamParams;
+    const pullScale = params.pathPullOutScale;
     vibeScratchDir.copy(p3).sub(focus);
     const d0 = vibeScratchDir.length();
     if (d0 < 1e-5) {
       vibeRandomUnit(vibeScratchDir);
       p3.addScaledVector(
         vibeScratchDir,
-        params.pullOutFallbackMin + Math.random() * params.pullOutFallbackSpan,
+        (params.pullOutFallbackMin +
+          Math.random() * params.pullOutFallbackSpan) *
+          pullScale,
       );
       return;
     }
@@ -398,14 +401,17 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (Math.random() < params.pullOutChanceMain) {
       p3.addScaledVector(
         vibeScratchDir,
-        params.pullOutPushMainMin + Math.random() * params.pullOutPushMainSpan,
+        (params.pullOutPushMainMin +
+          Math.random() * params.pullOutPushMainSpan) *
+          pullScale,
       );
     }
     if (Math.random() < params.pullOutChanceBoost) {
       p3.addScaledVector(
         vibeScratchDir,
-        params.pullOutPushBoostMin +
-          Math.random() * params.pullOutPushBoostSpan,
+        (params.pullOutPushBoostMin +
+          Math.random() * params.pullOutPushBoostSpan) *
+          pullScale,
       );
     }
     if (
@@ -416,14 +422,155 @@ export function createScene(mount: NeuronalGlSceneMount): {
         vibeScratchDir,
         (params.pullOutNearRefDist - d0) *
           (params.pullOutNearFactorMin +
-            Math.random() * params.pullOutNearFactorSpan),
+            Math.random() * params.pullOutNearFactorSpan) *
+          pullScale,
       );
     }
-    if (Math.random() < params.pullOutScaleChance) {
+    if (Math.random() < params.pullOutScaleChance * pullScale) {
       const k =
         params.pullOutScaleMin + Math.random() * params.pullOutScaleSpan;
-      p3.sub(focus).multiplyScalar(k).add(focus);
+      const scaledK = 1 + (k - 1) * pullScale;
+      p3.sub(focus).multiplyScalar(scaledK).add(focus);
     }
+  }
+
+  function vibeOrbitTangentAt(
+    origin: THREE.Vector3,
+    focus: THREE.Vector3,
+    yawRadians: number,
+    out: THREE.Vector3,
+  ): void {
+    vibeScratchDir.copy(origin).sub(focus);
+    const radialLength = vibeScratchDir.length();
+    if (radialLength < 1e-5) vibeScratchDir.set(0, 0, 1);
+    else vibeScratchDir.multiplyScalar(1 / radialLength);
+
+    vibeIdealCam.set(0, 1, 0);
+    out.crossVectors(vibeIdealCam, vibeScratchDir);
+    if (out.lengthSq() < 1e-6) {
+      out.set(1, 0, 0);
+      out.crossVectors(out, vibeScratchDir);
+    }
+    out.normalize();
+    if (Math.abs(yawRadians) > 1e-5)
+      out.applyAxisAngle(vibeScratchDir, yawRadians);
+  }
+
+  function vibePlaceSegmentEnd(
+    start: THREE.Vector3,
+    end: THREE.Vector3,
+    focus: THREE.Vector3,
+    previous: VibeCamCurveSeg | null,
+    firstSegment: boolean,
+  ): void {
+    const params = vibeCamParams;
+    const chaotic = params.pathIntraCurve;
+    const jitter = params.p3Jitter;
+    const chord =
+      params.pathTangentChordMin + Math.random() * params.pathTangentChordSpan;
+
+    vibeIdealCam.set(
+      start.x + 0.55 + Math.random() * 8.2 * jitter,
+      start.y - 1.45 + Math.random() * 4.5 * jitter,
+      start.z - 3.9 + Math.random() * 7.8 * jitter,
+    );
+    if (firstSegment) {
+      vibeIdealCam.set(
+        0.65 + Math.random() * 8 * jitter,
+        -1.35 + Math.random() * 4.4 * jitter,
+        -3.85 + Math.random() * 7.7 * jitter,
+      );
+    }
+
+    vibeScratchLerp.set(0, 0, 0);
+    if (previous) {
+      vibeScratchLerp.copy(previous.p3).sub(previous.p2);
+      if (vibeScratchLerp.lengthSq() < 1e-6) {
+        vibeScratchLerp.copy(previous.p3).sub(previous.p0);
+      }
+    }
+    if (vibeScratchLerp.lengthSq() < 1e-6) {
+      vibeOrbitTangentAt(start, focus, 0, vibeScratchLerp);
+    } else vibeScratchLerp.normalize();
+
+    const yaw = (Math.random() - 0.5) * 2 * params.pathHeadingYawMax;
+    vibeOrbitTangentAt(start, focus, yaw, vibeIdealUp);
+    vibeScratchDir
+      .copy(vibeScratchLerp)
+      .lerp(vibeIdealUp, params.pathOrbitBlend);
+    if (vibeScratchDir.lengthSq() < 1e-8) vibeScratchDir.copy(vibeIdealUp);
+    vibeScratchDir.normalize();
+
+    end.copy(start).addScaledVector(vibeScratchDir, chord);
+    end.lerp(vibeIdealCam, chaotic);
+    vibeBiasP3AwayFromFocus(end, focus);
+    clampVibeSegmentEndToMaxChord(start, end);
+  }
+
+  function vibePlaceCurveHandles(
+    segment: VibeCamCurveSeg,
+    previous: VibeCamCurveSeg | null,
+  ): void {
+    const params = vibeCamParams;
+    const bend = params.pathIntraCurve;
+    const wild = params.pathWildnessMul;
+
+    vibeScratchDir.copy(segment.p3).sub(segment.p0);
+    const chord = vibeScratchDir.length();
+    if (chord < 1e-5) return;
+    vibeScratchDir.multiplyScalar(1 / chord);
+
+    const calmP1 = vibeEntranceBlend.fromCam;
+    const calmP2 = vibeEntranceBlend.fromLook;
+    calmP1.copy(segment.p0).addScaledVector(vibeScratchDir, chord * 0.36);
+    calmP2.copy(segment.p3).addScaledVector(vibeScratchDir, -chord * 0.36);
+    if (previous) {
+      calmP1.copy(previous.p3).sub(previous.p2).add(segment.p0);
+      if (calmP1.distanceToSquared(segment.p0) < 1e-6) {
+        calmP1.copy(segment.p0).addScaledVector(vibeScratchDir, chord * 0.36);
+      }
+    }
+
+    vibeRandomUnit(vibeScratchLerp);
+    vibeScratchLerp.addScaledVector(
+      vibeScratchDir,
+      -vibeScratchLerp.dot(vibeScratchDir),
+    );
+    if (vibeScratchLerp.lengthSq() < 1e-8) vibeScratchLerp.set(0, 1, 0);
+    else vibeScratchLerp.normalize();
+
+    const bendAmount =
+      (params.pathHandlePerpMin + Math.random() * params.pathHandlePerpSpan) *
+      bend;
+    const handleOut =
+      (params.handleOutMin + Math.random() * params.handleOutSpan) * wild;
+    const handleIn =
+      (params.handleInNegMin + Math.random() * params.handleInNegSpan) * wild;
+    const alongOut = chord * THREE.MathUtils.lerp(0.34, 0.22, bend);
+    const alongIn = chord * THREE.MathUtils.lerp(-0.34, -0.22, bend);
+
+    const wildP1 = vibeEntranceBlend.fromUp;
+    wildP1
+      .copy(segment.p0)
+      .addScaledVector(vibeScratchDir, alongOut)
+      .addScaledVector(vibeScratchLerp, bendAmount)
+      .addScaledVector(vibeScratchLerp, handleOut * (0.35 + bend * 0.45));
+    const wildP2 = vibePathEval;
+    wildP2
+      .copy(segment.p3)
+      .addScaledVector(vibeScratchDir, alongIn)
+      .addScaledVector(
+        vibeScratchLerp,
+        -bendAmount * (0.7 + Math.random() * 0.55),
+      )
+      .addScaledVector(vibeScratchLerp, -handleIn * 0.25 * bend);
+
+    segment.p1.copy(calmP1).lerp(wildP1, bend);
+    segment.p2.copy(calmP2).lerp(wildP2, bend);
+    segment.p2.lerp(
+      segment.p1,
+      params.p2LerpMin + Math.random() * params.p2LerpSpan,
+    );
   }
 
   function clampVibeSegmentEndToMaxChord(
@@ -484,7 +631,6 @@ export function createScene(mount: NeuronalGlSceneMount): {
     look: THREE.Vector3,
   ): VibeCamCurveSeg {
     const params = vibeCamParams;
-    const wild = params.pathWildnessMul;
     const seg: VibeCamCurveSeg = {
       dur: params.firstDurBase + Math.random() * params.firstDurSpan,
       p0: new THREE.Vector3().copy(cam),
@@ -499,30 +645,10 @@ export function createScene(mount: NeuronalGlSceneMount): {
       u3: new THREE.Vector3(),
     };
     const jitter = params.p3Jitter;
-    seg.p3.set(
-      0.65 + Math.random() * 8 * jitter,
-      -1.35 + Math.random() * 4.4 * jitter,
-      -3.85 + Math.random() * 7.7 * jitter,
-    );
-    vibeRandomUnit(vibeScratchDir);
-    seg.p1
-      .copy(cam)
-      .addScaledVector(
-        vibeScratchDir,
-        (params.handleOutMin + Math.random() * params.handleOutSpan) * wild,
-      );
-    vibeRandomUnit(vibeScratchDir);
-    seg.p2
-      .copy(seg.p3)
-      .addScaledVector(
-        vibeScratchDir,
-        -(params.handleInNegMin + Math.random() * params.handleInNegSpan) *
-          wild,
-      );
-    seg.p2.lerp(seg.p1, params.p2LerpMin + Math.random() * params.p2LerpSpan);
+    const lookChaos = params.pathIntraCurve;
 
-    vibeBiasP3AwayFromFocus(seg.p3, look);
-    clampVibeSegmentEndToMaxChord(seg.p0, seg.p3);
+    vibePlaceSegmentEnd(seg.p0, seg.p3, look, null, true);
+    vibePlaceCurveHandles(seg, null);
 
     if (Math.random() < params.firstDurBoostChance) {
       seg.dur *=
@@ -535,17 +661,23 @@ export function createScene(mount: NeuronalGlSceneMount): {
     );
 
     seg.l3.copy(seg.p3);
-    seg.l3.x += (Math.random() - 0.5) * 2.6 * jitter;
-    seg.l3.y += (Math.random() - 0.5) * 2.1 * jitter;
-    seg.l3.z += (Math.random() - 0.5) * 2.6 * jitter;
+    seg.l3.x += (Math.random() - 0.5) * 2.6 * jitter * lookChaos;
+    seg.l3.y += (Math.random() - 0.5) * 2.1 * jitter * lookChaos;
+    seg.l3.z += (Math.random() - 0.5) * 2.6 * jitter * lookChaos;
     vibeRandomUnit(vibeScratchDir);
     seg.l1
       .copy(look)
-      .addScaledVector(vibeScratchDir, 1.05 + Math.random() * 2.5);
+      .addScaledVector(
+        vibeScratchDir,
+        (1.05 + Math.random() * 2.5) * lookChaos,
+      );
     vibeRandomUnit(vibeScratchDir);
     seg.l2
       .copy(seg.l3)
-      .addScaledVector(vibeScratchDir, -(1.1 + Math.random() * 2.7));
+      .addScaledVector(
+        vibeScratchDir,
+        -(1.1 + Math.random() * 2.7) * lookChaos,
+      );
 
     seg.u0
       .set((Math.random() - 0.5) * 0.48, 1, (Math.random() - 0.5) * 0.48)
@@ -558,7 +690,6 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   function createChainedVibeSeg(prev: VibeCamCurveSeg): VibeCamCurveSeg {
     const params = vibeCamParams;
-    const wild = params.pathWildnessMul;
     const seg: VibeCamCurveSeg = {
       dur: prev.dur,
       p0: new THREE.Vector3().copy(prev.p3),
@@ -572,35 +703,24 @@ export function createScene(mount: NeuronalGlSceneMount): {
       u0: new THREE.Vector3().copy(prev.u3),
       u3: new THREE.Vector3(),
     };
-    seg.p1.copy(prev.p3).add(vibeScratchDir.copy(prev.p3).sub(prev.p2));
     const jitter = params.p3Jitter;
-    seg.p3.set(
-      0.55 + Math.random() * 8.2 * jitter,
-      -1.45 + Math.random() * 4.5 * jitter,
-      -3.9 + Math.random() * 7.8 * jitter,
-    );
-    vibeRandomUnit(vibeScratchDir);
-    seg.p2
-      .copy(seg.p3)
-      .addScaledVector(
-        vibeScratchDir,
-        -(params.handleInNegMin + Math.random() * params.handleInNegSpan) *
-          wild,
-      );
-    seg.p2.lerp(seg.p1, params.p2LerpMin + Math.random() * params.p2LerpSpan);
+    const lookChaos = params.pathIntraCurve;
 
-    vibeBiasP3AwayFromFocus(seg.p3, vibeNetFocus);
-    clampVibeSegmentEndToMaxChord(seg.p0, seg.p3);
+    vibePlaceSegmentEnd(seg.p0, seg.p3, vibeNetFocus, prev, false);
+    vibePlaceCurveHandles(seg, prev);
 
     seg.l1.copy(prev.l3).add(vibeScratchLerp.copy(prev.l3).sub(prev.l2));
     seg.l3.copy(seg.p3);
-    seg.l3.x += (Math.random() - 0.5) * 2.8 * jitter;
-    seg.l3.y += (Math.random() - 0.5) * 2.2 * jitter;
-    seg.l3.z += (Math.random() - 0.5) * 2.8 * jitter;
+    seg.l3.x += (Math.random() - 0.5) * 2.8 * jitter * lookChaos;
+    seg.l3.y += (Math.random() - 0.5) * 2.2 * jitter * lookChaos;
+    seg.l3.z += (Math.random() - 0.5) * 2.8 * jitter * lookChaos;
     vibeRandomUnit(vibeScratchDir);
     seg.l2
       .copy(seg.l3)
-      .addScaledVector(vibeScratchDir, -(1.15 + Math.random() * 2.75));
+      .addScaledVector(
+        vibeScratchDir,
+        -(1.15 + Math.random() * 2.75) * lookChaos,
+      );
 
     seg.u3
       .set((Math.random() - 0.5) * 0.52, 1, (Math.random() - 0.5) * 0.52)
@@ -610,12 +730,18 @@ export function createScene(mount: NeuronalGlSceneMount): {
     const chordNew = seg.p0.distanceTo(seg.p3);
     const legato =
       params.legatoMin + Math.random() * (params.legatoMax - params.legatoMin);
-    let ratio = chordNew / chordPrev;
-    ratio = THREE.MathUtils.clamp(
-      ratio,
+    const ratioMin = THREE.MathUtils.lerp(
+      params.pathChordRatioMin,
       params.chordRatioMin,
-      params.chordRatioMax,
+      lookChaos,
     );
+    const ratioMax = THREE.MathUtils.lerp(
+      params.pathChordRatioMax,
+      params.chordRatioMax,
+      lookChaos,
+    );
+    let ratio = chordNew / chordPrev;
+    ratio = THREE.MathUtils.clamp(ratio, ratioMin, ratioMax);
     const targetDur = prev.dur * ratio * legato * params.chainDurMul;
     seg.dur = THREE.MathUtils.clamp(
       THREE.MathUtils.clamp(

@@ -8,7 +8,7 @@ export type VibeCameraTuning = {
   speed: number;
   /** 0 = nah, 1 = weiter raus */
   pullOut: number;
-  /** 0 = ruhige Kurven, 1 = wild */
+  /** 0 = ruhig, orbit-artig; 1 = sehr wilde Kurven */
   pathWildness: number;
   /** 0 = ruhiger Blick, 1 = schnellere Schicht-Wanderung */
   lookWander: number;
@@ -134,6 +134,19 @@ export type ResolvedVibeCameraParams = {
   pullOutScaleSpan: number;
   pathWildnessMul: number;
   p3Jitter: number;
+  /** 1 = lange gleichmäßige Abschnitte, 0 = abrupte Richtungswechsel */
+  pathContinuity: number;
+  pathOrbitBlend: number;
+  /** 0 = sanft, 1 = starke Kurven innerhalb eines Segments */
+  pathIntraCurve: number;
+  pathHeadingYawMax: number;
+  pathTangentChordMin: number;
+  pathTangentChordSpan: number;
+  pathHandlePerpMin: number;
+  pathHandlePerpSpan: number;
+  pathChordRatioMin: number;
+  pathChordRatioMax: number;
+  pathPullOutScale: number;
   handleOutMin: number;
   handleOutSpan: number;
   handleInNegMin: number;
@@ -292,7 +305,9 @@ export function resolveVibeCameraParams(
   const normalized = normalizeVibeCameraTuning(tuning);
   const { speed, overdrive, crawl } = resolveVibeSpeedFactors(normalized.speed);
   const pull = normalized.pullOut;
-  const wild = normalized.pathWildness;
+  const wildLinear = clamp01(normalized.pathWildness);
+  const wild = wildLinear * wildLinear * (3 - 2 * wildLinear);
+  const wildHigh = Math.pow(wildLinear, 0.62);
   const look = normalized.lookWander;
 
   return {
@@ -351,14 +366,25 @@ export function resolveVibeCameraParams(
     pullOutScaleChance: lerp(0.1, 0.2, pull),
     pullOutScaleMin: lerp(1.03, 1.05, pull),
     pullOutScaleSpan: lerp(0.1, 0.16, pull),
-    pathWildnessMul: lerp(0.72, 1.38, wild),
-    p3Jitter: lerp(0.55, 1.15, wild),
-    handleOutMin: lerp(1.15, 1.55, wild),
-    handleOutSpan: lerp(2.6, 4.2, wild),
-    handleInNegMin: lerp(1.7, 2.2, wild),
-    handleInNegSpan: lerp(3.8, 5.6, wild),
-    p2LerpMin: lerp(0.08, 0.14, wild),
-    p2LerpSpan: lerp(0.32, 0.48, wild),
+    pathWildnessMul: lerp(0.28, 2.45, wildHigh),
+    p3Jitter: lerp(0.06, 2.1, wildHigh),
+    pathContinuity: lerp(1, 0, wildHigh),
+    pathOrbitBlend: lerp(0.94, 0.08, wildHigh),
+    pathIntraCurve: wildHigh,
+    pathHeadingYawMax: lerp(0.035, 1.75, wildHigh),
+    pathTangentChordMin: lerp(5.8, 0.65, wildHigh),
+    pathTangentChordSpan: lerp(5.2, 5.8, wildHigh),
+    pathHandlePerpMin: lerp(0.08, 1.85, wildHigh),
+    pathHandlePerpSpan: lerp(0.25, 5.8, wildHigh),
+    pathChordRatioMin: lerp(0.965, 0.78, wildHigh),
+    pathChordRatioMax: lerp(1.035, 1.42, wildHigh),
+    pathPullOutScale: lerp(0.22, 1, wildHigh),
+    handleOutMin: lerp(0.85, 1.75, wildHigh),
+    handleOutSpan: lerp(1.4, 5.2, wildHigh),
+    handleInNegMin: lerp(1.2, 2.65, wildHigh),
+    handleInNegSpan: lerp(2.2, 6.8, wildHigh),
+    p2LerpMin: lerp(0.04, 0.2, wildHigh),
+    p2LerpSpan: lerp(0.18, 0.58, wildHigh),
     lookWanderSpeed: lerp(0.034, 0.078, look),
     lookEqualLayerBlend: lerp(0.44, 0.26, look),
     queueMin: normalized.pathQueueSize,
