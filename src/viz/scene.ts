@@ -260,6 +260,10 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const vibeSavedTarget = new THREE.Vector3();
   let vibeSavedEnableDamping = true;
 
+  /** Untergrenze Segmentdauer — verhindert kurze „Ras“-Phasen. */
+  const VIBE_SEG_DUR_MIN = 3.65;
+  const VIBE_SEG_DUR_MAX = 12.9;
+
   type VibeCamCurveSeg = {
     dur: number;
     p0: THREE.Vector3;
@@ -381,7 +385,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     look: THREE.Vector3,
   ): VibeCamCurveSeg {
     const seg: VibeCamCurveSeg = {
-      dur: 2.85 + Math.random() * 5.6,
+      dur: 3.85 + Math.random() * 5.45,
       p0: new THREE.Vector3().copy(cam),
       p1: new THREE.Vector3(),
       p2: new THREE.Vector3(),
@@ -412,8 +416,12 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
     if (Math.random() < 0.22) {
       seg.dur *= 1.05 + Math.random() * 0.18;
-      seg.dur = Math.min(seg.dur, 10.8);
     }
+    seg.dur = THREE.MathUtils.clamp(
+      seg.dur,
+      VIBE_SEG_DUR_MIN,
+      VIBE_SEG_DUR_MAX,
+    );
 
     seg.l3.copy(seg.p3);
     seg.l3.x += (Math.random() - 0.5) * 2.6;
@@ -481,15 +489,17 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
     const chordPrev = Math.max(0.52, prev.p0.distanceTo(prev.p3));
     const chordNew = seg.p0.distanceTo(seg.p3);
-    const legato = 0.97 + Math.random() * 0.06;
+    const legato = 1.0 + Math.random() * 0.055;
     let ratio = chordNew / chordPrev;
-    ratio = THREE.MathUtils.clamp(ratio, 0.84, 1.22);
-    const targetDur = prev.dur * ratio * legato;
+    ratio = THREE.MathUtils.clamp(ratio, 0.9, 1.18);
+    const targetDur = prev.dur * ratio * legato * 1.06;
     seg.dur = THREE.MathUtils.clamp(
-      THREE.MathUtils.clamp(targetDur, prev.dur * 0.86, prev.dur * 1.15),
-      2.25,
-      11.8,
+      THREE.MathUtils.clamp(targetDur, prev.dur * 0.92, prev.dur * 1.14),
+      VIBE_SEG_DUR_MIN,
+      VIBE_SEG_DUR_MAX,
     );
+    seg.dur = Math.max(seg.dur, Math.min(7.35, chordNew * 0.36 + 2.05));
+    seg.dur = Math.min(seg.dur, VIBE_SEG_DUR_MAX);
     return seg;
   }
 
