@@ -876,17 +876,77 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
                   title="Hintergrund und Nebelfarbe"
                 />
               </div>
+              <div class="flex flex-col gap-1">
+                <label
+                  for="vizSceneFogNear"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Nebel nah (Sichtbeginn)</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vizSceneFogNear"
+                    type="range"
+                    class="range range-xs range-primary min-w-0 flex-1"
+                    min="0.5"
+                    max="80"
+                    step="0.5"
+                    [value]="model().sceneColors.fogNear"
+                    (input)="onSceneFogNumber('fogNear', $event)"
+                  />
+                  <span
+                    class="text-base-content/70 w-9 shrink-0 text-right text-[0.62rem] tabular-nums"
+                    >{{ model().sceneColors.fogNear | number: '1.0-1' }}</span
+                  >
+                </div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label
+                  for="vizSceneFogFar"
+                  class="text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Nebel weit (Sichtende)</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vizSceneFogFar"
+                    type="range"
+                    class="range range-xs range-primary min-w-0 flex-1"
+                    min="5"
+                    max="200"
+                    step="1"
+                    [value]="model().sceneColors.fogFar"
+                    (input)="onSceneFogNumber('fogFar', $event)"
+                  />
+                  <span
+                    class="text-base-content/70 w-9 shrink-0 text-right text-[0.62rem] tabular-nums"
+                    >{{ model().sceneColors.fogFar | number: '1.0-0' }}</span
+                  >
+                </div>
+              </div>
+              <label
+                class="flex cursor-pointer items-center justify-between gap-2"
+              >
+                <span class="text-[0.68rem] font-medium text-base-content"
+                  >Boden anzeigen</span
+                >
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  [checked]="model().sceneColors.floorVisible"
+                  (change)="onSceneFloorVisible($event)"
+                />
+              </label>
               <div class="flex min-w-0 items-center justify-between gap-2">
                 <label
                   for="vizSceneFloor"
                   class="text-[0.68rem] font-medium leading-snug text-base-content"
-                  >Boden</label
+                  >Bodenfarbe</label
                 >
                 <input
                   id="vizSceneFloor"
                   type="color"
                   class="border-base-300 bg-base-100 h-9 w-[min(100%,4.5rem)] shrink-0 cursor-pointer rounded border p-0.5"
                   [value]="model().sceneColors.floor"
+                  [disabled]="!model().sceneColors.floorVisible"
                   (input)="onSceneColorInput('floor', $event)"
                   (change)="onSceneColorCommit('floor', $event)"
                   (blur)="onVizColorPickerBlur()"
@@ -1434,6 +1494,28 @@ export class NetworkViz3dShellComponent implements OnDestroy {
     if (!(t instanceof HTMLInputElement) || t.type !== 'color') return;
     this.store.dispatch(
       NeuronalActions.vizSceneColorChanged({ key, color: t.value }),
+    );
+  }
+
+  onSceneFogNumber(key: 'fogNear' | 'fogFar', ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'range')
+      return;
+    const value = parseFloat(target.value);
+    if (!Number.isFinite(value)) return;
+    this.store.dispatch(
+      NeuronalActions.vizSceneColorsPatch({ patch: { [key]: value } }),
+    );
+  }
+
+  onSceneFloorVisible(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox')
+      return;
+    this.store.dispatch(
+      NeuronalActions.vizSceneColorsPatch({
+        patch: { floorVisible: target.checked },
+      }),
     );
   }
 

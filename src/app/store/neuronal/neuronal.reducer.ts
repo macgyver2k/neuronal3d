@@ -18,6 +18,7 @@ import {
   isValidHexColor6,
   mergeVizNetworkColors,
   mergeVizPostProcess,
+  mergeVizSceneColors,
   vizNetworkPatchHasHexColor,
 } from '../../../viz/viz-appearance';
 import { EPOCH_TRACK_MAX_ROWS_PER_MODEL } from '../../core/epoch-storage';
@@ -311,6 +312,17 @@ export const neuronalReducer = createReducer<NeuronalState>(
     },
   ),
   on(
+    NeuronalActions.vizSceneColorsPatch,
+    (s, { patch }): NeuronalState => ({
+      ...s,
+      viz3d: {
+        ...s.viz3d,
+        colorPresetMode: 'custom',
+        sceneColors: mergeVizSceneColors(s.viz3d.sceneColors, patch),
+      },
+    }),
+  ),
+  on(
     NeuronalActions.vizLightColorChanged,
     (s, { key, color }): NeuronalState => {
       if (!isValidHexColor6(color)) return s;
@@ -373,7 +385,7 @@ export const neuronalReducer = createReducer<NeuronalState>(
       ...s,
       viz3d: {
         ...s.viz3d,
-        sceneColors: { ...sceneColors },
+        sceneColors: mergeVizSceneColors(s.viz3d.sceneColors, sceneColors),
         lightColors: { ...lightColors },
         networkColors: { ...networkColors },
         postProcess: mergeVizPostProcess(s.viz3d.postProcess, postProcessPatch),

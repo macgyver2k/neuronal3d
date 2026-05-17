@@ -104,6 +104,9 @@ const handleMessage = (
         fillLayoutCentroid: (out, elapsedSec = 0) => {
           net3d!.fillVibeLookTarget(out, elapsedSec);
         },
+        fillLayoutBounds: (min, max) => {
+          net3d!.fillLayoutBounds(min, max);
+        },
       });
       stopAnimCleanup = animateLoop(created.render, created.controls, () => {
         if (!fpsOverlayEnabled) {

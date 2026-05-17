@@ -85,6 +85,9 @@ export const NeuronalActions = createActionGroup({
       key: keyof VizSceneColorSettings;
       color: string;
     }>(),
+    'Viz Scene Colors Patch': props<{
+      patch: Partial<VizSceneColorSettings>;
+    }>(),
     'Viz Light Color Changed': props<{
       key: keyof VizLightColorSettings;
       color: string;
@@ -109,7 +112,7 @@ export const NeuronalActions = createActionGroup({
       fixedTheme?: DaisyUiThemeName;
     }>(),
     'Viz 3d Daisy Palette Applied': props<{
-      sceneColors: VizSceneColorSettings;
+      sceneColors: Partial<VizSceneColorSettings>;
       lightColors: VizLightColorSettings;
       networkColors: VizNetworkColorSettings;
       postProcessPatch: Partial<VizPostProcessSettings>;

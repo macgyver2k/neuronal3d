@@ -762,6 +762,47 @@ export class Network3D {
   }
 
   /**
+   * Achsenparalleles Layout-Rechteck (Weltkoordinaten) für Kamera-Pfad-Clamping.
+   * Mit Rand um Neuronen und typischen Pull-Out der Vibe-Kamera.
+   */
+  fillLayoutBounds(min: THREE.Vector3, max: THREE.Vector3): void {
+    let hasPoint = false;
+    let minX = 0;
+    let minY = 0;
+    let minZ = 0;
+    let maxX = 0;
+    let maxY = 0;
+    let maxZ = 0;
+    for (const layer of this.positions) {
+      for (const point of layer) {
+        if (!hasPoint) {
+          minX = maxX = point.x;
+          minY = maxY = point.y;
+          minZ = maxZ = point.z;
+          hasPoint = true;
+          continue;
+        }
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+        minZ = Math.min(minZ, point.z);
+        maxX = Math.max(maxX, point.x);
+        maxY = Math.max(maxY, point.y);
+        maxZ = Math.max(maxZ, point.z);
+      }
+    }
+    if (!hasPoint) {
+      min.set(0, -2.2, -4.5);
+      max.set(8.5, 2.8, 4.5);
+      return;
+    }
+    const padX = Math.max(2.8, (maxX - minX) * 0.42 + 2.4);
+    const padY = Math.max(2.4, (maxY - minY) * 0.55 + 2.6);
+    const padZ = Math.max(2.8, (maxZ - minZ) * 0.42 + 2.4);
+    min.set(minX - padX, minY - padY, minZ - padZ);
+    max.set(maxX + padX, maxY + padY, maxZ + padZ);
+  }
+
+  /**
    * Mittelpunkt des Layouts mit gleichem Gewicht pro Schicht (nicht pro Neuron).
    * Verhindert, dass große Eingangsschichten den Blick-Schwerpunkt dominieren.
    */

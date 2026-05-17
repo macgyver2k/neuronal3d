@@ -2,7 +2,9 @@ import type { DaisyUiThemeName } from '../app/workspace-ui/daisy-theme';
 import {
   DEFAULT_VIZ_NETWORK_COLORS,
   DEFAULT_VIZ_POST_PROCESS,
+  DEFAULT_VIZ_SCENE_COLORS,
   mergeVizNetworkColors,
+  mergeVizSceneColors,
   relativeLuminanceHex,
   type VizLightColorSettings,
   type VizNetworkColorSettings,
@@ -185,7 +187,7 @@ export function sampleDaisyThemeVizPalette(
   doc: Document,
   theme: DaisyUiThemeName,
 ): {
-  sceneColors: VizSceneColorSettings;
+  sceneColors: Partial<VizSceneColorSettings>;
   lightColors: VizLightColorSettings;
   networkColors: VizNetworkColorSettings;
   /** Hell: weiches Bild; dunkel: Standard-Bloom/Exposure aus `DEFAULT_VIZ_POST_PROCESS` */
@@ -218,42 +220,51 @@ export function sampleDaisyThemeVizPalette(
   /** Dunkles App-Theme: helle Flächen sind tatsächlich dunkel */
   const darkUi = lum100 < 0.38 && lumContent > lum100 + 0.12;
 
-  const sceneColors: VizSceneColorSettings = darkUi
-    ? {
-        backgroundFog: nudgeToward(
-          mixHex(base300, base200, 0.35),
-          mixHex(base300, primary, 0.14),
-          0.55,
-        ),
-        floor: nudgeToward(
-          mixHex(base300, base200, 0.5),
-          mixHex(base300, neutral, 0.12),
-          0.35,
-        ),
-      }
-    : {
-        /** Helle UI: kräftig Richtung Textfarbe ziehen + leicht abdunkeln (Szene bleibt lesbar, nicht weiß) */
-        backgroundFog: darkenHex(
-          nudgeToward(
-            mixHex(
-              mixHex(base300, baseContent, 0.26),
-              mixHex(base300, neutral, 0.14),
-              0.52,
+  const sceneColorPatch: Partial<VizSceneColorSettings> = {
+    ...(darkUi
+      ? {
+          backgroundFog: nudgeToward(
+            mixHex(base300, base200, 0.35),
+            mixHex(base300, primary, 0.14),
+            0.55,
+          ),
+          floor: nudgeToward(
+            mixHex(base300, base200, 0.5),
+            mixHex(base300, neutral, 0.12),
+            0.35,
+          ),
+        }
+      : {
+          /** Helle UI: kräftig Richtung Textfarbe ziehen + leicht abdunkeln (Szene bleibt lesbar, nicht weiß) */
+          backgroundFog: darkenHex(
+            nudgeToward(
+              mixHex(
+                mixHex(base300, baseContent, 0.26),
+                mixHex(base300, neutral, 0.14),
+                0.52,
+              ),
+              mixHex(primary, baseContent, 0.55),
+              0.14,
             ),
-            mixHex(primary, baseContent, 0.55),
-            0.14,
+            0.9,
           ),
-          0.9,
-        ),
-        floor: darkenHex(
-          mixHex(
-            mixHex(base300, baseContent, 0.2),
-            mixHex(base300, mixHex(neutral, primary, 0.08), 0.35),
-            0.48,
+          floor: darkenHex(
+            mixHex(
+              mixHex(base300, baseContent, 0.2),
+              mixHex(base300, mixHex(neutral, primary, 0.08), 0.35),
+              0.48,
+            ),
+            0.93,
           ),
-          0.93,
-        ),
-      };
+        }),
+    fogNear: DEFAULT_VIZ_SCENE_COLORS.fogNear,
+    fogFar: DEFAULT_VIZ_SCENE_COLORS.fogFar,
+  };
+
+  const sceneColors = mergeVizSceneColors(
+    DEFAULT_VIZ_SCENE_COLORS,
+    sceneColorPatch,
+  );
 
   const lightColors: VizLightColorSettings = darkUi
     ? {
@@ -371,7 +382,12 @@ export function sampleDaisyThemeVizPalette(
     ensureDaisyVizPaletteContrast(sceneColors, networkColors);
 
   return {
-    sceneColors: scVis,
+    sceneColors: {
+      backgroundFog: scVis.backgroundFog,
+      floor: scVis.floor,
+      fogNear: scVis.fogNear,
+      fogFar: scVis.fogFar,
+    },
     lightColors,
     networkColors: netVis,
     postProcessPatch,

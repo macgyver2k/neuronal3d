@@ -3,6 +3,12 @@ export type VizSceneColorSettings = {
   backgroundFog: string;
   /** Bodenplatte */
   floor: string;
+  /** Bodenplatte in der Szene anzeigen */
+  floorVisible: boolean;
+  /** Abstand, ab dem der Nebel einsetzt (Welt-Einheiten) */
+  fogNear: number;
+  /** Abstand, an dem der Nebel vollständig ist (Welt-Einheiten) */
+  fogFar: number;
 };
 
 export type VizLightColorSettings = {
@@ -18,7 +24,47 @@ export type VizLightColorSettings = {
 export const DEFAULT_VIZ_SCENE_COLORS: VizSceneColorSettings = {
   backgroundFog: '#2a3140',
   floor: '#3d4658',
+  floorVisible: false,
+  fogNear: 12,
+  fogFar: 120,
 };
+
+const FOG_NEAR_MIN = 0.5;
+const FOG_NEAR_MAX = 80;
+const FOG_FAR_MIN = 5;
+const FOG_FAR_MAX = 200;
+const FOG_NEAR_FAR_GAP = 1;
+
+export function mergeVizSceneColors(
+  base: VizSceneColorSettings,
+  patch: Partial<VizSceneColorSettings>,
+): VizSceneColorSettings {
+  const next = { ...base };
+  if (
+    typeof patch.backgroundFog === 'string' &&
+    isValidHexColor6(patch.backgroundFog)
+  ) {
+    next.backgroundFog = patch.backgroundFog;
+  }
+  if (typeof patch.floor === 'string' && isValidHexColor6(patch.floor)) {
+    next.floor = patch.floor;
+  }
+  if (typeof patch.floorVisible === 'boolean') {
+    next.floorVisible = patch.floorVisible;
+  }
+  const fogNear = patch.fogNear;
+  if (typeof fogNear === 'number' && Number.isFinite(fogNear)) {
+    next.fogNear = Math.min(FOG_NEAR_MAX, Math.max(FOG_NEAR_MIN, fogNear));
+  }
+  const fogFar = patch.fogFar;
+  if (typeof fogFar === 'number' && Number.isFinite(fogFar)) {
+    next.fogFar = Math.min(FOG_FAR_MAX, Math.max(FOG_FAR_MIN, fogFar));
+  }
+  if (next.fogFar <= next.fogNear + FOG_NEAR_FAR_GAP) {
+    next.fogFar = Math.min(FOG_FAR_MAX, next.fogNear + FOG_NEAR_FAR_GAP);
+  }
+  return next;
+}
 
 export const DEFAULT_VIZ_LIGHT_COLORS: VizLightColorSettings = {
   hemiSky: '#d6e2ff',

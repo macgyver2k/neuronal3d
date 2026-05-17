@@ -364,6 +364,20 @@ export class NeuronalEffects {
     { dispatch: false },
   );
 
+  vizSceneColorsPatch$ = createEffect(
+    () =>
+      this.actions$.pipe(
+        ofType(NeuronalActions.vizSceneColorsPatch),
+        withLatestFrom(this.store.select(selectNeuronalState)),
+        tap(([, n]) => {
+          this.zone.runOutsideAngular(() => {
+            this.neuronalApp.onVizSceneColorsApply(n.viz3d.sceneColors);
+          });
+        }),
+      ),
+    { dispatch: false },
+  );
+
   vizLightColor$ = createEffect(
     () =>
       this.actions$.pipe(

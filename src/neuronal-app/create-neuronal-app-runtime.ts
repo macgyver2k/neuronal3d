@@ -176,9 +176,22 @@ export async function createNeuronalAppRuntime(
     const merged: VizSceneColorSettings = { ...sceneColorBaseline };
     (
       Object.keys(sceneColorPreviewPatch) as (keyof VizSceneColorSettings)[]
-    ).forEach((k) => {
-      const v = sceneColorPreviewPatch[k];
-      if (v !== undefined && isValidHexColor6(v)) merged[k] = v;
+    ).forEach((key) => {
+      const value = sceneColorPreviewPatch[key];
+      if (value === undefined) return;
+      if (key === 'floorVisible') {
+        if (typeof value === 'boolean') merged.floorVisible = value;
+        return;
+      }
+      if (key === 'fogNear' || key === 'fogFar') {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          merged[key] = value;
+        }
+        return;
+      }
+      if (typeof value === 'string' && isValidHexColor6(value)) {
+        merged[key] = value;
+      }
     });
     sceneColorPreviewPatch = {};
     applyVizSceneColors(merged);
