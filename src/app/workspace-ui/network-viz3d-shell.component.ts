@@ -26,10 +26,14 @@ import {
   PATH_HORIZON_RADIUS_SCALE_MIN,
   VIBE_CAMERA_CONTROL_MODE_LABELS,
   VIBE_CAMERA_PROFILE_LABELS,
+  VIBE_PATH_PREVIEW_COLOR_MODE_LABELS,
+  VIBE_PATH_PREVIEW_THEME_COLOR_LABELS,
   vibeCameraTuningFromProfile,
   type VibeCameraControlMode,
   type VibeCameraProfileId,
   type VibeCameraTuning,
+  type VibePathPreviewColorMode,
+  type VibePathPreviewThemeColor,
 } from '../../viz/vibe-camera-settings';
 import type {
   VizLightColorSettings,
@@ -489,6 +493,51 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
                   (change)="onVibeCameraPathPreview($event)"
                 />
               </label>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraPathPreviewColorMode"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Pfad-Farben</label
+                >
+                <select
+                  id="vibeCameraPathPreviewColorMode"
+                  class="select select-bordered select-sm w-full min-w-0"
+                  [disabled]="!model().vibeCamera.pathPreview"
+                  [value]="model().vibeCamera.pathPreviewColorMode"
+                  (change)="onVibeCameraPathPreviewColorMode($event)"
+                >
+                  @for (
+                    entry of vibePathPreviewColorModeEntries;
+                    track entry.id
+                  ) {
+                    <option [value]="entry.id">{{ entry.label }}</option>
+                  }
+                </select>
+              </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraPathPreviewThemeColor"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Theme-Farbe</label
+                >
+                <select
+                  id="vibeCameraPathPreviewThemeColor"
+                  class="select select-bordered select-sm w-full min-w-0"
+                  [disabled]="
+                    !model().vibeCamera.pathPreview ||
+                    model().vibeCamera.pathPreviewColorMode !== 'themeGradient'
+                  "
+                  [value]="model().vibeCamera.pathPreviewThemeColor"
+                  (change)="onVibeCameraPathPreviewThemeColor($event)"
+                >
+                  @for (
+                    entry of vibePathPreviewThemeColorEntries;
+                    track entry.id
+                  ) {
+                    <option [value]="entry.id">{{ entry.label }}</option>
+                  }
+                </select>
+              </div>
               <label
                 class="flex cursor-pointer items-center justify-between gap-2"
               >
@@ -1264,6 +1313,16 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected readonly vibeCameraControlModeEntries = (
     Object.keys(VIBE_CAMERA_CONTROL_MODE_LABELS) as VibeCameraControlMode[]
   ).map((id) => ({ id, label: VIBE_CAMERA_CONTROL_MODE_LABELS[id] }));
+  protected readonly vibePathPreviewColorModeEntries = (
+    Object.keys(
+      VIBE_PATH_PREVIEW_COLOR_MODE_LABELS,
+    ) as VibePathPreviewColorMode[]
+  ).map((id) => ({ id, label: VIBE_PATH_PREVIEW_COLOR_MODE_LABELS[id] }));
+  protected readonly vibePathPreviewThemeColorEntries = (
+    Object.keys(
+      VIBE_PATH_PREVIEW_THEME_COLOR_LABELS,
+    ) as VibePathPreviewThemeColor[]
+  ).map((id) => ({ id, label: VIBE_PATH_PREVIEW_THEME_COLOR_LABELS[id] }));
   protected readonly pathHorizonRadiusMin = PATH_HORIZON_RADIUS_SCALE_MIN;
   protected readonly pathHorizonRadiusMax = PATH_HORIZON_RADIUS_SCALE_MAX;
 
@@ -1514,6 +1573,49 @@ export class NetworkViz3dShellComponent implements OnDestroy {
             : tuning.pathPreviewMarkerSize;
     this.store.dispatch(
       NeuronalActions.vizVibeCameraTuningPatch({ patch: { [key]: value } }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
+  }
+
+  onVibeCameraPathPreviewColorMode(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const value = target.value;
+    if (value !== 'random' && value !== 'themeGradient') return;
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      pathPreviewColorMode: value,
+    });
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({
+        patch: { pathPreviewColorMode: tuning.pathPreviewColorMode },
+      }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
+  }
+
+  onVibeCameraPathPreviewThemeColor(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const value = target.value;
+    if (
+      value !== 'primary' &&
+      value !== 'accent' &&
+      value !== 'secondary' &&
+      value !== 'info'
+    ) {
+      return;
+    }
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      pathPreviewThemeColor: value,
+    });
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({
+        patch: { pathPreviewThemeColor: tuning.pathPreviewThemeColor },
+      }),
     );
     this.pushVibeCameraTuningToRuntime(tuning);
   }

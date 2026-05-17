@@ -24,6 +24,7 @@ import {
   type ResolvedVibeCameraParams,
   type VibeCameraControlMode,
   type VibeCameraTuning,
+  type VibePathPreviewThemeColor,
 } from './vibe-camera-settings';
 import {
   DEFAULT_VIZ_LIGHT_COLORS,
@@ -291,8 +292,22 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const vibePathMarkerPool: THREE.Mesh[] = [];
   const vibePathMarkerGeometry = new THREE.SphereGeometry(1, 12, 10);
   const vibePathScratchColor = new THREE.Color();
+  const vibePathFadeTargetColor = new THREE.Color();
+  let vibePathThemeLightColors: VizLightColorSettings = {
+    ...DEFAULT_VIZ_LIGHT_COLORS,
+  };
 
   const vibePathEval = new THREE.Vector3();
+
+  const VIBE_PATH_THEME_LIGHT_KEY: Record<
+    VibePathPreviewThemeColor,
+    keyof VizLightColorSettings
+  > = {
+    primary: 'key',
+    accent: 'rim',
+    secondary: 'fill',
+    info: 'backAccent',
+  };
 
   function vibePathSegColorHex(colorIndex: number): number {
     return VIBE_PATH_SEG_PALETTE[colorIndex % VIBE_PATH_SEG_PALETTE.length]!;
@@ -300,10 +315,42 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   let vibeNextPathColorIndex = 0;
 
+  const vibeResolvePathThemeColorHex = (): number => {
+    const lightKey =
+      VIBE_PATH_THEME_LIGHT_KEY[vibeCamParams.pathPreviewThemeColor];
+    const hex = vibePathThemeLightColors[lightKey];
+    if (!isValidHexColor6(hex)) return VIBE_PATH_SEG_PALETTE[0]!;
+    return parseInt(hex.slice(1), 16);
+  };
+
   const vibeAllocatePathPreviewColor = (): number => {
+    if (vibeCamParams.pathPreviewColorMode === 'themeGradient') {
+      return vibeResolvePathThemeColorHex();
+    }
     const colorHex = vibePathSegColorHex(vibeNextPathColorIndex);
     vibeNextPathColorIndex++;
     return colorHex;
+  };
+
+  const vibeApplyPathPreviewAppearance = (
+    segIndex: number,
+    previewSegmentCount: number,
+    isCurrent: boolean,
+    segmentColorHex: number,
+  ): number => {
+    if (vibeCamParams.pathPreviewColorMode === 'random') {
+      vibePathScratchColor.setHex(segmentColorHex);
+      return isCurrent ? 0.82 : 0.48;
+    }
+
+    vibePathScratchColor.setHex(vibeResolvePathThemeColorHex());
+    const depthMax = Math.max(1, previewSegmentCount - 1);
+    const depth = segIndex / depthMax;
+    vibePathFadeTargetColor.setHex(0x000000);
+    vibePathScratchColor.lerp(vibePathFadeTargetColor, depth * 0.72);
+    const opacityNear = isCurrent ? 0.88 : 0.8;
+    const opacityFar = 0.18;
+    return opacityNear + (opacityFar - opacityNear) * depth;
   };
 
   function acquireVibePathLine(lineIndex: number): THREE.Line {
@@ -1043,6 +1090,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
       'pathPreviewMarkers',
       'pathPreviewMarkerRadius',
       'pathHorizonSpherePreview',
+      'pathPreviewColorMode',
+      'pathPreviewThemeColor',
     ]);
 
   const vibeResolvedParamsAffectPathPlanExceptQueueSize = (
@@ -1139,12 +1188,17 @@ export function createScene(mount: NeuronalGlSceneMount): {
         steps = VIBE_PATH_SAMPLES_CURRENT;
       }
 
-      vibePathScratchColor.setHex(seg.previewColorHex);
+      const lineOpacity = vibeApplyPathPreviewAppearance(
+        segIndex,
+        previewSegmentCount,
+        isCurrent,
+        seg.previewColorHex,
+      );
 
       const line = acquireVibePathLine(lineCount);
       const lineMaterial = line.material as THREE.LineBasicMaterial;
       lineMaterial.color.copy(vibePathScratchColor);
-      lineMaterial.opacity = isCurrent ? 0.82 : 0.48;
+      lineMaterial.opacity = lineOpacity;
 
       const positionAttribute = line.geometry.getAttribute(
         'position',
@@ -1177,7 +1231,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
         marker.position.copy(seg.p0);
         const markerMaterial = marker.material as THREE.MeshBasicMaterial;
         markerMaterial.color.copy(vibePathScratchColor);
-        markerMaterial.opacity = isCurrent ? 1 : 0.88;
+        markerMaterial.opacity = Math.min(1, lineOpacity + 0.08);
         const markerScale =
           vibeCamParams.pathPreviewMarkerRadius * (isCurrent ? 1.15 : 1);
         marker.scale.setScalar(markerScale);
@@ -1520,6 +1574,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
   };
 
   const applyVizLightColors = (next: VizLightColorSettings): void => {
+    vibePathThemeLightColors = { ...next };
     const sc = intensityScaleForLights(next);
     hemi.intensity = LIGHT_INTENSITY_BASE.hemi * sc;
     ambient.intensity = LIGHT_INTENSITY_BASE.ambient * sc;
@@ -1551,6 +1606,12 @@ export function createScene(mount: NeuronalGlSceneMount): {
     }
     if (isValidHexColor6(next.backAccent)) {
       backAccent.color.setHex(parseInt(next.backAccent.slice(1), 16));
+    }
+    if (
+      vibeCamParams.pathPreviewColorMode === 'themeGradient' &&
+      vibeCamParams.pathPreview
+    ) {
+      updateVibePathPreview();
     }
   };
 

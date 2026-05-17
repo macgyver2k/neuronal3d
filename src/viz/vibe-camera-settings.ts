@@ -5,6 +5,16 @@ export type VibeCameraProfileMode = VibeCameraProfileId | 'custom';
 /** `followPath`: Ansicht folgt dem Vibe-Pfad; `freeLook`: frei steuern, Pfad-Kamera als Modell. */
 export type VibeCameraControlMode = 'followPath' | 'freeLook';
 
+/** Farbgebung der Pfad-Vorschau-Segmente. */
+export type VibePathPreviewColorMode = 'random' | 'themeGradient';
+
+/** Theme-Farbe für {@link VibePathPreviewColorMode.themeGradient}. */
+export type VibePathPreviewThemeColor =
+  | 'primary'
+  | 'accent'
+  | 'secondary'
+  | 'info';
+
 export type VibeCameraTuning = {
   profileMode: VibeCameraProfileMode;
   controlMode: VibeCameraControlMode;
@@ -36,6 +46,10 @@ export type VibeCameraTuning = {
   pathHorizonRadiusScale: number;
   /** Ellipsoid-Vorschau für den Pfad-Horizont in der Szene */
   pathHorizonSpherePreview: boolean;
+  /** Zufällige Segmentfarben oder Theme-Farbe mit Abstufung nach hinten. */
+  pathPreviewColorMode: VibePathPreviewColorMode;
+  /** Welche DaisyUI-/Szene-Lichtfarbe als Basis für den Verlauf dient. */
+  pathPreviewThemeColor: VibePathPreviewThemeColor;
 };
 
 export const VIBE_SPEED_MAX = 100;
@@ -49,6 +63,24 @@ export const VIBE_CAMERA_CONTROL_MODE_LABELS: Record<
 > = {
   followPath: 'Pfad folgen',
   freeLook: 'Frei bewegen',
+};
+
+export const VIBE_PATH_PREVIEW_COLOR_MODE_LABELS: Record<
+  VibePathPreviewColorMode,
+  string
+> = {
+  random: 'Zufällige Farben',
+  themeGradient: 'Theme-Verlauf',
+};
+
+export const VIBE_PATH_PREVIEW_THEME_COLOR_LABELS: Record<
+  VibePathPreviewThemeColor,
+  string
+> = {
+  primary: 'Primary',
+  accent: 'Accent',
+  secondary: 'Secondary',
+  info: 'Info',
 };
 
 export const DEFAULT_VIBE_CAMERA_TUNING: VibeCameraTuning = {
@@ -66,6 +98,8 @@ export const DEFAULT_VIBE_CAMERA_TUNING: VibeCameraTuning = {
   pathPreviewMarkerSize: 0.16,
   pathHorizonRadiusScale: 1,
   pathHorizonSpherePreview: false,
+  pathPreviewColorMode: 'random',
+  pathPreviewThemeColor: 'primary',
 };
 
 export const VIBE_CAMERA_PROFILE_TUNING: Record<
@@ -196,6 +230,8 @@ export type ResolvedVibeCameraParams = {
   horizonRadiusScale: number;
   pathHorizonSpherePreview: boolean;
   pathTraverse: number;
+  pathPreviewColorMode: VibePathPreviewColorMode;
+  pathPreviewThemeColor: VibePathPreviewThemeColor;
 };
 
 export const PATH_HORIZON_RADIUS_SCALE_MIN = 0.2;
@@ -324,6 +360,16 @@ export function normalizeVibeCameraTuning(
     pathHorizonSpherePreview:
       base.pathHorizonSpherePreview ??
       DEFAULT_VIBE_CAMERA_TUNING.pathHorizonSpherePreview,
+    pathPreviewColorMode:
+      base.pathPreviewColorMode === 'themeGradient'
+        ? 'themeGradient'
+        : DEFAULT_VIBE_CAMERA_TUNING.pathPreviewColorMode,
+    pathPreviewThemeColor:
+      base.pathPreviewThemeColor === 'accent' ||
+      base.pathPreviewThemeColor === 'secondary' ||
+      base.pathPreviewThemeColor === 'info'
+        ? base.pathPreviewThemeColor
+        : DEFAULT_VIBE_CAMERA_TUNING.pathPreviewThemeColor,
   };
 }
 
@@ -356,7 +402,9 @@ export function vibeCameraProfileMatchesTuning(
     tuning.pathPreviewMarkers === base.pathPreviewMarkers &&
     near(tuning.pathPreviewMarkerSize, base.pathPreviewMarkerSize) &&
     near(tuning.pathHorizonRadiusScale, base.pathHorizonRadiusScale) &&
-    tuning.pathHorizonSpherePreview === base.pathHorizonSpherePreview
+    tuning.pathHorizonSpherePreview === base.pathHorizonSpherePreview &&
+    tuning.pathPreviewColorMode === base.pathPreviewColorMode &&
+    tuning.pathPreviewThemeColor === base.pathPreviewThemeColor
   );
 }
 
@@ -458,5 +506,7 @@ export function resolveVibeCameraParams(
     horizonRadiusScale: normalized.pathHorizonRadiusScale,
     pathHorizonSpherePreview: normalized.pathHorizonSpherePreview,
     pathTraverse: normalized.pathTraverse,
+    pathPreviewColorMode: normalized.pathPreviewColorMode,
+    pathPreviewThemeColor: normalized.pathPreviewThemeColor,
   };
 }
