@@ -92,7 +92,7 @@ export const DEFAULT_VIBE_CAMERA_TUNING: VibeCameraTuning = {
   pathTraverse: 0.45,
   lookWander: 0.5,
   pathQueueSize: 100,
-  maxSegmentChord: 4,
+  maxSegmentChord: 40,
   pathPreview: true,
   pathPreviewMarkers: true,
   pathPreviewMarkerSize: 0.16,

@@ -15,6 +15,7 @@ import {
   simulateVibeGravitySegmentEnd,
   snapVibePositionToElevationPass,
   VIBE_GRAVITY_STRENGTH,
+  vibeCoasterDistanceFraction,
   type VibePathElevationPass,
 } from './vibe-camera-gravity-path';
 import {
@@ -480,7 +481,14 @@ export function createScene(mount: NeuronalGlSceneMount): {
     l2: THREE.Vector3;
     l3: THREE.Vector3;
     elevationPass: VibePathElevationPass;
+    simPathLength: number;
+    startSpeed: number;
+    endSpeed: number;
+    arcLengthTotal: number;
+    arcLengthTable: Float32Array | null;
   };
+
+  const VIBE_ARC_LENGTH_SAMPLES = 28;
 
   function vibeBezierEvalPoint(
     a: THREE.Vector3,
@@ -500,6 +508,84 @@ export function createScene(mount: NeuronalGlSceneMount): {
     out.addScaledVector(b, t1);
     out.addScaledVector(c, t2);
     out.addScaledVector(d, t3);
+  }
+
+  function buildVibeSegmentArcLengthTable(segment: VibeCamCurveSeg): void {
+    const sampleCount = VIBE_ARC_LENGTH_SAMPLES;
+    const table = new Float32Array(sampleCount + 1);
+    table[0] = 0;
+    vibePathEval.copy(segment.p0);
+    for (let sampleIndex = 1; sampleIndex <= sampleCount; sampleIndex++) {
+      const parameter = sampleIndex / sampleCount;
+      vibeBezierEvalPoint(
+        segment.p0,
+        segment.p1,
+        segment.p2,
+        segment.p3,
+        parameter,
+        vibeScratchLerp,
+      );
+      table[sampleIndex] =
+        table[sampleIndex - 1]! + vibePathEval.distanceTo(vibeScratchLerp);
+      vibePathEval.copy(vibeScratchLerp);
+    }
+    segment.arcLengthTable = table;
+    segment.arcLengthTotal = table[sampleCount]!;
+  }
+
+  function vibeBezierWFromArcFraction(
+    segment: VibeCamCurveSeg,
+    arcFraction: number,
+  ): number {
+    const fraction = arcFraction < 0 ? 0 : arcFraction > 1 ? 1 : arcFraction;
+    const table = segment.arcLengthTable;
+    const totalLength = segment.arcLengthTotal;
+    if (!table || totalLength < 1e-6) return fraction;
+
+    const targetDistance = fraction * totalLength;
+    let lowIndex = 0;
+    let highIndex = table.length - 1;
+    while (lowIndex < highIndex - 1) {
+      const midIndex = (lowIndex + highIndex) >> 1;
+      if (table[midIndex]! < targetDistance) lowIndex = midIndex;
+      else highIndex = midIndex;
+    }
+
+    const lowDistance = table[lowIndex]!;
+    const highDistance = table[highIndex]!;
+    const span = highDistance - lowDistance;
+    const segmentBlend =
+      span < 1e-8 ? 0 : (targetDistance - lowDistance) / span;
+    const lowParameter = lowIndex / VIBE_ARC_LENGTH_SAMPLES;
+    const highParameter = highIndex / VIBE_ARC_LENGTH_SAMPLES;
+    return THREE.MathUtils.lerp(lowParameter, highParameter, segmentBlend);
+  }
+
+  function vibeSegmentBezierProgress(
+    segment: VibeCamCurveSeg,
+    linearTime: number,
+  ): number {
+    const time = linearTime < 0 ? 0 : linearTime > 1 ? 1 : linearTime;
+    const cruiseSpeed = Math.max(vibeResolveFlightSpeed(), 1e-3);
+    const startSpeed =
+      segment.startSpeed > 1e-5 ? segment.startSpeed : cruiseSpeed;
+    const endSpeed = segment.endSpeed > 1e-5 ? segment.endSpeed : cruiseSpeed;
+    const arcFraction = vibeCoasterDistanceFraction(time, startSpeed, endSpeed);
+    return vibeBezierWFromArcFraction(segment, arcFraction);
+  }
+
+  function refreshVibeSegmentMotionMetadata(segment: VibeCamCurveSeg): void {
+    const cruiseSpeed = Math.max(vibeResolveFlightSpeed(), 1e-3);
+    segment.simPathLength = vibeGravityPathState.segmentPathLength;
+    segment.startSpeed =
+      vibeGravityPathState.segmentStartSpeed > 1e-5
+        ? vibeGravityPathState.segmentStartSpeed
+        : cruiseSpeed;
+    segment.endSpeed =
+      vibeGravityPathState.segmentEndSpeed > 1e-5
+        ? vibeGravityPathState.segmentEndSpeed
+        : cruiseSpeed;
+    buildVibeSegmentArcLengthTable(segment);
   }
 
   function vibeRandomUnit(out: THREE.Vector3): void {
@@ -876,6 +962,11 @@ export function createScene(mount: NeuronalGlSceneMount): {
       l2: new THREE.Vector3(),
       l3: new THREE.Vector3(),
       elevationPass: 'side',
+      simPathLength: 0,
+      startSpeed: 0,
+      endSpeed: 0,
+      arcLengthTotal: 0,
+      arcLengthTable: null,
     };
     const lookScatter = params.lookWanderSpeed * 32;
 
@@ -902,6 +993,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     );
     vibePlaceCurveHandles(seg, null, vibePathGravityFocus);
     vibeArcSegmentHandlesForElevation(seg, vibePathGravityFocus, elevationPass);
+    refreshVibeSegmentMotionMetadata(seg);
 
     seg.l3.copy(seg.p3);
     seg.l3.x += (Math.random() - 0.5) * 2.6 * lookScatter;
@@ -934,6 +1026,11 @@ export function createScene(mount: NeuronalGlSceneMount): {
       l2: new THREE.Vector3(),
       l3: new THREE.Vector3(),
       elevationPass: 'side',
+      simPathLength: 0,
+      startSpeed: 0,
+      endSpeed: 0,
+      arcLengthTotal: 0,
+      arcLengthTable: null,
     };
     const lookScatter = params.lookWanderSpeed * 32;
     const joinVelocity = vibeIdealCam.copy(vibeGravityPathState.velocity);
@@ -982,6 +1079,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     );
     vibePlaceCurveHandles(seg, prev, vibePathGravityFocus);
     vibeArcSegmentHandlesForElevation(seg, vibePathGravityFocus, elevationPass);
+    refreshVibeSegmentMotionMetadata(seg);
 
     seg.l1.copy(prev.l3).add(vibeScratchLerp.copy(prev.l3).sub(prev.p2));
     seg.l3.copy(seg.p3);
@@ -1020,8 +1118,11 @@ export function createScene(mount: NeuronalGlSceneMount): {
       out.copy(head.p0);
       return;
     }
-    let progress = vibeSegElapsed / head.dur;
-    if (progress > 1) progress = 1;
+    const linearTime = vibeSegElapsed / head.dur;
+    const progress = vibeSegmentBezierProgress(
+      head,
+      linearTime > 1 ? 1 : linearTime,
+    );
     vibeBezierEvalPoint(head.p0, head.p1, head.p2, head.p3, progress, out);
   }
 
@@ -1180,9 +1281,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
           s0 = 0;
           s1 = 1;
         } else {
-          let w = vibeSegElapsed / seg.dur;
-          if (w > 1) w = 1;
-          s0 = w;
+          const linearTime = vibeSegElapsed / seg.dur;
+          s0 = vibeSegmentBezierProgress(seg, linearTime > 1 ? 1 : linearTime);
           s1 = 1;
         }
         steps = VIBE_PATH_SAMPLES_CURRENT;
@@ -1282,9 +1382,19 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (vibeEntranceBlend.active) {
       vibeIdealCam.copy(head.p0);
     } else {
-      let w = vibeSegElapsed / head.dur;
-      if (w > 1) w = 1;
-      vibeBezierEvalPoint(head.p0, head.p1, head.p2, head.p3, w, vibeIdealCam);
+      const linearTime = vibeSegElapsed / head.dur;
+      const progress = vibeSegmentBezierProgress(
+        head,
+        linearTime > 1 ? 1 : linearTime,
+      );
+      vibeBezierEvalPoint(
+        head.p0,
+        head.p1,
+        head.p2,
+        head.p3,
+        progress,
+        vibeIdealCam,
+      );
     }
 
     vibeResolveCameraUp(vibeIdealCam, vibeNetFocus, vibeIdealUp);

@@ -12,6 +12,12 @@ export const VIBE_GRAVITY_STRENGTH = 0.34;
 /** Exponent für Stärke ∝ 1/s^exp bei skaliertem Horizont. */
 export const VIBE_GRAVITY_RADIUS_STRENGTH_EXPONENT = 2.5;
 
+/** Untere Geschwindigkeitsgrenze relativ zur Reisegeschwindigkeit. */
+export const VIBE_COASTER_MIN_SPEED_RATIO = 0.36;
+
+/** Obere Geschwindigkeitsgrenze relativ zur Reisegeschwindigkeit. */
+export const VIBE_COASTER_MAX_SPEED_RATIO = 1.78;
+
 /** Räumliche Pfadlage relativ zum Modell-Schwerpunkt. */
 export type VibePathElevationPass = 'side' | 'over' | 'under';
 
@@ -21,6 +27,9 @@ export type VibeGravityPathState = {
   initialized: boolean;
   orbitSign: 1 | -1;
   elevationPass: VibePathElevationPass;
+  segmentPathLength: number;
+  segmentStartSpeed: number;
+  segmentEndSpeed: number;
 };
 
 export function createVibeGravityPathState(): VibeGravityPathState {
@@ -30,7 +39,22 @@ export function createVibeGravityPathState(): VibeGravityPathState {
     initialized: false,
     orbitSign: 1,
     elevationPass: 'side',
+    segmentPathLength: 0,
+    segmentStartSpeed: 0,
+    segmentEndSpeed: 0,
   };
+}
+
+/** Fortschritt entlang der Strecke bei linearer Zeit (Achterbahn-Beschleunigung). */
+export function vibeCoasterDistanceFraction(
+  linearTime: number,
+  startSpeed: number,
+  endSpeed: number,
+): number {
+  const time = linearTime < 0 ? 0 : linearTime > 1 ? 1 : linearTime;
+  const start = Math.max(startSpeed, 1e-3);
+  const end = Math.max(endSpeed, 1e-3);
+  return (2 * start * time + (end - start) * time * time) / (start + end);
 }
 
 const projectOffsetToEllipsoidShell = (
@@ -135,10 +159,14 @@ function applyElevationPassSteering(
   const distance = _scratchToCenter.length();
   if (distance < 1e-8) return;
 
+  const currentSpeed = Math.max(
+    velocity.length(),
+    flightSpeed * VIBE_COASTER_MIN_SPEED_RATIO,
+  );
   const steerBlend = 1 - Math.exp(-5.8 * step);
   velocity.addScaledVector(
     _scratchToCenter,
-    (flightSpeed * steerBlend * 0.85) / distance,
+    (currentSpeed * steerBlend * 0.85) / distance,
   );
 }
 
@@ -392,12 +420,63 @@ function blendVibeGravityVelocityTowardInwardStart(
   _scratchToCenter.copy(focus).sub(start);
   if (_scratchToCenter.lengthSq() < 1e-8) return;
 
-  _scratchToCenter.normalize().multiplyScalar(flightSpeed);
+  const currentSpeed = Math.max(velocity.length(), flightSpeed * 0.55);
+  _scratchToCenter.normalize().multiplyScalar(currentSpeed);
   const blend = traverseStrength(pathTraverse) * 0.55;
   velocity.lerp(_scratchToCenter, blend);
-  if (velocity.lengthSq() > 1e-8) {
-    velocity.normalize().multiplyScalar(flightSpeed);
-  }
+}
+
+function vibeCoasterPotential(
+  position: THREE.Vector3,
+  focus: THREE.Vector3,
+  horizonRadii: THREE.Vector3,
+): number {
+  _scratchOffset.copy(position).sub(focus);
+  const ellipsoidDist = ellipsoidDistance(_scratchOffset, horizonRadii);
+  return _scratchOffset.y * 0.52 + ellipsoidDist * horizonRadii.y * 0.28;
+}
+
+function applyVibeCoasterSpeed(
+  velocity: THREE.Vector3,
+  steerDirection: THREE.Vector3,
+  flightSpeed: number,
+  potentialDrop: number,
+  steerBlend: number,
+  step: number,
+  outPathLengthDelta: { value: number },
+): void {
+  let speed = velocity.length();
+  if (speed < 1e-5) speed = flightSpeed * 0.68;
+
+  const alignment = speed > 1e-5 ? velocity.dot(steerDirection) / speed : 1;
+  const directionBlend = steerBlend * (1 + (1 - Math.abs(alignment)) * 0.32);
+  velocity.lerp(
+    _scratchNormal.copy(steerDirection).multiplyScalar(speed),
+    directionBlend,
+  );
+
+  const downhillPush =
+    Math.max(potentialDrop, 0) * VIBE_GRAVITY_STRENGTH * flightSpeed * 2.6;
+  const climbDrag =
+    Math.max(-potentialDrop, 0) * VIBE_GRAVITY_STRENGTH * flightSpeed * 1.05;
+  const cruisePull = (speed - flightSpeed) * 0.82;
+  const curveBrake =
+    (1 - THREE.MathUtils.clamp(alignment, -1, 1)) *
+    flightSpeed *
+    2.8 *
+    steerBlend;
+
+  speed += (downhillPush - climbDrag - cruisePull - curveBrake) * step;
+  speed = THREE.MathUtils.clamp(
+    speed,
+    flightSpeed * VIBE_COASTER_MIN_SPEED_RATIO,
+    flightSpeed * VIBE_COASTER_MAX_SPEED_RATIO,
+  );
+
+  if (velocity.lengthSq() > 1e-8) velocity.normalize().multiplyScalar(speed);
+  else velocity.copy(steerDirection).multiplyScalar(speed);
+
+  outPathLengthDelta.value += speed * step;
 }
 
 export function simulateVibeGravitySegmentEnd(
@@ -435,6 +514,12 @@ export function simulateVibeGravitySegmentEnd(
   }
 
   state.segmentStartVelocity.copy(state.velocity);
+  state.segmentStartSpeed = Math.max(
+    state.velocity.length(),
+    flightSpeed * 0.55,
+  );
+  state.segmentPathLength = 0;
+  const pathLengthDelta = { value: 0 };
 
   const position = _scratchPosition.copy(start);
   const velocity = _scratchVelocity.copy(state.velocity);
@@ -445,6 +530,7 @@ export function simulateVibeGravitySegmentEnd(
   let wasBeyondInner =
     ellipsoidDistance(_scratchOffset.copy(start).sub(focus), horizonRadii) >
     innerFlipDist;
+  let previousPotential = vibeCoasterPotential(start, focus, horizonRadii);
 
   while (elapsed < duration - 1e-9) {
     const step = Math.min(VIBE_GRAVITY_SIM_STEP_SEC, duration - elapsed);
@@ -479,10 +565,18 @@ export function simulateVibeGravitySegmentEnd(
       }
     }
 
+    const currentPotential = vibeCoasterPotential(
+      position,
+      focus,
+      horizonRadii,
+    );
+    const potentialDrop = previousPotential - currentPotential;
+    previousPotential = currentPotential;
+
     const turnRate = THREE.MathUtils.lerp(2.6, 10.5, traverse);
     const steerBlend = 1 - Math.exp(-turnRate * step);
-    velocity.normalize();
-    velocity.lerp(_scratchDesired.multiplyScalar(flightSpeed), steerBlend);
+    const currentSpeed = Math.max(velocity.length(), flightSpeed * 0.4);
+    _scratchTangent.copy(_scratchDesired);
 
     applyElevationPassSteering(
       position,
@@ -503,7 +597,7 @@ export function simulateVibeGravitySegmentEnd(
       _scratchToCenter.copy(focus).sub(position);
       const centerDistance = _scratchToCenter.length();
       if (centerDistance > 1e-8) {
-        const radialBoost = strength * gravityStrength * step * 1.1;
+        const radialBoost = strength * gravityStrength * currentSpeed * step;
         velocity.addScaledVector(
           _scratchToCenter,
           radialBoost / centerDistance,
@@ -520,22 +614,20 @@ export function simulateVibeGravitySegmentEnd(
       if (_scratchRadial.lengthSq() > 1e-8) {
         _scratchRadial.normalize();
         const shellRecovery =
-          strength * flightSpeed * step * (0.62 - ellipsoidDist) * 0.85;
+          strength * currentSpeed * step * (0.62 - ellipsoidDist) * 0.85;
         velocity.addScaledVector(_scratchRadial, shellRecovery);
       }
     }
 
-    if (velocity.lengthSq() > 1e-8) {
-      velocity.normalize().multiplyScalar(flightSpeed);
-    } else {
-      initVibeGravityVelocityFromPosition(
-        position,
-        focus,
-        flightSpeed,
-        state.orbitSign,
-        velocity,
-      );
-    }
+    applyVibeCoasterSpeed(
+      velocity,
+      _scratchTangent,
+      flightSpeed,
+      potentialDrop,
+      steerBlend,
+      step,
+      pathLengthDelta,
+    );
 
     position.addScaledVector(velocity, step);
     clampVibeGravityHorizon(
@@ -550,6 +642,8 @@ export function simulateVibeGravitySegmentEnd(
 
   outEnd.copy(position);
   state.velocity.copy(velocity);
+  state.segmentPathLength = pathLengthDelta.value;
+  state.segmentEndSpeed = Math.max(velocity.length(), flightSpeed * 0.35);
 }
 
 const _scratchRadial = new THREE.Vector3();
