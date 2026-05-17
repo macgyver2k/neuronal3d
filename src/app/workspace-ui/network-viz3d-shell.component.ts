@@ -234,11 +234,15 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
                 <select
                   id="vibeCameraControlMode"
                   class="select select-bordered select-sm w-full"
-                  [value]="model().vibeCamera.controlMode"
                   (change)="onVibeCameraControlMode($event)"
                 >
                   @for (entry of vibeCameraControlModeEntries; track entry.id) {
-                    <option [value]="entry.id">{{ entry.label }}</option>
+                    <option
+                      [value]="entry.id"
+                      [selected]="entry.id === model().vibeCamera.controlMode"
+                    >
+                      {{ entry.label }}
+                    </option>
                   }
                 </select>
               </div>

@@ -12,11 +12,15 @@ export const VIBE_GRAVITY_STRENGTH = 0.34;
 /** Exponent für Stärke ∝ 1/s^exp bei skaliertem Horizont. */
 export const VIBE_GRAVITY_RADIUS_STRENGTH_EXPONENT = 2.5;
 
+/** Räumliche Pfadlage relativ zum Modell-Schwerpunkt. */
+export type VibePathElevationPass = 'side' | 'over' | 'under';
+
 export type VibeGravityPathState = {
   velocity: THREE.Vector3;
   segmentStartVelocity: THREE.Vector3;
   initialized: boolean;
   orbitSign: 1 | -1;
+  elevationPass: VibePathElevationPass;
 };
 
 export function createVibeGravityPathState(): VibeGravityPathState {
@@ -25,7 +29,151 @@ export function createVibeGravityPathState(): VibeGravityPathState {
     segmentStartVelocity: new THREE.Vector3(),
     initialized: false,
     orbitSign: 1,
+    elevationPass: 'side',
   };
+}
+
+const projectOffsetToEllipsoidShell = (
+  offset: THREE.Vector3,
+  horizonRadii: THREE.Vector3,
+  horizonLimit: number,
+): void => {
+  const ellipsoidY = horizonRadii.y * 1.18;
+  const normX = offset.x / horizonRadii.x;
+  const normY = offset.y / ellipsoidY;
+  const normZ = offset.z / horizonRadii.z;
+  const distance = Math.sqrt(normX * normX + normY * normY + normZ * normZ);
+  if (distance > 1e-8) {
+    offset.multiplyScalar((horizonLimit * 0.96) / distance);
+  }
+};
+
+/** Kamera auf obere/untere Bahn legen (Pfad geht über/unter dem Modell). */
+export function snapVibePositionToElevationPass(
+  position: THREE.Vector3,
+  focus: THREE.Vector3,
+  horizonRadii: THREE.Vector3,
+  horizonLimit: number,
+  elevationPass: VibePathElevationPass,
+): void {
+  if (elevationPass === 'side') return;
+
+  _scratchOffset.copy(position).sub(focus);
+  const yMagnitude =
+    horizonRadii.y *
+    (elevationPass === 'over'
+      ? THREE.MathUtils.lerp(0.58, 0.88, 0.55 + Math.random() * 0.45)
+      : THREE.MathUtils.lerp(0.5, 0.78, 0.55 + Math.random() * 0.45));
+
+  if (elevationPass === 'over') {
+    if (_scratchOffset.y < yMagnitude) _scratchOffset.y = yMagnitude;
+  } else if (_scratchOffset.y > -yMagnitude) {
+    _scratchOffset.y = -yMagnitude;
+  }
+
+  const horizontalLength = Math.hypot(_scratchOffset.x, _scratchOffset.z);
+  if (horizontalLength < horizonRadii.x * 0.2) {
+    const orbitAngle = Math.random() * Math.PI * 2;
+    _scratchOffset.x = Math.cos(orbitAngle) * horizonRadii.x * 0.62;
+    _scratchOffset.z = Math.sin(orbitAngle) * horizonRadii.z * 0.62;
+  }
+
+  projectOffsetToEllipsoidShell(_scratchOffset, horizonRadii, horizonLimit);
+  position.copy(focus).add(_scratchOffset);
+}
+
+function vibeElevationPassSteerTarget(
+  position: THREE.Vector3,
+  focus: THREE.Vector3,
+  horizonRadii: THREE.Vector3,
+  horizonLimit: number,
+  elevationPass: VibePathElevationPass,
+  out: THREE.Vector3,
+): void {
+  _scratchOffset.copy(position).sub(focus);
+  const ySign = elevationPass === 'over' ? 1 : -1;
+  const yMagnitude = horizonRadii.y * (elevationPass === 'over' ? 0.72 : 0.62);
+
+  if (_scratchOffset.lengthSq() < 1e-8) {
+    out.set(horizonRadii.x * 0.65, ySign * yMagnitude, 0);
+  } else {
+    out.copy(_scratchOffset);
+    out.y = ySign * Math.max(Math.abs(out.y), yMagnitude);
+    const horizontalLength = Math.hypot(out.x, out.z);
+    if (horizontalLength < horizonRadii.x * 0.18) {
+      out.x += horizonRadii.x * 0.35 * (out.x >= 0 ? 1 : -1);
+      out.z += horizonRadii.z * 0.28 * (out.z >= 0 ? 1 : -1);
+    }
+  }
+
+  projectOffsetToEllipsoidShell(out, horizonRadii, horizonLimit);
+  out.add(focus);
+}
+
+function applyElevationPassSteering(
+  position: THREE.Vector3,
+  focus: THREE.Vector3,
+  horizonRadii: THREE.Vector3,
+  horizonLimit: number,
+  elevationPass: VibePathElevationPass,
+  flightSpeed: number,
+  step: number,
+  velocity: THREE.Vector3,
+): void {
+  if (elevationPass === 'side') return;
+
+  vibeElevationPassSteerTarget(
+    position,
+    focus,
+    horizonRadii,
+    horizonLimit,
+    elevationPass,
+    _scratchDesired,
+  );
+
+  _scratchToCenter.copy(_scratchDesired).sub(position);
+  const distance = _scratchToCenter.length();
+  if (distance < 1e-8) return;
+
+  const steerBlend = 1 - Math.exp(-5.8 * step);
+  velocity.addScaledVector(
+    _scratchToCenter,
+    (flightSpeed * steerBlend * 0.85) / distance,
+  );
+}
+
+function initElevationPassVelocity(
+  start: THREE.Vector3,
+  focus: THREE.Vector3,
+  flightSpeed: number,
+  orbitSign: 1 | -1,
+  elevationPass: VibePathElevationPass,
+  outVelocity: THREE.Vector3,
+): void {
+  initVibeGravityVelocityFromPosition(
+    start,
+    focus,
+    flightSpeed,
+    orbitSign,
+    outVelocity,
+  );
+  if (elevationPass === 'side') return;
+
+  _scratchOffset.copy(start).sub(focus);
+  const horizontalLength = Math.hypot(_scratchOffset.x, _scratchOffset.z);
+  if (horizontalLength < 1e-6) {
+    outVelocity.set(orbitSign * flightSpeed, 0, 0);
+    return;
+  }
+
+  _scratchTangent.set(-_scratchOffset.z, 0, _scratchOffset.x).normalize();
+  outVelocity.copy(_scratchTangent).multiplyScalar(orbitSign * flightSpeed);
+  if (elevationPass === 'over') {
+    outVelocity.y += flightSpeed * 0.12;
+  } else {
+    outVelocity.y -= flightSpeed * 0.12;
+  }
+  outVelocity.normalize().multiplyScalar(flightSpeed);
 }
 
 export function refreshVibeGravityHorizonRadii(
@@ -268,11 +416,12 @@ export function simulateVibeGravitySegmentEnd(
 
   if (!state.initialized) {
     state.orbitSign = Math.random() < 0.5 ? 1 : -1;
-    initVibeGravityVelocityFromPosition(
+    initElevationPassVelocity(
       start,
       focus,
       flightSpeed,
       state.orbitSign,
+      state.elevationPass,
       state.velocity,
     );
     blendVibeGravityVelocityTowardInwardStart(
@@ -308,21 +457,49 @@ export function simulateVibeGravitySegmentEnd(
     }
     if (ellipsoidDist > innerFlipDist + 0.06) wasBeyondInner = true;
 
-    vibeGravitySteerDirection(
-      position,
-      focus,
-      horizonRadii,
-      pathTraverse,
-      state.orbitSign,
-      _scratchDesired,
-    );
+    if (state.elevationPass === 'side') {
+      vibeGravitySteerDirection(
+        position,
+        focus,
+        horizonRadii,
+        pathTraverse,
+        state.orbitSign,
+        _scratchDesired,
+      );
+    } else {
+      _scratchOffset.copy(position).sub(focus);
+      const horizontalLength = Math.hypot(_scratchOffset.x, _scratchOffset.z);
+      if (horizontalLength > 1e-6) {
+        _scratchDesired
+          .set(-_scratchOffset.z, 0, _scratchOffset.x)
+          .normalize()
+          .multiplyScalar(state.orbitSign);
+      } else {
+        _scratchDesired.set(state.orbitSign, 0, 0);
+      }
+    }
 
     const turnRate = THREE.MathUtils.lerp(2.6, 10.5, traverse);
     const steerBlend = 1 - Math.exp(-turnRate * step);
     velocity.normalize();
     velocity.lerp(_scratchDesired.multiplyScalar(flightSpeed), steerBlend);
 
-    if (traverse > 0.55 && ellipsoidDist > 0.72) {
+    applyElevationPassSteering(
+      position,
+      focus,
+      horizonRadii,
+      horizonLimit,
+      state.elevationPass,
+      flightSpeed,
+      step,
+      velocity,
+    );
+
+    if (
+      state.elevationPass === 'side' &&
+      traverse > 0.55 &&
+      ellipsoidDist > 0.72
+    ) {
       _scratchToCenter.copy(focus).sub(position);
       const centerDistance = _scratchToCenter.length();
       if (centerDistance > 1e-8) {
@@ -334,7 +511,11 @@ export function simulateVibeGravitySegmentEnd(
       }
     }
 
-    if (traverse > 0.35 && ellipsoidDist < 0.62) {
+    if (
+      state.elevationPass === 'side' &&
+      traverse > 0.35 &&
+      ellipsoidDist < 0.62
+    ) {
       _scratchRadial.copy(position).sub(focus);
       if (_scratchRadial.lengthSq() > 1e-8) {
         _scratchRadial.normalize();

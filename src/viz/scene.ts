@@ -13,7 +13,9 @@ import {
   resolveVibeGravityHorizonLimit,
   resolveVibeGravityStrength,
   simulateVibeGravitySegmentEnd,
+  snapVibePositionToElevationPass,
   VIBE_GRAVITY_STRENGTH,
+  type VibePathElevationPass,
 } from './vibe-camera-gravity-path';
 import {
   DEFAULT_VIBE_CAMERA_TUNING,
@@ -430,8 +432,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     l1: THREE.Vector3;
     l2: THREE.Vector3;
     l3: THREE.Vector3;
-    u0: THREE.Vector3;
-    u3: THREE.Vector3;
+    elevationPass: VibePathElevationPass;
   };
 
   function vibeBezierEvalPoint(
@@ -462,6 +463,98 @@ export function createScene(mount: NeuronalGlSceneMount): {
     );
     if (out.lengthSq() < 1e-8) out.set(0, 1, 0);
     else out.normalize();
+  }
+
+  function vibePickPathElevationPass(): VibePathElevationPass {
+    const params = vibeCamParams;
+    const roll = Math.random();
+    if (roll < params.pathViewOverChance) return 'over';
+    if (roll < params.pathViewOverChance + params.pathViewUnderChance) {
+      return 'under';
+    }
+    return 'side';
+  }
+
+  function vibeSegmentViewDirection(
+    cameraPosition: THREE.Vector3,
+    lookTarget: THREE.Vector3,
+    out: THREE.Vector3,
+  ): void {
+    out.copy(lookTarget).sub(cameraPosition);
+    if (out.lengthSq() < 1e-8) out.set(0, -1, 0);
+    else out.normalize();
+  }
+
+  /**
+   * Up aus Welt-Y (bzw. Welt-Z bei steilem Blick) – kein Roll um die Blickachse.
+   * right = view × refUp, up = right × view
+   */
+  function vibeResolveCameraUp(
+    cameraPosition: THREE.Vector3,
+    lookTarget: THREE.Vector3,
+    out: THREE.Vector3,
+  ): void {
+    vibeSegmentViewDirection(cameraPosition, lookTarget, vibeScratchLerp);
+
+    const worldUpReference =
+      Math.abs(vibeScratchLerp.y) > 0.92
+        ? vibeScratchDir.set(0, 0, 1)
+        : vibeScratchDir.set(0, 1, 0);
+
+    out.crossVectors(vibeScratchLerp, worldUpReference);
+    if (out.lengthSq() < 1e-8) {
+      worldUpReference.set(1, 0, 0);
+      out.crossVectors(vibeScratchLerp, worldUpReference);
+    }
+    out.normalize();
+    out.crossVectors(out, vibeScratchLerp).normalize();
+  }
+
+  function vibeSnapSegmentEndToElevationPass(
+    end: THREE.Vector3,
+    focus: THREE.Vector3,
+    elevationPass: VibePathElevationPass,
+  ): void {
+    if (elevationPass === 'side') return;
+
+    refreshVibeHorizonRadiiForFocus(focus);
+    snapVibePositionToElevationPass(
+      end,
+      focus,
+      vibeHorizonRadii,
+      resolveVibeGravityHorizonLimit(vibeCamParams.pathTraverse),
+      elevationPass,
+    );
+  }
+
+  function vibeArcSegmentHandlesForElevation(
+    segment: VibeCamCurveSeg,
+    focus: THREE.Vector3,
+    elevationPass: VibePathElevationPass,
+  ): void {
+    if (elevationPass === 'side') return;
+
+    refreshVibeHorizonRadiiForFocus(focus);
+    const arcLift =
+      vibeHorizonRadii.y *
+      (elevationPass === 'over'
+        ? THREE.MathUtils.lerp(0.42, 0.62, 0.5 + Math.random() * 0.5)
+        : -THREE.MathUtils.lerp(0.38, 0.56, 0.5 + Math.random() * 0.5));
+    const arcMidY = focus.y + arcLift;
+
+    vibeScratchLerp.copy(segment.p0).lerp(segment.p3, 0.5);
+    vibeScratchLerp.y = arcMidY;
+    const handleBlend = 0.58;
+    segment.p1.y = THREE.MathUtils.lerp(
+      segment.p1.y,
+      vibeScratchLerp.y,
+      handleBlend,
+    );
+    segment.p2.y = THREE.MathUtils.lerp(
+      segment.p2.y,
+      vibeScratchLerp.y,
+      handleBlend,
+    );
   }
 
   function vibeJointOutgoingTangent(
@@ -735,8 +828,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       l1: new THREE.Vector3(),
       l2: new THREE.Vector3(),
       l3: new THREE.Vector3(),
-      u0: new THREE.Vector3(),
-      u3: new THREE.Vector3(),
+      elevationPass: 'side',
     };
     const lookScatter = params.lookWanderSpeed * 32;
 
@@ -752,8 +844,17 @@ export function createScene(mount: NeuronalGlSceneMount): {
       params.segDurMax,
     );
 
+    const elevationPass = vibePickPathElevationPass();
+    seg.elevationPass = elevationPass;
+    vibeGravityPathState.elevationPass = elevationPass;
     vibePlaceSegmentEnd(seg.p0, seg.p3, vibePathGravityFocus, seg.dur);
+    vibeSnapSegmentEndToElevationPass(
+      seg.p3,
+      vibePathGravityFocus,
+      elevationPass,
+    );
     vibePlaceCurveHandles(seg, null, vibePathGravityFocus);
+    vibeArcSegmentHandlesForElevation(seg, vibePathGravityFocus, elevationPass);
 
     seg.l3.copy(seg.p3);
     seg.l3.x += (Math.random() - 0.5) * 2.6 * lookScatter;
@@ -769,12 +870,6 @@ export function createScene(mount: NeuronalGlSceneMount): {
       .copy(seg.l3)
       .addScaledVector(vibeScratchDir, -(1.1 + Math.random() * 2.7));
 
-    seg.u0
-      .set((Math.random() - 0.5) * 0.48, 1, (Math.random() - 0.5) * 0.48)
-      .normalize();
-    seg.u3
-      .set((Math.random() - 0.5) * 0.52, 1, (Math.random() - 0.5) * 0.52)
-      .normalize();
     return seg;
   }
 
@@ -791,8 +886,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       l1: new THREE.Vector3(),
       l2: new THREE.Vector3(),
       l3: new THREE.Vector3(),
-      u0: new THREE.Vector3().copy(prev.u3),
-      u3: new THREE.Vector3(),
+      elevationPass: 'side',
     };
     const lookScatter = params.lookWanderSpeed * 32;
     const joinVelocity = vibeIdealCam.copy(vibeGravityPathState.velocity);
@@ -830,8 +924,17 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
     vibeGravityPathState.velocity.copy(joinVelocity);
     vibeGravityPathState.segmentStartVelocity.copy(joinVelocity);
+    const elevationPass = vibePickPathElevationPass();
+    seg.elevationPass = elevationPass;
+    vibeGravityPathState.elevationPass = elevationPass;
     vibePlaceSegmentEnd(seg.p0, seg.p3, vibePathGravityFocus, seg.dur);
+    vibeSnapSegmentEndToElevationPass(
+      seg.p3,
+      vibePathGravityFocus,
+      elevationPass,
+    );
     vibePlaceCurveHandles(seg, prev, vibePathGravityFocus);
+    vibeArcSegmentHandlesForElevation(seg, vibePathGravityFocus, elevationPass);
 
     seg.l1.copy(prev.l3).add(vibeScratchLerp.copy(prev.l3).sub(prev.p2));
     seg.l3.copy(seg.p3);
@@ -843,10 +946,6 @@ export function createScene(mount: NeuronalGlSceneMount): {
     seg.l2
       .copy(seg.l3)
       .addScaledVector(vibeScratchDir, -(1.15 + Math.random() * 2.75));
-
-    seg.u3
-      .set((Math.random() - 0.5) * 0.52, 1, (Math.random() - 0.5) * 0.52)
-      .normalize();
 
     return seg;
   }
@@ -1128,14 +1227,13 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
     if (vibeEntranceBlend.active) {
       vibeIdealCam.copy(head.p0);
-      vibeIdealUp.copy(head.u0).normalize();
     } else {
       let w = vibeSegElapsed / head.dur;
       if (w > 1) w = 1;
-      const s = w;
-      vibeBezierEvalPoint(head.p0, head.p1, head.p2, head.p3, s, vibeIdealCam);
-      vibeIdealUp.copy(head.u0).lerp(head.u3, s).normalize();
+      vibeBezierEvalPoint(head.p0, head.p1, head.p2, head.p3, w, vibeIdealCam);
     }
+
+    vibeResolveCameraUp(vibeIdealCam, vibeNetFocus, vibeIdealUp);
 
     if (vibeCamControlMode === 'freeLook') {
       updateVibePathCameraRig();
@@ -1160,9 +1258,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
           vibeNetFocus,
           u,
         );
-        camera.up
-          .lerpVectors(vibeEntranceBlend.fromUp, vibeIdealUp, u)
-          .normalize();
+        vibeResolveCameraUp(camera.position, vibeScratchLerp, camera.up);
         camera.lookAt(vibeScratchLerp);
         controls.target.copy(vibeScratchLerp);
       }

@@ -168,7 +168,10 @@ export type ResolvedVibeCameraParams = {
   pathOrbitBlend: number;
   /** 0 = sanft, 1 = starke Kurven innerhalb eines Segments */
   pathIntraCurve: number;
-  pathHeadingYawMax: number;
+  /** Anteil Segmente: Pfad über dem Modell. */
+  pathViewOverChance: number;
+  /** Anteil Segmente: Pfad unter dem Modell. */
+  pathViewUnderChance: number;
   pathTangentChordMin: number;
   pathTangentChordSpan: number;
   pathHandlePerpMin: number;
@@ -429,7 +432,8 @@ export function resolveVibeCameraParams(
     pathContinuity: lerp(1, 0, wildHigh),
     pathOrbitBlend: lerp(0.94, 0.08, wildHigh),
     pathIntraCurve: wildHigh,
-    pathHeadingYawMax: lerp(0.035, 1.75, wildHigh),
+    pathViewOverChance: lerp(0.16, 0.34, look),
+    pathViewUnderChance: lerp(0.14, 0.3, look),
     pathTangentChordMin: lerp(5.8, 0.65, wildHigh),
     pathTangentChordSpan: lerp(5.2, 5.8, wildHigh),
     pathHandlePerpMin: lerp(0.08, 1.85, wildHigh),
