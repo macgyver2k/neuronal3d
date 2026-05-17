@@ -104,6 +104,9 @@ const handleMessage = (
         fillLayoutCentroid: (out, elapsedSec = 0) => {
           net3d!.fillVibeLookTarget(out, elapsedSec);
         },
+        fillPathGravityFocus: (out) => {
+          net3d!.fillSceneDisplayCenter(out);
+        },
         fillLayoutBounds: (min, max) => {
           net3d!.fillLayoutBounds(min, max);
         },

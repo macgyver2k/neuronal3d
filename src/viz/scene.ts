@@ -10,6 +10,8 @@ import {
   clampVibeGravityHorizon,
   createVibeGravityPathState,
   refreshVibeGravityHorizonRadii,
+  resolveVibeGravityHorizonLimit,
+  resolveVibeGravityStrength,
   simulateVibeGravitySegmentEnd,
   VIBE_GRAVITY_STRENGTH,
 } from './vibe-camera-gravity-path';
@@ -92,6 +94,8 @@ export type VibeNetworkLookFocusSampler = {
    * @param elapsedSec Zeit seit Vibe-Start (Three.js-Clock), z. B. für wandernde Foci
    */
   fillLayoutCentroid: (out: THREE.Vector3, elapsedSec?: number) => void;
+  /** Schwerpunkt für Gravitations-Pfad (ohne Wanderung). */
+  fillPathGravityFocus: (out: THREE.Vector3) => void;
   fillLayoutBounds: (min: THREE.Vector3, max: THREE.Vector3) => void;
 };
 
@@ -263,6 +267,24 @@ export function createScene(mount: NeuronalGlSceneMount): {
   vibePathCameraLens.position.set(0, 0, 0.3);
   vibePathCameraRig.add(vibePathCameraBody, vibePathCameraLens);
   scene.add(vibePathCameraRig);
+
+  const vibeHorizonSphereRoot = new THREE.Group();
+  vibeHorizonSphereRoot.visible = false;
+  vibeHorizonSphereRoot.frustumCulled = false;
+  const vibeHorizonSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 40, 28),
+    new THREE.MeshBasicMaterial({
+      color: 0x6eb8ff,
+      transparent: true,
+      opacity: 0.14,
+      wireframe: true,
+      depthTest: true,
+      depthWrite: false,
+    }),
+  );
+  vibeHorizonSphereRoot.add(vibeHorizonSphere);
+  scene.add(vibeHorizonSphereRoot);
+
   const vibePathLinePool: THREE.Line[] = [];
   const vibePathMarkerPool: THREE.Mesh[] = [];
   const vibePathMarkerGeometry = new THREE.SphereGeometry(1, 12, 10);
@@ -523,26 +545,37 @@ export function createScene(mount: NeuronalGlSceneMount): {
     );
   }
 
-  /** Segment-Ende per Gravitations-Vorausintegration (ohne Wildheit). */
+  function refreshVibeHorizonRadiiForFocus(focus: THREE.Vector3): void {
+    refreshVibeGravityHorizonRadii(
+      focus,
+      vibeLayoutMin,
+      vibeLayoutMax,
+      vibeHorizonRadii,
+      vibeCamParams.horizonRadiusScale,
+    );
+  }
+
+  /** Segment-Ende per Gravitations-Vorausintegration. */
   function vibePlaceSegmentEnd(
     start: THREE.Vector3,
     end: THREE.Vector3,
     focus: THREE.Vector3,
     segmentDurationSec: number,
   ): void {
-    refreshVibeGravityHorizonRadii(
-      focus,
-      vibeLayoutMin,
-      vibeLayoutMax,
-      vibeHorizonRadii,
-    );
+    const pathTraverse = vibeCamParams.pathTraverse;
+    refreshVibeHorizonRadiiForFocus(focus);
     simulateVibeGravitySegmentEnd(
       start,
       focus,
       segmentDurationSec,
       vibeResolveFlightSpeed(),
-      VIBE_GRAVITY_STRENGTH,
+      resolveVibeGravityStrength(
+        VIBE_GRAVITY_STRENGTH,
+        vibeCamParams.horizonRadiusScale,
+        pathTraverse,
+      ),
       vibeHorizonRadii,
+      pathTraverse,
       vibeGravityPathState,
       end,
     );
@@ -552,6 +585,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       end,
       vibeGravityPathState.velocity,
       vibeHorizonRadii,
+      resolveVibeGravityHorizonLimit(pathTraverse),
     );
   }
 
@@ -572,18 +606,23 @@ export function createScene(mount: NeuronalGlSceneMount): {
       .copy(segment.p3)
       .addScaledVector(vibeGravityPathState.velocity, -handleLength);
 
+    vibeEnforceBezierJoinContinuity(segment, previous);
+    const horizonLimit = resolveVibeGravityHorizonLimit(
+      vibeCamParams.pathTraverse,
+    );
     clampVibeGravityHorizon(
       focus,
       segment.p1,
       vibeGravityPathState.segmentStartVelocity,
       vibeHorizonRadii,
+      horizonLimit,
     );
-    vibeEnforceBezierJoinContinuity(segment, previous);
     clampVibeGravityHorizon(
       focus,
       segment.p2,
       vibeGravityPathState.velocity,
       vibeHorizonRadii,
+      horizonLimit,
     );
   }
 
@@ -608,6 +647,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const vibeIdealCam = new THREE.Vector3();
   const vibeIdealUp = new THREE.Vector3();
   const vibeNetFocus = new THREE.Vector3(4, 0, 0);
+  const vibePathGravityFocus = new THREE.Vector3(4, 0, 0);
   const vibeLayoutMin = new THREE.Vector3(0, -2.2, -4.5);
   const vibeLayoutMax = new THREE.Vector3(8.5, 2.8, 4.5);
   const vibeGravityPathState = createVibeGravityPathState();
@@ -615,9 +655,15 @@ export function createScene(mount: NeuronalGlSceneMount): {
   let vibeNetLookFill:
     | ((out: THREE.Vector3, elapsedSec: number) => void)
     | null = null;
+  let vibePathGravityFill: ((out: THREE.Vector3) => void) | null = null;
   let vibeNetBoundsFill:
     | ((min: THREE.Vector3, max: THREE.Vector3) => void)
     | null = null;
+
+  function refreshVibePathGravityFocus(): void {
+    if (vibePathGravityFill) vibePathGravityFill(vibePathGravityFocus);
+    else vibePathGravityFocus.set(4, 0, 0);
+  }
 
   function refreshVibeLayoutBounds(): void {
     if (vibeNetBoundsFill) vibeNetBoundsFill(vibeLayoutMin, vibeLayoutMax);
@@ -627,12 +673,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     point: THREE.Vector3,
     focus: THREE.Vector3 = vibeNetFocus,
   ): void {
-    refreshVibeGravityHorizonRadii(
-      focus,
-      vibeLayoutMin,
-      vibeLayoutMax,
-      vibeHorizonRadii,
-    );
+    refreshVibeHorizonRadiiForFocus(focus);
     clampVibeGravityHorizon(
       focus,
       point,
@@ -647,10 +688,14 @@ export function createScene(mount: NeuronalGlSceneMount): {
     vibeNetLookFill = sampler
       ? (out, elapsedSec) => sampler.fillLayoutCentroid(out, elapsedSec)
       : null;
+    vibePathGravityFill = sampler
+      ? (out) => sampler.fillPathGravityFocus(out)
+      : null;
     vibeNetBoundsFill = sampler
       ? (min, max) => sampler.fillLayoutBounds(min, max)
       : null;
     refreshVibeLayoutBounds();
+    refreshVibePathGravityFocus();
   }
 
   const vibeEntranceBlend = {
@@ -707,8 +752,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
       params.segDurMax,
     );
 
-    vibePlaceSegmentEnd(seg.p0, seg.p3, look, seg.dur);
-    vibePlaceCurveHandles(seg, null, look);
+    vibePlaceSegmentEnd(seg.p0, seg.p3, vibePathGravityFocus, seg.dur);
+    vibePlaceCurveHandles(seg, null, vibePathGravityFocus);
 
     seg.l3.copy(seg.p3);
     seg.l3.x += (Math.random() - 0.5) * 2.6 * lookScatter;
@@ -752,7 +797,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     const lookScatter = params.lookWanderSpeed * 32;
     const joinVelocity = vibeIdealCam.copy(vibeGravityPathState.velocity);
 
-    vibePlaceSegmentEnd(seg.p0, seg.p3, vibeNetFocus, prev.dur);
+    vibePlaceSegmentEnd(seg.p0, seg.p3, vibePathGravityFocus, prev.dur);
 
     const chordPrev = Math.max(0.52, prev.p0.distanceTo(prev.p3));
     const chordNew = seg.p0.distanceTo(seg.p3);
@@ -785,8 +830,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
     vibeGravityPathState.velocity.copy(joinVelocity);
     vibeGravityPathState.segmentStartVelocity.copy(joinVelocity);
-    vibePlaceSegmentEnd(seg.p0, seg.p3, vibeNetFocus, seg.dur);
-    vibePlaceCurveHandles(seg, prev, vibeNetFocus);
+    vibePlaceSegmentEnd(seg.p0, seg.p3, vibePathGravityFocus, seg.dur);
+    vibePlaceCurveHandles(seg, prev, vibePathGravityFocus);
 
     seg.l1.copy(prev.l3).add(vibeScratchLerp.copy(prev.l3).sub(prev.p2));
     seg.l3.copy(seg.p3);
@@ -808,6 +853,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   function refillVibeSegQueue(cam: THREE.Vector3, look: THREE.Vector3): void {
     refreshVibeLayoutBounds();
+    refreshVibePathGravityFocus();
     if (vibeNetLookFill) vibeNetLookFill(vibeNetFocus, 0);
     vibeGravityPathState.initialized = false;
     vibeNextPathColorIndex = 0;
@@ -875,12 +921,29 @@ export function createScene(mount: NeuronalGlSceneMount): {
     syncVibeSegQueueLength();
   }
 
+  function updateVibeHorizonSpherePreview(): void {
+    const show = vibeCameraMode && vibeCamParams.pathHorizonSpherePreview;
+    vibeHorizonSphereRoot.visible = show;
+    if (!show) return;
+    refreshVibeLayoutBounds();
+    refreshVibePathGravityFocus();
+    refreshVibeHorizonRadiiForFocus(vibePathGravityFocus);
+    vibeHorizonSphereRoot.position.copy(vibePathGravityFocus);
+    const ellipsoidY = vibeHorizonRadii.y * 1.18;
+    vibeHorizonSphere.scale.set(
+      vibeHorizonRadii.x,
+      ellipsoidY,
+      vibeHorizonRadii.z,
+    );
+  }
+
   const vibePreviewOnlyParamKeys: ReadonlySet<keyof ResolvedVibeCameraParams> =
     new Set([
       'pathPreview',
       'pathPreviewMaxSegments',
       'pathPreviewMarkers',
       'pathPreviewMarkerRadius',
+      'pathHorizonSpherePreview',
     ]);
 
   const vibeResolvedParamsAffectPathPlanExceptQueueSize = (
@@ -917,10 +980,14 @@ export function createScene(mount: NeuronalGlSceneMount): {
     }
     const maxSegmentChordChanged =
       previousParams.maxSegmentChord !== vibeCamParams.maxSegmentChord;
+    const pathPhysicsChanged =
+      previousParams.pathTraverse !== vibeCamParams.pathTraverse ||
+      previousParams.pathIntraCurve !== vibeCamParams.pathIntraCurve ||
+      previousParams.horizonRadiusScale !== vibeCamParams.horizonRadiusScale;
 
     if (vibeEntranceBlend.active || vibeSegQueue.length === 0) {
       refillVibeSegQueueFromScene();
-    } else if (maxSegmentChordChanged) {
+    } else if (maxSegmentChordChanged || pathPhysicsChanged) {
       replanVibeSegQueuePreservingProgress();
     } else if (
       vibeResolvedParamsAffectPathPlanExceptQueueSize(
@@ -933,6 +1000,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       syncVibeSegQueueLength();
     }
     updateVibePathPreview();
+    updateVibeHorizonSpherePreview();
   };
 
   function updateVibePathPreview(): void {
@@ -1026,6 +1094,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const applyVibeCamera = () => {
     if (!vibeCameraMode) return;
     const rawT = vibeClock.getElapsedTime();
+    refreshVibePathGravityFocus();
     if (vibeNetLookFill) vibeNetLookFill(vibeNetFocus, rawT);
     else vibeNetFocus.set(4, 0, 0);
 
@@ -1053,6 +1122,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (!head) {
       refillVibeSegQueueFromScene();
       updateVibePathPreview();
+      updateVibeHorizonSpherePreview();
       return;
     }
 
@@ -1070,6 +1140,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (vibeCamControlMode === 'freeLook') {
       updateVibePathCameraRig();
       updateVibePathPreview();
+      updateVibeHorizonSpherePreview();
       return;
     }
 
@@ -1103,6 +1174,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
     }
 
     updateVibePathPreview();
+    updateVibeHorizonSpherePreview();
   };
 
   const setVibeCameraMode = (enabled: boolean) => {
@@ -1129,6 +1201,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       vibeSegQueue.length = 0;
       vibeLastRawT = -1;
       vibePathPreviewRoot.visible = false;
+      vibeHorizonSphereRoot.visible = false;
       hideUnusedVibePathPreview(0, 0);
       camera.position.copy(vibeSavedCam);
       controls.target.copy(vibeSavedTarget);
@@ -1253,6 +1326,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   const dispose = () => {
     vibeNetLookFill = null;
+    vibePathGravityFill = null;
+    vibeNetBoundsFill = null;
     if (containerResizeRaf !== 0) {
       cancelAnimationFrame(containerResizeRaf);
       containerResizeRaf = 0;
@@ -1270,7 +1345,10 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (!isDom) orbitDomSurface?.removeAllListeners();
     controls.dispose();
     scene.remove(vibePathPreviewRoot);
+    scene.remove(vibeHorizonSphereRoot);
     scene.remove(vibePathCameraRig);
+    vibeHorizonSphere.geometry.dispose();
+    (vibeHorizonSphere.material as THREE.Material).dispose();
     vibePathCameraBody.geometry.dispose();
     (vibePathCameraBody.material as THREE.Material).dispose();
     vibePathCameraLens.geometry.dispose();

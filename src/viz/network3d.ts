@@ -762,6 +762,66 @@ export class Network3D {
   }
 
   /**
+   * Mittelpunkt der Bounding-Box aller sichtbaren Netz-Elemente
+   * (Neuronen und Ausgabe-Ziffern-Sprites), ohne Neuronen-pro-Schicht-Bias.
+   */
+  fillSceneDisplayCenter(out: THREE.Vector3): void {
+    const extentMin = this.scratchV3a;
+    const extentMax = this.scratchV3b;
+    if (!this.fillSceneDisplayExtent(extentMin, extentMax)) {
+      out.set(4, 0, 0);
+      return;
+    }
+    out.set(
+      (extentMin.x + extentMax.x) * 0.5,
+      (extentMin.y + extentMax.y) * 0.5,
+      (extentMin.z + extentMax.z) * 0.5,
+    );
+  }
+
+  /**
+   * Achsenparalleles Extent aller sichtbaren Netz-Elemente (ohne Padding).
+   * @returns `false` wenn keine Punkte vorhanden sind
+   */
+  fillSceneDisplayExtent(min: THREE.Vector3, max: THREE.Vector3): boolean {
+    let hasPoint = false;
+    let minX = 0;
+    let minY = 0;
+    let minZ = 0;
+    let maxX = 0;
+    let maxY = 0;
+    let maxZ = 0;
+    const includePoint = (x: number, y: number, z: number): void => {
+      if (!hasPoint) {
+        minX = maxX = x;
+        minY = maxY = y;
+        minZ = maxZ = z;
+        hasPoint = true;
+        return;
+      }
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      minZ = Math.min(minZ, z);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+      maxZ = Math.max(maxZ, z);
+    };
+    for (const layer of this.positions) {
+      for (const point of layer) {
+        includePoint(point.x, point.y, point.z);
+      }
+    }
+    for (const sprite of this.outputDigitSprites) {
+      const position = sprite.position;
+      includePoint(position.x, position.y, position.z);
+    }
+    if (!hasPoint) return false;
+    min.set(minX, minY, minZ);
+    max.set(maxX, maxY, maxZ);
+    return true;
+  }
+
+  /**
    * Achsenparalleles Layout-Rechteck (Weltkoordinaten) für Kamera-Pfad-Clamping.
    * Mit Rand um Neuronen und typischen Pull-Out der Vibe-Kamera.
    */

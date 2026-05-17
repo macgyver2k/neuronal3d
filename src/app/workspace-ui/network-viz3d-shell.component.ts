@@ -22,6 +22,8 @@ import {
 } from '../../viz/network3d';
 import {
   normalizeVibeCameraTuning,
+  PATH_HORIZON_RADIUS_SCALE_MAX,
+  PATH_HORIZON_RADIUS_SCALE_MIN,
   VIBE_CAMERA_CONTROL_MODE_LABELS,
   VIBE_CAMERA_PROFILE_LABELS,
   vibeCameraTuningFromProfile,
@@ -335,6 +337,31 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
               </div>
               <div class="min-w-0">
                 <label
+                  for="vibeCameraPathTraverse"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Durchquerung</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraPathTraverse"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    [value]="model().vibeCamera.pathTraverse"
+                    (input)="onVibeCameraTuning('pathTraverse', $event)"
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-8 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().vibeCamera.pathTraverse | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <div class="min-w-0">
+                <label
                   for="vibeCameraLookWander"
                   class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
                   >Blick-Wanderung</label
@@ -404,6 +431,47 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
                   >
                 </div>
               </div>
+              <div class="min-w-0">
+                <label
+                  for="vibeCameraPathHorizonRadius"
+                  class="mb-1 block w-full text-[0.68rem] font-medium leading-snug text-base-content"
+                  >Pfad-Radius</label
+                >
+                <div class="flex min-w-0 items-center gap-2">
+                  <input
+                    id="vibeCameraPathHorizonRadius"
+                    type="range"
+                    [min]="pathHorizonRadiusMin"
+                    [max]="pathHorizonRadiusMax"
+                    step="0.05"
+                    [value]="model().vibeCamera.pathHorizonRadiusScale"
+                    (input)="
+                      onVibeCameraPlanning('pathHorizonRadiusScale', $event)
+                    "
+                    class="range range-primary flex-1 min-w-0"
+                  />
+                  <span
+                    class="text-base-content/60 w-10 shrink-0 text-right text-[0.65rem] tabular-nums"
+                    >{{
+                      model().vibeCamera.pathHorizonRadiusScale
+                        | number: '1.0-2'
+                    }}</span
+                  >
+                </div>
+              </div>
+              <label
+                class="flex cursor-pointer items-center justify-between gap-2"
+              >
+                <span class="text-[0.68rem] font-medium text-base-content"
+                  >Radius-Vorschau</span
+                >
+                <input
+                  type="checkbox"
+                  class="toggle toggle-primary toggle-sm"
+                  [checked]="model().vibeCamera.pathHorizonSpherePreview"
+                  (change)="onVibeCameraPathHorizonSpherePreview($event)"
+                />
+              </label>
               <label
                 class="flex cursor-pointer items-center justify-between gap-2"
               >
@@ -1192,6 +1260,8 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   protected readonly vibeCameraControlModeEntries = (
     Object.keys(VIBE_CAMERA_CONTROL_MODE_LABELS) as VibeCameraControlMode[]
   ).map((id) => ({ id, label: VIBE_CAMERA_CONTROL_MODE_LABELS[id] }));
+  protected readonly pathHorizonRadiusMin = PATH_HORIZON_RADIUS_SCALE_MIN;
+  protected readonly pathHorizonRadiusMax = PATH_HORIZON_RADIUS_SCALE_MAX;
 
   /** Mount-Punkt für die Three.js-Szene (an neuronal-app übergeben). */
   readonly vizMountEl = viewChild<ElementRef<HTMLElement>>('vizMount');
@@ -1388,7 +1458,7 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   }
 
   onVibeCameraTuning(
-    key: 'speed' | 'pullOut' | 'pathWildness' | 'lookWander',
+    key: 'speed' | 'pullOut' | 'pathWildness' | 'pathTraverse' | 'lookWander',
     ev: Event,
   ): void {
     const target = ev.target;
@@ -1409,7 +1479,11 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   }
 
   onVibeCameraPlanning(
-    key: 'pathQueueSize' | 'maxSegmentChord' | 'pathPreviewMarkerSize',
+    key:
+      | 'pathQueueSize'
+      | 'maxSegmentChord'
+      | 'pathPreviewMarkerSize'
+      | 'pathHorizonRadiusScale',
     ev: Event,
   ): void {
     const target = ev.target;
@@ -1431,7 +1505,9 @@ export class NetworkViz3dShellComponent implements OnDestroy {
         ? tuning.pathQueueSize
         : key === 'maxSegmentChord'
           ? tuning.maxSegmentChord
-          : tuning.pathPreviewMarkerSize;
+          : key === 'pathHorizonRadiusScale'
+            ? tuning.pathHorizonRadiusScale
+            : tuning.pathPreviewMarkerSize;
     this.store.dispatch(
       NeuronalActions.vizVibeCameraTuningPatch({ patch: { [key]: value } }),
     );
@@ -1451,6 +1527,24 @@ export class NetworkViz3dShellComponent implements OnDestroy {
     this.store.dispatch(
       NeuronalActions.vizVibeCameraTuningPatch({
         patch: { pathPreviewMarkers: tuning.pathPreviewMarkers },
+      }),
+    );
+    this.pushVibeCameraTuningToRuntime(tuning);
+  }
+
+  onVibeCameraPathHorizonSpherePreview(ev: Event): void {
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
+      return;
+    }
+    const tuning = normalizeVibeCameraTuning({
+      ...this.model().vibeCamera,
+      profileMode: 'custom',
+      pathHorizonSpherePreview: target.checked,
+    });
+    this.store.dispatch(
+      NeuronalActions.vizVibeCameraTuningPatch({
+        patch: { pathHorizonSpherePreview: target.checked },
       }),
     );
     this.pushVibeCameraTuningToRuntime(tuning);

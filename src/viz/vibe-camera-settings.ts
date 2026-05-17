@@ -14,6 +14,10 @@ export type VibeCameraTuning = {
   pullOut: number;
   /** 0 = ruhig, orbit-artig; 1 = sehr wilde Kurven */
   pathWildness: number;
+  /**
+   * 0 = vor allem Außenorbit; 1 = häufige Durchquerung durch die Szene.
+   */
+  pathTraverse: number;
   /** 0 = ruhiger Blick, 1 = schnellere Schicht-Wanderung */
   lookWander: number;
   /** Anzahl vorausgeplanter Pfad-Segmente (1–1000) */
@@ -25,6 +29,13 @@ export type VibeCameraTuning = {
   pathPreviewMarkers: boolean;
   /** Kugelradius (Welt-Einheiten) */
   pathPreviewMarkerSize: number;
+  /**
+   * Skalierung des Gravitations-Horizonts (Ellipsoid um den Pfad-Schwerpunkt).
+   * 1 = automatisch aus Layout.
+   */
+  pathHorizonRadiusScale: number;
+  /** Ellipsoid-Vorschau für den Pfad-Horizont in der Szene */
+  pathHorizonSpherePreview: boolean;
 };
 
 export const VIBE_SPEED_MAX = 100;
@@ -46,12 +57,15 @@ export const DEFAULT_VIBE_CAMERA_TUNING: VibeCameraTuning = {
   speed: 50,
   pullOut: 0.5,
   pathWildness: 0.5,
+  pathTraverse: 0.45,
   lookWander: 0.5,
   pathQueueSize: 100,
   maxSegmentChord: 4,
   pathPreview: true,
   pathPreviewMarkers: true,
   pathPreviewMarkerSize: 0.16,
+  pathHorizonRadiusScale: 1,
+  pathHorizonSpherePreview: false,
 };
 
 export const VIBE_CAMERA_PROFILE_TUNING: Record<
@@ -63,6 +77,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
     speed: 25,
     pullOut: 0.4,
     pathWildness: 0.2,
+    pathTraverse: 0.15,
     lookWander: 0.3,
     pathPreview: true,
     pathPreviewMarkers: true,
@@ -73,6 +88,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
     speed: 50,
     pullOut: 0.5,
     pathWildness: 0.5,
+    pathTraverse: 0.45,
     lookWander: 0.5,
     pathPreview: true,
     pathPreviewMarkers: true,
@@ -83,6 +99,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
     speed: 55,
     pullOut: 0.52,
     pathWildness: 0.75,
+    pathTraverse: 0.72,
     lookWander: 0.7,
     pathPreview: true,
     pathPreviewMarkers: true,
@@ -93,6 +110,7 @@ export const VIBE_CAMERA_PROFILE_TUNING: Record<
     speed: 100,
     pullOut: 0.38,
     pathWildness: 0.65,
+    pathTraverse: 0.58,
     lookWander: 0.55,
     pathQueueSize: 6,
     maxSegmentChord: 14,
@@ -172,7 +190,13 @@ export type ResolvedVibeCameraParams = {
   pathPreview: boolean;
   pathPreviewMarkers: boolean;
   pathPreviewMarkerRadius: number;
+  horizonRadiusScale: number;
+  pathHorizonSpherePreview: boolean;
+  pathTraverse: number;
 };
+
+export const PATH_HORIZON_RADIUS_SCALE_MIN = 0.2;
+export const PATH_HORIZON_RADIUS_SCALE_MAX = 3;
 
 const lerp = (low: number, high: number, t: number): number =>
   low + (high - low) * t;
@@ -237,6 +261,12 @@ const PATH_PREVIEW_MAX_SEGMENTS = 96;
 const PATH_PREVIEW_MARKER_SIZE_MIN = 0.04;
 const PATH_PREVIEW_MARKER_SIZE_MAX = 0.8;
 
+const clampPathHorizonRadiusScale = (value: number): number =>
+  Math.min(
+    PATH_HORIZON_RADIUS_SCALE_MAX,
+    Math.max(PATH_HORIZON_RADIUS_SCALE_MIN, value),
+  );
+
 const clampPathQueueSize = (value: number): number =>
   Math.round(
     Math.min(PATH_QUEUE_SIZE_MAX, Math.max(PATH_QUEUE_SIZE_MIN, value)),
@@ -265,6 +295,9 @@ export function normalizeVibeCameraTuning(
     pathWildness: clamp01(
       base.pathWildness ?? DEFAULT_VIBE_CAMERA_TUNING.pathWildness,
     ),
+    pathTraverse: clamp01(
+      base.pathTraverse ?? DEFAULT_VIBE_CAMERA_TUNING.pathTraverse,
+    ),
     lookWander: clamp01(
       base.lookWander ?? DEFAULT_VIBE_CAMERA_TUNING.lookWander,
     ),
@@ -281,6 +314,13 @@ export function normalizeVibeCameraTuning(
       base.pathPreviewMarkerSize ??
         DEFAULT_VIBE_CAMERA_TUNING.pathPreviewMarkerSize,
     ),
+    pathHorizonRadiusScale: clampPathHorizonRadiusScale(
+      base.pathHorizonRadiusScale ??
+        DEFAULT_VIBE_CAMERA_TUNING.pathHorizonRadiusScale,
+    ),
+    pathHorizonSpherePreview:
+      base.pathHorizonSpherePreview ??
+      DEFAULT_VIBE_CAMERA_TUNING.pathHorizonSpherePreview,
   };
 }
 
@@ -305,12 +345,15 @@ export function vibeCameraProfileMatchesTuning(
     near(tuning.speed, base.speed) &&
     near(tuning.pullOut, base.pullOut) &&
     near(tuning.pathWildness, base.pathWildness) &&
+    near(tuning.pathTraverse, base.pathTraverse) &&
     near(tuning.lookWander, base.lookWander) &&
     tuning.pathQueueSize === base.pathQueueSize &&
     near(tuning.maxSegmentChord, base.maxSegmentChord) &&
     tuning.pathPreview === base.pathPreview &&
     tuning.pathPreviewMarkers === base.pathPreviewMarkers &&
-    near(tuning.pathPreviewMarkerSize, base.pathPreviewMarkerSize)
+    near(tuning.pathPreviewMarkerSize, base.pathPreviewMarkerSize) &&
+    near(tuning.pathHorizonRadiusScale, base.pathHorizonRadiusScale) &&
+    tuning.pathHorizonSpherePreview === base.pathHorizonSpherePreview
   );
 }
 
@@ -408,5 +451,8 @@ export function resolveVibeCameraParams(
     pathPreview: normalized.pathPreview,
     pathPreviewMarkers: normalized.pathPreviewMarkers,
     pathPreviewMarkerRadius: normalized.pathPreviewMarkerSize,
+    horizonRadiusScale: normalized.pathHorizonRadiusScale,
+    pathHorizonSpherePreview: normalized.pathHorizonSpherePreview,
+    pathTraverse: normalized.pathTraverse,
   };
 }
