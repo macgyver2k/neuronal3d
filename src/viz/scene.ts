@@ -662,8 +662,10 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   function vibeArcSegmentHandlesForElevation(
     segment: VibeCamCurveSeg,
+    previous: VibeCamCurveSeg | null,
     focus: THREE.Vector3,
     elevationPass: VibePathElevationPass,
+    lockPreviousEndHandle: boolean,
   ): void {
     if (elevationPass === 'side') return;
 
@@ -688,6 +690,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       vibeScratchLerp.y,
       handleBlend,
     );
+    vibeEnforceBezierJoinContinuity(segment, previous, lockPreviousEndHandle);
   }
 
   function vibeJointOutgoingTangent(
@@ -701,43 +704,114 @@ export function createScene(mount: NeuronalGlSceneMount): {
     return true;
   }
 
-  /** C¹ am Nahtpunkt: gemeinsame Tangente und gleiche Handle-Länge (kein Ruckeln). */
+  /** Naht-Tangente: Bezier-Ausgang des Vorgängers, optional mit Simulationsrichtung gemischt. */
+  function vibeResolveJointTangent(
+    previous: VibeCamCurveSeg,
+    out: THREE.Vector3,
+  ): boolean {
+    if (!vibeJointOutgoingTangent(previous, out)) return false;
+
+    const continuity = vibeCamParams.pathContinuity;
+    if (continuity >= 0.995) return true;
+
+    const startVelocity = vibeGravityPathState.segmentStartVelocity;
+    if (startVelocity.lengthSq() < 1e-6) return true;
+
+    vibeScratchLerp.copy(startVelocity).normalize();
+    out
+      .multiplyScalar(continuity)
+      .addScaledVector(vibeScratchLerp, 1 - continuity);
+    if (out.lengthSq() < 1e-8) return vibeJointOutgoingTangent(previous, out);
+    out.normalize();
+    return true;
+  }
+
+  function vibeShouldLockPreviousEndHandle(
+    previous: VibeCamCurveSeg | null,
+  ): boolean {
+    if (!previous || vibeSegQueue.length === 0) return false;
+    if (previous !== vibeSegQueue[0]) return false;
+    return vibeSegElapsed > 1e-4;
+  }
+
+  function vibeAlignTangentWithChord(
+    tangent: THREE.Vector3,
+    chordDirection: THREE.Vector3,
+  ): void {
+    if (tangent.dot(chordDirection) < 0) tangent.negate();
+  }
+
+  /** Eingang p1: Naht-Tangente; Ausgang p2: Simulations-/Sehnenrichtung (nicht identisch). */
+  function vibeResolveSegmentStartTangent(
+    segment: VibeCamCurveSeg,
+    previous: VibeCamCurveSeg | null,
+    out: THREE.Vector3,
+  ): boolean {
+    if (previous && vibeResolveJointTangent(previous, out)) return true;
+
+    if (vibeGravityPathState.segmentStartVelocity.lengthSq() > 1e-6) {
+      out.copy(vibeGravityPathState.segmentStartVelocity).normalize();
+      return true;
+    }
+
+    out.copy(segment.p1).sub(segment.p0);
+    if (out.lengthSq() < 1e-6) out.copy(segment.p3).sub(segment.p0);
+    if (out.lengthSq() < 1e-6) return false;
+    out.normalize();
+    return true;
+  }
+
+  function vibeResolveSegmentEndTangent(
+    segment: VibeCamCurveSeg,
+    out: THREE.Vector3,
+  ): boolean {
+    const chordDirection = vibeIdealUp.copy(segment.p3).sub(segment.p0);
+    const chordLength = chordDirection.length();
+    if (chordLength < 1e-5) return false;
+    chordDirection.multiplyScalar(1 / chordLength);
+
+    if (vibeGravityPathState.velocity.lengthSq() > 1e-6) {
+      out.copy(vibeGravityPathState.velocity).normalize();
+    } else {
+      out.copy(segment.p3).sub(segment.p2);
+      if (out.lengthSq() < 1e-6) out.copy(chordDirection);
+      else out.normalize();
+    }
+
+    const chordAlignment = out.dot(chordDirection);
+    if (chordAlignment < 0.35) {
+      const blend = THREE.MathUtils.clamp(1 - chordAlignment * 1.4, 0.35, 0.92);
+      out.lerp(chordDirection, blend).normalize();
+    }
+    return true;
+  }
+
+  /** C¹ am Nahtpunkt; p2 entlang Ausgangstangente (vermeidet „gerade dann Knick“). */
   function vibeEnforceBezierJoinContinuity(
     segment: VibeCamCurveSeg,
     previous: VibeCamCurveSeg | null,
+    lockPreviousEndHandle = false,
   ): void {
     const chord = Math.max(segment.p0.distanceTo(segment.p3), 1e-5);
     const handleSpan = chord * 0.48;
     const handleMin = chord * 0.24;
+    const chordDirection = vibeScratchLerp.copy(segment.p3).sub(segment.p0);
+    chordDirection.multiplyScalar(1 / chord);
 
-    if (vibeGravityPathState.segmentStartVelocity.lengthSq() > 1e-6) {
-      vibeScratchDir
-        .copy(vibeGravityPathState.segmentStartVelocity)
-        .normalize();
-    } else if (previous && vibeJointOutgoingTangent(previous, vibeScratchDir)) {
-      /* Naht-Tangente = Ausgangsrichtung des Vorgängers */
-    } else {
-      vibeScratchDir.copy(segment.p1).sub(segment.p0);
-      if (vibeScratchDir.lengthSq() < 1e-6) {
-        vibeScratchDir.copy(segment.p3).sub(segment.p0);
-      }
-      if (vibeScratchDir.lengthSq() < 1e-6) return;
-      vibeScratchDir.normalize();
+    if (!vibeResolveSegmentStartTangent(segment, previous, vibeScratchDir))
+      return;
+    if (!previous) {
+      vibeAlignTangentWithChord(vibeScratchDir, chordDirection);
     }
 
-    const dotCheck = vibeScratchDir.dot(
-      vibeIdealUp.copy(segment.p3).sub(segment.p0),
-    );
-    if (dotCheck < 0) vibeScratchDir.negate();
+    if (!vibeResolveSegmentEndTangent(segment, vibeIdealUp)) return;
 
     const segmentEndLength = THREE.MathUtils.clamp(
       segment.p3.distanceTo(segment.p2),
       handleMin,
       handleSpan,
     );
-    segment.p2
-      .copy(segment.p3)
-      .addScaledVector(vibeScratchDir, -segmentEndLength);
+    segment.p2.copy(segment.p3).addScaledVector(vibeIdealUp, -segmentEndLength);
 
     if (!previous) {
       const segmentStartLength = THREE.MathUtils.clamp(
@@ -752,14 +826,20 @@ export function createScene(mount: NeuronalGlSceneMount): {
     }
 
     const jointLength = THREE.MathUtils.clamp(
-      Math.max(
-        previous.p3.distanceTo(previous.p2),
-        segment.p1.distanceTo(segment.p0),
-      ),
+      lockPreviousEndHandle
+        ? segment.p1.distanceTo(segment.p0)
+        : Math.max(
+            previous.p3.distanceTo(previous.p2),
+            segment.p1.distanceTo(segment.p0),
+          ),
       handleMin,
       handleSpan,
     );
-    previous.p2.copy(previous.p3).addScaledVector(vibeScratchDir, -jointLength);
+    if (!lockPreviousEndHandle) {
+      previous.p2
+        .copy(previous.p3)
+        .addScaledVector(vibeScratchDir, -jointLength);
+    }
     segment.p1.copy(segment.p0).addScaledVector(vibeScratchDir, jointLength);
   }
 
@@ -832,7 +912,8 @@ export function createScene(mount: NeuronalGlSceneMount): {
       .copy(segment.p3)
       .addScaledVector(vibeGravityPathState.velocity, -handleLength);
 
-    vibeEnforceBezierJoinContinuity(segment, previous);
+    const lockPreviousEndHandle = vibeShouldLockPreviousEndHandle(previous);
+    vibeEnforceBezierJoinContinuity(segment, previous, lockPreviousEndHandle);
     const horizonLimit = resolveVibeGravityHorizonLimit(
       vibeCamParams.pathTraverse,
     );
@@ -850,6 +931,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
       vibeHorizonRadii,
       horizonLimit,
     );
+    vibeEnforceBezierJoinContinuity(segment, previous, lockPreviousEndHandle);
   }
 
   function clampVibeSegmentEndToMaxChord(
@@ -992,7 +1074,13 @@ export function createScene(mount: NeuronalGlSceneMount): {
       elevationPass,
     );
     vibePlaceCurveHandles(seg, null, vibePathGravityFocus);
-    vibeArcSegmentHandlesForElevation(seg, vibePathGravityFocus, elevationPass);
+    vibeArcSegmentHandlesForElevation(
+      seg,
+      null,
+      vibePathGravityFocus,
+      elevationPass,
+      false,
+    );
     refreshVibeSegmentMotionMetadata(seg);
 
     seg.l3.copy(seg.p3);
@@ -1035,10 +1123,12 @@ export function createScene(mount: NeuronalGlSceneMount): {
     const lookScatter = params.lookWanderSpeed * 32;
     const joinVelocity = vibeIdealCam.copy(vibeGravityPathState.velocity);
 
-    vibePlaceSegmentEnd(seg.p0, seg.p3, vibePathGravityFocus, prev.dur);
-
     const chordPrev = Math.max(0.52, prev.p0.distanceTo(prev.p3));
-    const chordNew = seg.p0.distanceTo(seg.p3);
+    const joinSpeed = Math.max(joinVelocity.length(), vibeResolveFlightSpeed());
+    vibeScratchLerp
+      .copy(seg.p0)
+      .addScaledVector(joinVelocity, joinSpeed * prev.dur * 0.82);
+    const chordNew = seg.p0.distanceTo(vibeScratchLerp);
     const legato =
       params.legatoMin + Math.random() * (params.legatoMax - params.legatoMin);
     let ratio = chordNew / chordPrev;
@@ -1068,6 +1158,15 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
     vibeGravityPathState.velocity.copy(joinVelocity);
     vibeGravityPathState.segmentStartVelocity.copy(joinVelocity);
+    if (vibeJointOutgoingTangent(prev, vibeScratchDir)) {
+      const tangentSpeed = Math.max(
+        joinVelocity.length(),
+        vibeResolveFlightSpeed() * 0.4,
+      );
+      vibeGravityPathState.segmentStartVelocity
+        .copy(vibeScratchDir)
+        .multiplyScalar(tangentSpeed);
+    }
     const elevationPass = vibePickPathElevationPass();
     seg.elevationPass = elevationPass;
     vibeGravityPathState.elevationPass = elevationPass;
@@ -1077,8 +1176,15 @@ export function createScene(mount: NeuronalGlSceneMount): {
       vibePathGravityFocus,
       elevationPass,
     );
+    const lockPreviousEndHandle = vibeShouldLockPreviousEndHandle(prev);
     vibePlaceCurveHandles(seg, prev, vibePathGravityFocus);
-    vibeArcSegmentHandlesForElevation(seg, vibePathGravityFocus, elevationPass);
+    vibeArcSegmentHandlesForElevation(
+      seg,
+      prev,
+      vibePathGravityFocus,
+      elevationPass,
+      lockPreviousEndHandle,
+    );
     refreshVibeSegmentMotionMetadata(seg);
 
     seg.l1.copy(prev.l3).add(vibeScratchLerp.copy(prev.l3).sub(prev.p2));
