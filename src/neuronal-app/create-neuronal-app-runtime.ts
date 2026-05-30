@@ -50,6 +50,7 @@ import { getMnistTestDataRef, getMnistTrainDataRef } from './mnist-data';
 import { packMnistTrainForTransfer } from './mnist-train-pack';
 import { loadSelectedModelIntoNet, selectModelById } from './model-selection';
 import { NeuronalTrainWorkerHost } from './neuronal-train-worker-host';
+import type { NeuronalTrainWorkerWorkerToHostMessage } from './neuronal-train-worker.protocol';
 import { NeuronalVizRenderWorkerHost } from './neuronal-viz-worker-host';
 import { RT } from './runtime-state';
 import {
@@ -74,8 +75,14 @@ import {
   parseInputLayerVizLayout,
   publishVizState,
   reapplyViz3dAfterLayoutChange,
+  syncVizWeightsFromNet,
   zeroActivationsForLayout,
 } from './viz-sync';
+
+type PendingTrainVizSnapshot = Extract<
+  NeuronalTrainWorkerWorkerToHostMessage,
+  { type: 'trainSnapshot' }
+>;
 
 function renderFrame(): void {
   RT.renderDisplayBound();
@@ -110,6 +117,7 @@ export async function createNeuronalAppRuntime(
     RT.appStore.dispatch(NeuronalActions.lastTrainMetricsReset());
     upsertModelEntry(entry);
     applyEpochHistoryToUi(entry.id);
+    syncVizWeightsFromNet();
     publishVizState('idle', zeroActivationsForLayout());
     setStatus(`Neues Modell: ${entry.name}`);
     publishKernelCaps();
@@ -259,7 +267,7 @@ export async function createNeuronalAppRuntime(
   const vizSurface = neuronalVizHost.vizSurface;
   RT.net3d = vizSurface;
   vizSurface.applyVizNetworkColors(networkColorBaseline);
-  if (RT.net) vizSurface.setWeights(RT.net.weights);
+  syncVizWeightsFromNet();
   RT.stopAnimCleanup = (): void => {
     neuronalVizHost?.stopMainVizTickOnly();
   };
@@ -388,7 +396,7 @@ export async function createNeuronalAppRuntime(
     networkColorBaseline = { ...colors };
     if (RT.net3d) {
       RT.net3d.applyVizNetworkColors(networkColorBaseline);
-      if (RT.net) RT.net3d.setWeights(RT.net.weights);
+      syncVizWeightsFromNet();
     }
     renderFrame();
   };
@@ -438,6 +446,36 @@ export async function createNeuronalAppRuntime(
   let testCarouselTimer: number | null = null;
   let testCarouselIndex = 0;
   const TEST_CAROUSEL_MS = 2800;
+
+  let pendingTrainVizSnapshot: PendingTrainVizSnapshot | null = null;
+  let trainVizSnapshotRaf = 0;
+
+  const flushPendingTrainVizSnapshot = (): void => {
+    trainVizSnapshotRaf = 0;
+    const snapshot = pendingTrainVizSnapshot;
+    pendingTrainVizSnapshot = null;
+    if (!snapshot) return;
+    publishVizState('train', snapshot.activations, snapshot.weights);
+    setStatus(
+      `Ep ${fmtInt(snapshot.epoch + 1, 3)}  Batch ${fmtInt(snapshot.batchIndex, 5)}  loss ${fmtFloat(snapshot.loss, 8, 4)}  acc ${fmtFloat(snapshot.trainAccBatch * 100, 6, 1)}%`,
+    );
+  };
+
+  const schedulePendingTrainVizSnapshot = (
+    snapshot: PendingTrainVizSnapshot,
+  ): void => {
+    pendingTrainVizSnapshot = snapshot;
+    if (trainVizSnapshotRaf !== 0) return;
+    trainVizSnapshotRaf = requestAnimationFrame(flushPendingTrainVizSnapshot);
+  };
+
+  const cancelPendingTrainVizSnapshot = (): void => {
+    if (trainVizSnapshotRaf !== 0) {
+      cancelAnimationFrame(trainVizSnapshotRaf);
+      trainVizSnapshotRaf = 0;
+    }
+    pendingTrainVizSnapshot = null;
+  };
 
   const clearTestCarouselTimer = (): void => {
     if (testCarouselTimer === null) return;
@@ -605,16 +643,7 @@ export async function createNeuronalAppRuntime(
           trainCfg,
           {
             onSnapshot: (snapshot) => {
-              setTimeout(() => {
-                publishVizState(
-                  'train',
-                  snapshot.activations,
-                  snapshot.weights,
-                );
-                setStatus(
-                  `Ep ${fmtInt(snapshot.epoch + 1, 3)}  Batch ${fmtInt(snapshot.batchIndex, 5)}  loss ${fmtFloat(snapshot.loss, 8, 4)}  acc ${fmtFloat(snapshot.trainAccBatch * 100, 6, 1)}%`,
-                );
-              }, 0);
+              schedulePendingTrainVizSnapshot(snapshot);
             },
             onEpochEnd: (epochSummary) => {
               const row: PersistedEpochRow = {
@@ -674,7 +703,11 @@ export async function createNeuronalAppRuntime(
           });
         }
       }
-      if (RT.net) publishVizState('idle', zeroActivationsForLayout());
+      cancelPendingTrainVizSnapshot();
+      if (RT.net) {
+        syncVizWeightsFromNet();
+        publishVizState('idle', zeroActivationsForLayout());
+      }
       const act = RT.nLatest.modelCollection.activeModelId
         ? RT.nLatest.modelCollection.models.find(
             (m) => m.id === RT.nLatest.modelCollection.activeModelId,
@@ -736,6 +769,7 @@ export async function createNeuronalAppRuntime(
         });
       } catch {}
       cancelLiveCanvasInferRaf();
+      cancelPendingTrainVizSnapshot();
       cancelPendingVizColorPreviews();
       clearTestCarouselTimer();
       RT.appStore.dispatch(NeuronalActions.trainingStopRequested());

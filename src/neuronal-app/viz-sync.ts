@@ -32,13 +32,16 @@ export function publishVizState(
   pendingVizState = {
     stamp: ++vizStampCounter,
     mode,
-    activations: activations.map((a) => [...a]),
-    weightsForViz:
-      weightsForViz === undefined
-        ? undefined
-        : weightsForViz.map((matrix) => matrix.map((row) => [...row])),
+    activations: activations.map((layer) => [...layer]),
+    weightsForViz,
   };
   void flushVizState();
+}
+
+/** Gewichte nur bei Modellwechsel/Training — nicht bei jedem Infer erneut senden. */
+export function syncVizWeightsFromNet(): void {
+  if (!RT.net3d || !RT.net) return;
+  RT.net3d.setWeights(RT.net.weights);
 }
 
 export function flushVizState(): boolean {
@@ -55,9 +58,9 @@ export function flushVizState(): boolean {
     pendingVizState.mode === 'infer' ? pendingVizState.activations : null,
   );
   RT.net3d.setActivations(pendingVizState.activations);
-  const weightMatrices =
-    pendingVizState.weightsForViz ?? RT.net?.weights ?? null;
-  if (weightMatrices) RT.net3d.setWeights(weightMatrices);
+  if (pendingVizState.weightsForViz) {
+    RT.net3d.setWeights(pendingVizState.weightsForViz);
+  }
   lastAppliedVizStamp = pendingVizState.stamp;
   return true;
 }

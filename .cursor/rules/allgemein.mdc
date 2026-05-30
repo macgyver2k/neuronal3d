@@ -1,0 +1,10 @@
+---
+description: 
+alwaysApply: true
+---
+
+Ändere nie selbstständig große teile des bestehenden Codes, außer du wirst explizit dazu aufgewordert.
+Verschiebe Dateien immer über ein Tool call.
+Benutze immer konkrete Bezeichner mit kompletten Worten und keine Bezeichner mit nur einem Buchstaben und keine abkürzungen
+
+Benutze wenn möglich einzeilige returns ohne Block.

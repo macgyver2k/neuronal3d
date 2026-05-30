@@ -13,9 +13,6 @@ let trainPaused = false;
 
 let trainShouldStop = false;
 
-const cloneWeightMatrices = (weights: number[][][]): number[][][] =>
-  weights.map((matrix) => matrix.map((row) => [...row]));
-
 const runTrainJob = async (
   message: Extract<
     NeuronalTrainWorkerHostToWorkerMessage,
@@ -32,7 +29,7 @@ const runTrainJob = async (
         workerScope.postMessage({
           type: 'trainSnapshot',
           ...snapshot,
-          weights: cloneWeightMatrices(net.weights),
+          weights: net.weights,
         } satisfies NeuronalTrainWorkerWorkerToHostMessage);
       },
       (summary) => {

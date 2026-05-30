@@ -1,0 +1,31 @@
+---
+description: 
+alwaysApply: true
+---
+
+# Formatierung
+
+Beim Erzeugen und Bearbeiten von Code immer die Projekt-.prettierrc einhalten:
+
+- Einrückung: 2 Leerzeichen (keine Tabs)
+- Anführungszeichen: single quotes
+- Semikolons: setzen
+- Trailing commas: überall wo erlaubt
+- Zeilenlänge: max. 80 Zeichen (printWidth 80)
+- Arrow-Funktionen: Klammern um Parameter weglassen wenn genau ein Parameter (arrowParens: avoid)
+- Objekt-Literale mehrzeilig: Klammer auf gleicher Zeile wie letztes Property (bracketSameLine: false)
+- Objekt-Wrap: collapse
+
+Zusätzlich: **Eine Leerzeile nach Blöcken einfügen.** Konkret:
+
+- Nach dem schließenden `}` einer Funktion
+- Nach dem schließenden `}` von if/else, switch, for, while, try/catch
+- Nach einer kompletten class-/interface-/type-Definition
+- Zwischen aufeinanderfolgenden Funktionen, Klassen oder Top-Level-Blöcken
+- Zwischen aufeinanderfolgenden Anweisungsblöcken innerhalb einer Funktion (z. B. zwischen mehrzeiligen const-/let-Deklarationen, nach .filter()/.sort()/.map()-Ketten, vor einem return)
+
+Nicht mehrere Leerzeilen hintereinander; genau eine Leerzeile nach dem Block, dann der nächste Block oder das Ende der Datei.
+
+# Iteration
+
+**reduce vor for-Loop:** Wenn eine Schleife einen Wert akkumuliert (z. B. Summe, Map/Objekt aufbauen, Array sammeln), immer `Array.prototype.reduce` (oder `.reduceRight` falls Reihenfolge relevant) verwenden statt einer `for`-/`for...of`-Schleife mit einer Variable außerhalb.

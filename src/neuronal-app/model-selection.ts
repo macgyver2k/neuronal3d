@@ -3,7 +3,11 @@ import { NeuronalActions } from '../app/store/neuronal/neuronal.actions';
 import { RT } from './runtime-state';
 import { publishKernelCaps, setStatus } from './store-dispatch';
 import { applyStoredModelToNet } from './stored-model-utils';
-import { publishVizState, zeroActivationsForLayout } from './viz-sync';
+import {
+  publishVizState,
+  syncVizWeightsFromNet,
+  zeroActivationsForLayout,
+} from './viz-sync';
 
 export function loadSelectedModelIntoNet(id: string): boolean {
   const entry = RT.nLatest.modelCollection.models.find((m) => m.id === id);
@@ -22,6 +26,7 @@ export function loadSelectedModelIntoNet(id: string): boolean {
       routeModelSegmentFromUrl: routeSegment,
     }),
   );
+  syncVizWeightsFromNet();
   publishVizState('idle', zeroActivationsForLayout());
   publishKernelCaps();
   return true;
