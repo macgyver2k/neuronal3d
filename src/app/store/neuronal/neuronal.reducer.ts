@@ -27,6 +27,7 @@ import type {
   StoredModelEntry,
 } from '../../core/model.types';
 import { normalizeTrainHyperparams } from '../../core/train-hyperparams';
+import { loadViz3dFromStorage } from '../../core/viz3d-storage';
 import {
   DAISYUI_DEFAULT_THEME,
   isDaisyUiThemeName,
@@ -34,6 +35,7 @@ import {
 import { NeuronalActions } from './neuronal.actions';
 import {
   createInitialNeuronalState,
+  createInitialViz3dState,
   initialEpochDisplay,
   type NeuronalState,
 } from './neuronal.state';
@@ -82,7 +84,10 @@ function epochRowsForId(s: NeuronalState, id: string): PersistedEpochRow[] {
   return [...(s.epochByModelId[id] ?? [])];
 }
 
-const initial = createInitialNeuronalState();
+const initial: NeuronalState = {
+  ...createInitialNeuronalState(),
+  viz3d: loadViz3dFromStorage() ?? createInitialViz3dState(),
+};
 
 export const neuronalReducer = createReducer<NeuronalState>(
   initial,

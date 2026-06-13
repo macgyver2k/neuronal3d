@@ -34,9 +34,9 @@ import { TrainInferThumbComponent } from './train-infer-thumb.component';
   template: `
     <article
       id="dockInfer"
-      class="card border-base-300 bg-base-200 rounded-box flex min-h-0 flex-1 flex-col gap-3 border shadow-xl"
+      class="card border-base-300 bg-base-200 rounded-box flex min-h-0 flex-col gap-3 border shadow-xl lg:flex-1"
     >
-      <div class="card-body min-h-0 flex flex-1 flex-col gap-3 p-5">
+      <div class="card-body min-h-0 flex flex-1 flex-col gap-3 p-3 sm:p-5">
         <div class="shrink-0">
           <h2 class="card-title text-base">Inferenz</h2>
           <p class="text-base-content/60 text-xs">

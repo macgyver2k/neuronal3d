@@ -1,3 +1,8 @@
+import {
+  isMobileQualityProfile,
+  MOBILE_POINTER_MOVE_MIN_MS,
+  mobilePixelRatioCap,
+} from '../viz/mobile-quality';
 import type {
   HiddenLayerVizLayout,
   InputLayerVizLayout,
@@ -11,6 +16,7 @@ import type {
 } from '../viz/viz-appearance';
 import { LAYER_SIZES } from './constants';
 import type {
+  VizCanvasPointerInit,
   VizWorkerHostToWorkerMessage,
   VizWorkerWorkerToHostMessage,
 } from './neuronal-viz-worker.protocol';
@@ -38,13 +44,20 @@ function isTypingFocusTarget(target: EventTarget | null): boolean {
 function pointerInitLocal(
   canvas: HTMLCanvasElement,
   source: PointerEvent,
-): PointerEventInit {
+): VizCanvasPointerInit {
   const rect = canvas.getBoundingClientRect();
+  const localX = source.clientX - rect.left;
+  const localY = source.clientY - rect.top;
+
   return {
     pointerId: source.pointerId,
     pointerType: source.pointerType,
-    clientX: source.clientX - rect.left,
-    clientY: source.clientY - rect.top,
+    clientX: localX,
+    clientY: localY,
+    pageX: localX,
+    pageY: localY,
+    offsetX: localX,
+    offsetY: localY,
     buttons: source.buttons,
     button: source.button,
     ctrlKey: source.ctrlKey,
@@ -56,6 +69,15 @@ function pointerInitLocal(
     isPrimary: source.isPrimary,
     pressure: source.pressure,
   };
+}
+
+function isVizTouchLikePointer(event: PointerEvent): boolean {
+  return event.pointerType === 'touch' || event.pointerType === 'pen';
+}
+
+function preventTouchScroll(event: PointerEvent): void {
+  if (!isVizTouchLikePointer(event)) return;
+  event.preventDefault();
 }
 
 function wheelInitLocal(
@@ -135,6 +157,23 @@ class NeuronalVizWorkerSurfaceBridge implements NeuronalVizSurface {
     this.postToWorker({ type: 'setActivations', activations });
   }
 
+  applyVizState(
+    mode: 'idle' | 'train' | 'infer',
+    activations: number[][],
+    predictedDigit: number | null,
+    expectedDigit: number | null,
+    weightsForViz?: number[][][],
+  ): void {
+    this.postToWorker({
+      type: 'applyVizState',
+      mode,
+      activations,
+      predictedDigit,
+      expectedDigit,
+      weightsForViz,
+    });
+  }
+
   setHiddenLayerLayout(index: number, layout: HiddenLayerVizLayout): void {
     this.postToWorker({ type: 'setHiddenLayerLayout', index, layout });
   }
@@ -181,12 +220,50 @@ export class NeuronalVizRenderWorkerHost {
   private readonly surfaceBridge: NeuronalVizWorkerSurfaceBridge;
   private latestPixelRatio = 1;
   private fpsSampleListener: ((framesPerSecond: number) => void) | null = null;
+  private pointerMoveRaf = 0;
+  private pointerMoveFlushAt = 0;
+  private pendingPointerMove: VizCanvasPointerInit | null = null;
+  private readonly mobileQuality = isMobileQualityProfile();
 
   constructor(private readonly container: HTMLElement) {
     this.surfaceBridge = new NeuronalVizWorkerSurfaceBridge((message) =>
       this.postToWorker(message),
     );
     this.vizSurface = this.surfaceBridge;
+  }
+
+  private postPointerMove(initDict: VizCanvasPointerInit): void {
+    if (!this.mobileQuality) {
+      this.postToWorker({
+        type: 'canvasPointer',
+        eventType: 'pointermove',
+        initDict,
+      });
+      return;
+    }
+    this.pendingPointerMove = initDict;
+    const now = performance.now();
+    if (now - this.pointerMoveFlushAt >= MOBILE_POINTER_MOVE_MIN_MS) {
+      this.flushPendingPointerMove();
+      return;
+    }
+    if (this.pointerMoveRaf !== 0) return;
+    this.pointerMoveRaf = requestAnimationFrame(() => {
+      this.pointerMoveRaf = 0;
+      this.flushPendingPointerMove();
+    });
+  }
+
+  private flushPendingPointerMove(): void {
+    if (!this.pendingPointerMove) return;
+    const initDict = this.pendingPointerMove;
+    this.pendingPointerMove = null;
+    this.pointerMoveFlushAt = performance.now();
+    this.postToWorker({
+      type: 'canvasPointer',
+      eventType: 'pointermove',
+      initDict,
+    });
   }
 
   private postToWorker(message: VizWorkerHostToWorkerMessage): void {
@@ -202,7 +279,7 @@ export class NeuronalVizRenderWorkerHost {
   private pushResize(): void {
     if (!this.worker || !this.canvas) return;
     const { width, height } = this.measureDrawable();
-    this.latestPixelRatio = Math.min(window.devicePixelRatio, 2);
+    this.latestPixelRatio = mobilePixelRatioCap();
     this.worker.postMessage({
       type: 'resize',
       width,
@@ -262,10 +339,11 @@ export class NeuronalVizRenderWorkerHost {
     canvas.style.display = 'block';
     canvas.style.width = '100%';
     canvas.style.height = '100%';
+    canvas.style.touchAction = 'none';
     this.container.appendChild(canvas);
 
     const { width, height } = this.measureDrawable();
-    this.latestPixelRatio = Math.min(window.devicePixelRatio, 2);
+    this.latestPixelRatio = mobilePixelRatioCap();
     const offscreen = canvas.transferControlToOffscreen();
     await new Promise<void>((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
@@ -289,6 +367,7 @@ export class NeuronalVizRenderWorkerHost {
           height,
           pixelRatio: this.latestPixelRatio,
           layerSizes: LAYER_SIZES,
+          mobileQuality: this.mobileQuality,
         } satisfies VizWorkerHostToWorkerMessage,
         [offscreen],
       );
@@ -311,6 +390,14 @@ export class NeuronalVizRenderWorkerHost {
     window.addEventListener('resize', this.onWindowResize);
 
     const onPointerDown = (event: PointerEvent): void => {
+      preventTouchScroll(event);
+      if (isVizTouchLikePointer(event)) {
+        try {
+          canvas.setPointerCapture(event.pointerId);
+        } catch {
+          /* ignore capture errors on unsupported platforms */
+        }
+      }
       this.postToWorker({
         type: 'canvasPointer',
         eventType: 'pointerdown',
@@ -318,13 +405,22 @@ export class NeuronalVizRenderWorkerHost {
       });
     };
     const onPointerMove = (event: PointerEvent): void => {
-      this.postToWorker({
-        type: 'canvasPointer',
-        eventType: 'pointermove',
-        initDict: pointerInitLocal(canvas, event),
-      });
+      if (
+        isVizTouchLikePointer(event) &&
+        canvas.hasPointerCapture(event.pointerId)
+      ) {
+        event.preventDefault();
+      }
+      this.postPointerMove(pointerInitLocal(canvas, event));
     };
     const onPointerUp = (event: PointerEvent): void => {
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        try {
+          canvas.releasePointerCapture(event.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
       this.postToWorker({
         type: 'canvasPointer',
         eventType: 'pointerup',
@@ -332,6 +428,13 @@ export class NeuronalVizRenderWorkerHost {
       });
     };
     const onPointerCancel = (event: PointerEvent): void => {
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        try {
+          canvas.releasePointerCapture(event.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
       this.postToWorker({
         type: 'canvasPointer',
         eventType: 'pointercancel',
@@ -353,8 +456,17 @@ export class NeuronalVizRenderWorkerHost {
       });
     };
 
-    canvas.addEventListener('pointerdown', onPointerDown);
-    canvas.addEventListener('pointermove', onPointerMove);
+    const pointerListenerOptions: AddEventListenerOptions = { passive: false };
+    canvas.addEventListener(
+      'pointerdown',
+      onPointerDown,
+      pointerListenerOptions,
+    );
+    canvas.addEventListener(
+      'pointermove',
+      onPointerMove,
+      pointerListenerOptions,
+    );
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerCancel);
     canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -392,8 +504,16 @@ export class NeuronalVizRenderWorkerHost {
     this.stopMainVizTick = this.startMainThreadVizTick();
 
     this.detachCanvasListeners = (): void => {
-      canvas.removeEventListener('pointerdown', onPointerDown);
-      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener(
+        'pointerdown',
+        onPointerDown,
+        pointerListenerOptions,
+      );
+      canvas.removeEventListener(
+        'pointermove',
+        onPointerMove,
+        pointerListenerOptions,
+      );
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointercancel', onPointerCancel);
       canvas.removeEventListener('wheel', onWheel);
@@ -463,6 +583,11 @@ export class NeuronalVizRenderWorkerHost {
   destroy(): void {
     this.setFpsReporting(false, null);
     this.stopMainVizTickOnly();
+    if (this.pointerMoveRaf !== 0) {
+      cancelAnimationFrame(this.pointerMoveRaf);
+      this.pointerMoveRaf = 0;
+    }
+    this.pendingPointerMove = null;
     window.removeEventListener('resize', this.onWindowResize);
     if (this.resizeObserverRaf !== 0) {
       cancelAnimationFrame(this.resizeObserverRaf);

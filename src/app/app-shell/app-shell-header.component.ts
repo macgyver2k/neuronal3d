@@ -23,21 +23,23 @@ import { ThemeSwitcherComponent } from '../workspace-ui/theme-switcher.component
   imports: [RouterLink, ThemeSwitcherComponent, NeuronalModelBarComponent],
   template: `
     <header
-      class="border-base-200 bg-base-100 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2 shadow-sm"
+      class="border-base-200 bg-base-100 flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2 shadow-sm sm:gap-3 sm:px-4"
     >
       <nav
-        class="breadcrumbs text-sm min-w-0 flex flex-row gap-3"
+        class="breadcrumbs min-w-0 flex w-full flex-col gap-2 text-sm sm:w-auto sm:flex-row sm:items-center sm:gap-3"
         aria-label="Brotkrümel"
       >
-        <ul>
-          <li>
-            <a routerLink="/" class="link-hover link font-medium text-2xl"
+        <ul class="flex min-w-0 flex-wrap items-center gap-2">
+          <li class="shrink-0">
+            <a
+              routerLink="/"
+              class="link-hover link text-lg font-medium sm:text-2xl"
               >Modelle</a
             >
           </li>
-          <li class="min-w-0 max-w-full sm:max-w-md">
+          <li class="min-w-0 max-w-full flex-1 sm:max-w-md sm:flex-none">
             <select
-              class="select select-bordered w-full min-w-40 max-w-full"
+              class="select select-bordered select-sm w-full min-w-0 max-w-full sm:select-md sm:min-w-40"
               aria-label="Aktives Modell"
               [disabled]="modelBar().dropdownDisabled"
               [value]="selectedModelIdValue()"
@@ -65,11 +67,13 @@ import { ThemeSwitcherComponent } from '../workspace-ui/theme-switcher.component
             </select>
           </li>
         </ul>
-        <div class="justify-self-start">
+        <div class="min-w-0 w-full sm:w-auto">
           <app-neuronal-model-bar />
         </div>
       </nav>
-      <div class="flex shrink-0 items-center gap-2">
+      <div
+        class="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto"
+      >
         <app-theme-switcher />
       </div>
     </header>

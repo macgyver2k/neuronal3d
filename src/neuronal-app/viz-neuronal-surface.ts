@@ -19,6 +19,13 @@ export interface NeuronalVizSurface {
     activations: number[][] | null,
   ): void;
   setActivations(activations: number[][]): void;
+  applyVizState(
+    mode: 'idle' | 'train' | 'infer',
+    activations: number[][],
+    predictedDigit: number | null,
+    expectedDigit: number | null,
+    weightsForViz?: number[][][],
+  ): void;
   setHiddenLayerLayout(index: number, layout: HiddenLayerVizLayout): void;
   setHiddenLayerLayoutScale(index: number, scale: number): void;
   setInputLayerLayout(layout: InputLayerVizLayout): void;

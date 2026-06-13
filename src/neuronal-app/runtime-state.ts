@@ -2,6 +2,7 @@ import { Store } from '@ngrx/store';
 import type { AppState } from '../app/store/app.state';
 import type { NeuronalState } from '../app/store/neuronal/neuronal.state';
 import type { MLP } from '../nn/network';
+import type { NeuronalInferWorkerHost } from './neuronal-infer-worker-host';
 import type { ReconcileWorkspaceUrlForModelSelection } from './types';
 import type { NeuronalVizSurface } from './viz-neuronal-surface';
 
@@ -21,6 +22,7 @@ export const RT = {
   nLatest: null as unknown as NeuronalState,
   net: null as MLP | null,
   net3d: null as NeuronalVizSurface | null,
+  inferWorkerHost: null as NeuronalInferWorkerHost | null,
   inferCounter: 0,
   lastInferSampleIndex: -1,
   lastInferActsDebug: null as number[][] | null,

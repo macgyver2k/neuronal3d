@@ -51,6 +51,8 @@ export type NeuronalGlSceneWorkerMount = {
   orbitDomSurface: WorkerCanvasDomSurfaceStub;
   /** Aktuelles Geräte-Pixelverhältnis (vom Hauptthread gespiegelt). */
   getPixelRatio: () => number;
+  /** Reduzierte Render-Qualität für schwache Geräte. */
+  mobileQuality?: boolean;
 };
 
 export type NeuronalGlSceneMount =
@@ -124,6 +126,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
   const isDom = mount.mode === 'dom';
   const domContainer = isDom ? mount.container : null;
   const orbitDomSurface = isDom ? null : mount.orbitDomSurface;
+  const mobileQuality = mount.mode === 'worker' && mount.mobileQuality === true;
 
   const drawableSize = (): { w: number; h: number } => {
     if (isDom && domContainer) {
@@ -142,7 +145,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   const effectivePixelRatio = (): number => {
     if (isDom) return Math.min(window.devicePixelRatio, 2);
-    return Math.min(mount.getPixelRatio(), 2);
+    return Math.min(mount.getPixelRatio(), mobileQuality ? 1 : 2);
   };
 
   const scene = new THREE.Scene();
@@ -166,8 +169,12 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   const renderer = new THREE.WebGLRenderer(
     isDom
-      ? { antialias: true, alpha: true }
-      : { antialias: true, alpha: true, canvas: mount.offscreenCanvas },
+      ? { antialias: !mobileQuality, alpha: true }
+      : {
+          antialias: !mobileQuality,
+          alpha: true,
+          canvas: mount.offscreenCanvas,
+        },
   );
   const updateCanvasDomStyle = isDom;
   renderer.setPixelRatio(effectivePixelRatio());
@@ -199,23 +206,28 @@ export function createScene(mount: NeuronalGlSceneMount): {
   key.position.set(7, 10, 8);
   scene.add(key);
 
-  const fill = new THREE.DirectionalLight(
+  let fill: THREE.DirectionalLight | null = null;
+  let rim: THREE.DirectionalLight | null = null;
+  let backAccent: THREE.PointLight | null = null;
+  const accentLightScale = mobileQuality ? 0.55 : 1;
+
+  fill = new THREE.DirectionalLight(
     parseInt(DEFAULT_VIZ_LIGHT_COLORS.fill.slice(1), 16),
-    1.6,
+    1.6 * accentLightScale,
   );
   fill.position.set(-6, 4, -3);
   scene.add(fill);
 
-  const rim = new THREE.DirectionalLight(
+  rim = new THREE.DirectionalLight(
     parseInt(DEFAULT_VIZ_LIGHT_COLORS.rim.slice(1), 16),
-    1.2,
+    1.2 * accentLightScale,
   );
   rim.position.set(-2, 7, 12);
   scene.add(rim);
 
-  const backAccent = new THREE.PointLight(
+  backAccent = new THREE.PointLight(
     parseInt(DEFAULT_VIZ_LIGHT_COLORS.backAccent.slice(1), 16),
-    14,
+    14 * accentLightScale,
     24,
     2,
   );
@@ -223,7 +235,7 @@ export function createScene(mount: NeuronalGlSceneMount): {
   scene.add(backAccent);
 
   const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(60, 96),
+    new THREE.CircleGeometry(60, mobileQuality ? 32 : 96),
     new THREE.MeshBasicMaterial({
       color: parseInt(DEFAULT_VIZ_SCENE_COLORS.floor.slice(1), 16),
     }),
@@ -1791,17 +1803,27 @@ export function createScene(mount: NeuronalGlSceneMount): {
 
   const applyVizLightColors = (next: VizLightColorSettings): void => {
     vibePathThemeLightColors = { ...next };
-    const sc = intensityScaleForLights(next);
-    hemi.intensity = LIGHT_INTENSITY_BASE.hemi * sc;
-    ambient.intensity = LIGHT_INTENSITY_BASE.ambient * sc;
-    key.intensity = LIGHT_INTENSITY_BASE.key * sc;
-    fill.intensity = LIGHT_INTENSITY_BASE.fill * sc;
-    rim.intensity = LIGHT_INTENSITY_BASE.rim * sc;
-    const pt = Math.min(
+    const intensityScale = intensityScaleForLights(next);
+    hemi.intensity = LIGHT_INTENSITY_BASE.hemi * intensityScale;
+    ambient.intensity = LIGHT_INTENSITY_BASE.ambient * intensityScale;
+    key.intensity = LIGHT_INTENSITY_BASE.key * intensityScale;
+    if (fill) {
+      fill.intensity =
+        LIGHT_INTENSITY_BASE.fill * intensityScale * accentLightScale;
+    }
+    if (rim) {
+      rim.intensity =
+        LIGHT_INTENSITY_BASE.rim * intensityScale * accentLightScale;
+    }
+    const pointIntensity = Math.min(
       8.5,
-      LIGHT_INTENSITY_BASE.point * sc * (0.45 + 0.55 * sc),
+      LIGHT_INTENSITY_BASE.point *
+        intensityScale *
+        (0.45 + 0.55 * intensityScale),
     );
-    backAccent.intensity = pt;
+    if (backAccent) {
+      backAccent.intensity = pointIntensity * accentLightScale;
+    }
     if (isValidHexColor6(next.hemiSky)) {
       hemi.color.setHex(parseInt(next.hemiSky.slice(1), 16));
     }
@@ -1814,13 +1836,13 @@ export function createScene(mount: NeuronalGlSceneMount): {
     if (isValidHexColor6(next.key)) {
       key.color.setHex(parseInt(next.key.slice(1), 16));
     }
-    if (isValidHexColor6(next.fill)) {
+    if (isValidHexColor6(next.fill) && fill) {
       fill.color.setHex(parseInt(next.fill.slice(1), 16));
     }
-    if (isValidHexColor6(next.rim)) {
+    if (isValidHexColor6(next.rim) && rim) {
       rim.color.setHex(parseInt(next.rim.slice(1), 16));
     }
-    if (isValidHexColor6(next.backAccent)) {
+    if (isValidHexColor6(next.backAccent) && backAccent) {
       backAccent.color.setHex(parseInt(next.backAccent.slice(1), 16));
     }
     if (

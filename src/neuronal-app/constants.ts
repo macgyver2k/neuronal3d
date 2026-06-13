@@ -21,4 +21,5 @@ export const INFER_DRAW_BRUSH_SIZE_MAX = 7;
 /** Referenz-Canvas-Kante (früher 320px) — weiche Pinselradien skalieren davon auf aktuelle `drawCanvas`-Größe. */
 export const SOFT_DAB_REF_SIDE = 320;
 
+/** @deprecated Nutze liveInferMinIntervalMs() aus mobile-quality. */
 export const LIVE_INFER_MIN_MS = 48;

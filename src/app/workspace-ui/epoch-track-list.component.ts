@@ -104,7 +104,7 @@ type EpochChartModel = {
                 } @else {
                   @for (r of view().rows; track rowKey(r)) {
                     <li
-                      class="border-base-300/80 bg-base-100/40 rounded-btn grid grid-cols-[3.2rem_4rem_1fr_auto] items-center gap-2 border p-2 font-mono text-[0.68rem] tabular-nums"
+                      class="border-base-300/80 bg-base-100/40 rounded-btn grid grid-cols-[2.5rem_3rem_1fr_auto] items-center gap-1.5 border p-2 font-mono text-[0.64rem] tabular-nums sm:grid-cols-[3.2rem_4rem_1fr_auto] sm:gap-2 sm:text-[0.68rem]"
                     >
                       <span class="text-base-content/60"
                         >R{{ runLabel(r.run) }}</span

@@ -15,19 +15,21 @@ import { selectNewModelDisabled } from '../store/neuronal/neuronal.selectors';
         <button
           id="btnNewModel"
           type="button"
-          class="btn btn-accent shrink-0"
+          class="btn btn-accent btn-sm min-w-0 flex-1 whitespace-normal sm:btn-md sm:flex-none sm:whitespace-nowrap"
           [disabled]="newModelDisabled()"
           (click)="newModel()"
         >
-          Neues Modell starten
+          <span class="sm:hidden">Neues Modell</span>
+          <span class="hidden sm:inline">Neues Modell starten</span>
         </button>
         <button
           id="btnExportJson"
           type="button"
-          class="btn btn-outline shrink-0"
+          class="btn btn-outline btn-sm min-w-0 flex-1 sm:btn-md sm:flex-none"
           (click)="exportJson()"
         >
-          JSON exportieren
+          <span class="sm:hidden">Export</span>
+          <span class="hidden sm:inline">JSON exportieren</span>
         </button>
       </div>
     </div>

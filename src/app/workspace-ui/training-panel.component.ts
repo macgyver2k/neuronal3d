@@ -20,20 +20,18 @@ import {
   template: `
     <article
       id="dockTrain"
-      class="border-base-300 bg-base-200 rounded-box flex w-full min-w-0 shrink-0
-        flex-wrap items-center gap-x-3 gap-y-2 border px-3 py-2 shadow-sm"
+      class="border-base-300 bg-base-200 rounded-box flex w-full min-w-0 shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border px-2 py-2 shadow-sm sm:gap-x-3 sm:px-3"
       aria-label="Training"
     >
       <p
-        class="text-base-content/70 max-w-[11rem] truncate text-xs sm:max-w-[14rem]"
+        class="text-base-content/70 w-full max-w-none truncate text-xs sm:max-w-[14rem] sm:w-auto"
         aria-live="polite"
         [attr.title]="datasetRibbon()"
       >
         {{ datasetRibbon() }}
       </p>
       <div
-        class="border-base-300/50 flex min-w-0 max-w-[14rem] flex-col gap-0.5
-          border-l pl-3 sm:max-w-[18rem]"
+        class="border-base-300/50 flex min-w-0 max-w-full flex-col gap-0.5 sm:max-w-[18rem] sm:border-l sm:pl-3"
       >
         <p class="text-base-content truncate text-sm font-semibold">
           {{ activeTitle() }}
@@ -46,12 +44,12 @@ import {
         </p>
       </div>
       <div
-        class="border-base-300/50 flex flex-wrap items-center gap-2 border-l pl-3"
+        class="border-base-300/50 flex w-full flex-wrap items-center gap-2 sm:w-auto sm:border-l sm:pl-3"
       >
         <button
           id="btnSaveModelAs"
           type="button"
-          class="btn btn-outline btn-xs sm:btn-sm"
+          class="btn btn-outline btn-xs flex-1 sm:btn-sm sm:flex-none"
           title="Als neuen Stand speichern"
           [disabled]="ui().saveDisabled"
           (click)="saveAs()"
@@ -61,7 +59,7 @@ import {
         <button
           id="btnResetModel"
           type="button"
-          class="btn btn-ghost btn-xs sm:btn-sm"
+          class="btn btn-ghost btn-xs flex-1 sm:btn-sm sm:flex-none"
           title="Gewichte zurücksetzen"
           [disabled]="ui().resetDisabled"
           (click)="reset()"
@@ -70,7 +68,7 @@ import {
         </button>
       </div>
       <div
-        class="border-base-300/50 flex flex-wrap items-center gap-2 border-l pl-3"
+        class="border-base-300/50 flex w-full flex-wrap items-center gap-2 sm:w-auto sm:border-l sm:pl-3"
         [attr.title]="epochHint()"
       >
         <span
@@ -142,12 +140,12 @@ import {
         </p>
       </div>
       <div
-        class="border-base-300/50 flex flex-wrap items-center gap-2 border-l pl-3"
+        class="border-base-300/50 flex w-full flex-wrap items-center gap-2 sm:w-auto sm:border-l sm:pl-3"
       >
         <button
           id="btnTrain"
           type="button"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary btn-sm flex-1 sm:flex-none"
           [disabled]="ui().trainDisabled"
           (click)="trainStart()"
         >
@@ -156,7 +154,7 @@ import {
         <button
           id="btnPause"
           type="button"
-          class="btn btn-outline btn-sm"
+          class="btn btn-outline btn-sm flex-1 sm:flex-none"
           [disabled]="ui().pauseDisabled"
           (click)="pauseToggle()"
         >
@@ -164,7 +162,7 @@ import {
         </button>
       </div>
       <details
-        class="border-base-300/60 bg-base-300/30 rounded-btn border"
+        class="border-base-300/60 bg-base-300/30 rounded-btn w-full border sm:w-auto"
         id="trainAdvanced"
       >
         <summary

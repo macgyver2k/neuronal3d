@@ -6,6 +6,7 @@ import {
 } from '../viz/network3d';
 import { LAYER_SIZES } from './constants';
 import { RT } from './runtime-state';
+import { cloneStoredModel } from './stored-model-utils';
 
 type VizMode = 'idle' | 'train' | 'infer';
 
@@ -14,6 +15,8 @@ type VizState = {
   mode: VizMode;
   activations: number[][];
   weightsForViz?: number[][][];
+  predictedDigit: number | null;
+  expectedDigit: number | null;
 };
 
 let vizStampCounter = 0;
@@ -28,12 +31,18 @@ export function publishVizState(
   mode: VizMode,
   activations: number[][],
   weightsForViz?: number[][][],
+  inferResult?: {
+    predictedDigit: number | null;
+    expectedDigit: number | null;
+  },
 ): void {
   pendingVizState = {
     stamp: ++vizStampCounter,
     mode,
     activations: activations.map((layer) => [...layer]),
     weightsForViz,
+    predictedDigit: inferResult?.predictedDigit ?? null,
+    expectedDigit: inferResult?.expectedDigit ?? null,
   };
   void flushVizState();
 }
@@ -42,25 +51,19 @@ export function publishVizState(
 export function syncVizWeightsFromNet(): void {
   if (!RT.net3d || !RT.net) return;
   RT.net3d.setWeights(RT.net.weights);
+  RT.inferWorkerHost?.syncModel(cloneStoredModel(RT.net));
 }
 
 export function flushVizState(): boolean {
   if (!RT.net3d || !pendingVizState) return false;
   if (pendingVizState.stamp === lastAppliedVizStamp) return false;
-  RT.net3d.setIdleDim(pendingVizState.mode === 'idle');
-  if (pendingVizState.mode !== 'infer') RT.net3d.setInferResult(null, null);
-  RT.net3d.setEdgeFocus(
-    pendingVizState.mode === 'infer'
-      ? 'infer'
-      : pendingVizState.mode === 'train'
-        ? 'trainRecent'
-        : 'off',
-    pendingVizState.mode === 'infer' ? pendingVizState.activations : null,
+  RT.net3d.applyVizState(
+    pendingVizState.mode,
+    pendingVizState.activations,
+    pendingVizState.mode === 'infer' ? pendingVizState.predictedDigit : null,
+    pendingVizState.mode === 'infer' ? pendingVizState.expectedDigit : null,
+    pendingVizState.weightsForViz,
   );
-  RT.net3d.setActivations(pendingVizState.activations);
-  if (pendingVizState.weightsForViz) {
-    RT.net3d.setWeights(pendingVizState.weightsForViz);
-  }
   lastAppliedVizStamp = pendingVizState.stamp;
   return true;
 }

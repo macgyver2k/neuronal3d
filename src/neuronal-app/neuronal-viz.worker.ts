@@ -94,11 +94,14 @@ const handleMessage = (
         offscreenCanvas: message.canvas,
         orbitDomSurface: orbitSurface,
         getPixelRatio: () => latestPixelRatio,
+        mobileQuality: message.mobileQuality,
       });
       sceneBundle = created;
       disposeScene = created.dispose;
       syncLayoutFromMount = created.syncLayoutFromMount;
-      net3d = new Network3D([...message.layerSizes]);
+      net3d = new Network3D([...message.layerSizes], {
+        lowNeuronMeshDetail: message.mobileQuality,
+      });
       created.scene.add(net3d.root);
       created.setVibeNetworkLookFocus({
         fillLayoutCentroid: (out, elapsedSec = 0) => {
@@ -199,6 +202,26 @@ const handleMessage = (
     }
     case 'setActivations': {
       net3d?.setActivations(message.activations);
+      break;
+    }
+    case 'applyVizState': {
+      if (!net3d) break;
+      net3d.setIdleDim(message.mode === 'idle');
+      if (message.mode === 'infer') {
+        net3d.setInferResult(message.predictedDigit, message.expectedDigit);
+      } else {
+        net3d.setInferResult(null, null);
+      }
+      net3d.setEdgeFocus(
+        message.mode === 'infer'
+          ? 'infer'
+          : message.mode === 'train'
+            ? 'trainRecent'
+            : 'off',
+        message.mode === 'infer' ? message.activations : null,
+      );
+      net3d.setActivations(message.activations);
+      if (message.weightsForViz) net3d.setWeights(message.weightsForViz);
       break;
     }
     case 'setHiddenLayerLayout': {

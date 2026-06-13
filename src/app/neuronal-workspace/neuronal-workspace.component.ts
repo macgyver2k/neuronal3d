@@ -2,9 +2,11 @@ import {
   AfterViewInit,
   Component,
   computed,
+  DestroyRef,
   HostListener,
   inject,
   OnDestroy,
+  signal,
   ViewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -41,13 +43,13 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
   template: `
     <div
       id="app"
-      class="bg-base-100 text-base-content flex min-h-0 flex-1 flex-col"
+      class="bg-base-100 text-base-content flex min-h-0 flex-1 flex-col max-lg:overflow-y-auto lg:overflow-hidden"
     >
       @if (!immersive()) {
         <div
           role="region"
           aria-label="Modell-Arbeitsbereich"
-          class="border-base-300/60 bg-base-100 flex shrink-0 flex-col gap-2 border-b px-3 py-2 sm:px-4 sm:py-3"
+          class="border-base-300/60 bg-base-100 flex shrink-0 flex-col gap-2 border-b px-2 py-2 sm:px-4 sm:py-3"
         >
           <div class="flex flex-col gap-2">
             <app-training-panel />
@@ -57,7 +59,7 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
       }
       <div [class]="workspaceContentGridClass()">
         <main
-          class="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] gap-3"
+          class="grid h-[45dvh] max-h-[50dvh] min-w-0 shrink-0 grid-rows-[minmax(0,1fr)] sm:h-[50dvh] lg:h-full lg:max-h-none lg:min-h-0 lg:overflow-hidden"
         >
           <section
             class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
@@ -77,13 +79,39 @@ import { WorkspaceStatusComponent } from '../workspace-ui/workspace-status.compo
 
         @if (!immersive()) {
           <section
-            class="flex min-h-0 flex-col gap-3"
+            class="relative flex min-w-0 shrink-0 flex-col gap-3 lg:min-h-0 lg:shrink lg:overflow-hidden"
             aria-label="Epochen und Inferenz"
           >
-            <div class="flex flex-col min-h-0  gap-3 overflow-hidden">
-              <app-infer-panel />
-              <app-epoch-track-list />
+            <div
+              role="tablist"
+              aria-label="Arbeitsbereich"
+              class="tabs tabs-boxed bg-base-300/40 shrink-0 p-1 lg:hidden"
+            >
+              <button
+                type="button"
+                class="tab flex-1 text-xs sm:text-sm"
+                role="tab"
+                id="tab-workspace-infer"
+                [attr.aria-selected]="mobilePanelTab() === 'infer'"
+                [class.tab-active]="mobilePanelTab() === 'infer'"
+                (click)="mobilePanelTab.set('infer')"
+              >
+                Inferenz
+              </button>
+              <button
+                type="button"
+                class="tab flex-1 text-xs sm:text-sm"
+                role="tab"
+                id="tab-workspace-epochs"
+                [attr.aria-selected]="mobilePanelTab() === 'epochs'"
+                [class.tab-active]="mobilePanelTab() === 'epochs'"
+                (click)="mobilePanelTab.set('epochs')"
+              >
+                Epochen
+              </button>
             </div>
+            <app-infer-panel [class.hidden]="inferPanelHidden()" />
+            <app-epoch-track-list [class.hidden]="epochPanelHidden()" />
           </section>
         }
       </div>
@@ -108,13 +136,33 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
   readonly workspaceContentGridClass = computed(() =>
     this.immersive()
       ? 'grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)]'
-      : 'grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)] xl:grid-rows-[minmax(0,1fr)]',
+      : 'flex shrink-0 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:min-h-0 lg:flex-1 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)]',
   );
+  protected readonly mobilePanelTab = signal<'infer' | 'epochs'>('infer');
+  protected readonly viewportIsWide = signal(readViewportIsWide());
+  protected readonly inferPanelHidden = computed(
+    () => !this.viewportIsWide() && this.mobilePanelTab() !== 'infer',
+  );
+  protected readonly epochPanelHidden = computed(
+    () => !this.viewportIsWide() && this.mobilePanelTab() !== 'epochs',
+  );
+  private readonly destroyRef = inject(DestroyRef);
   private readonly neuronalApp = inject(NeuronalAppService);
   private readonly appInstance = inject(NeuronalAppInstance);
   private readonly router = inject(Router);
   private teardown: (() => void) | null = null;
   private bindGen = 0;
+
+  constructor() {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const syncViewport = (): void =>
+      this.viewportIsWide.set(mediaQuery.matches);
+    mediaQuery.addEventListener('change', syncViewport);
+    this.destroyRef.onDestroy(() =>
+      mediaQuery.removeEventListener('change', syncViewport),
+    );
+  }
 
   ngAfterViewInit(): void {
     void this.bootstrapRuntime();
@@ -198,4 +246,9 @@ export class NeuronalWorkspaceComponent implements AfterViewInit, OnDestroy {
       );
     }
   }
+}
+
+function readViewportIsWide(): boolean {
+  if (typeof window === 'undefined') return true;
+  return window.matchMedia('(min-width: 1024px)').matches;
 }

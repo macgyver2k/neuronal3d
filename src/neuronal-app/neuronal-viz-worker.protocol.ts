@@ -10,6 +10,13 @@ import type {
   VizSceneColorSettings,
 } from '../viz/viz-appearance';
 
+export type VizCanvasPointerInit = PointerEventInit & {
+  pageX: number;
+  pageY: number;
+  offsetX: number;
+  offsetY: number;
+};
+
 export type VizWorkerHostToWorkerMessage =
   | {
       type: 'init';
@@ -18,6 +25,7 @@ export type VizWorkerHostToWorkerMessage =
       height: number;
       pixelRatio: number;
       layerSizes: readonly number[];
+      mobileQuality: boolean;
     }
   | { type: 'resize'; width: number; height: number; pixelRatio: number }
   | { type: 'dispose' }
@@ -40,6 +48,14 @@ export type VizWorkerHostToWorkerMessage =
     }
   | { type: 'setActivations'; activations: number[][] }
   | {
+      type: 'applyVizState';
+      mode: 'idle' | 'train' | 'infer';
+      activations: number[][];
+      predictedDigit: number | null;
+      expectedDigit: number | null;
+      weightsForViz?: number[][][];
+    }
+  | {
       type: 'setHiddenLayerLayout';
       index: number;
       layout: HiddenLayerVizLayout;
@@ -52,7 +68,7 @@ export type VizWorkerHostToWorkerMessage =
   | {
       type: 'canvasPointer';
       eventType: string;
-      initDict: PointerEventInit;
+      initDict: VizCanvasPointerInit;
     }
   | { type: 'canvasWheel'; initDict: WheelEventInit }
   | { type: 'canvasContextMenu'; initDict: MouseEventInit }

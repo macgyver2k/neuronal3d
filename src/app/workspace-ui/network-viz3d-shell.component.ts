@@ -4,6 +4,7 @@ import {
   Component,
   effect,
   ElementRef,
+  HostListener,
   inject,
   NgZone,
   OnDestroy,
@@ -12,6 +13,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Store } from '@ngrx/store';
+import { mobileVibeCameraEnabledDefault } from '../../viz/mobile-quality';
 import {
   ACTIVE_NEURON_MAX_SCALE_MUL_MAX,
   ACTIVE_NEURON_MAX_SCALE_MUL_MIN,
@@ -63,12 +65,36 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
     class: 'flex min-h-0 min-w-0 flex-1 flex-col',
   },
   template: `
-    <div class="relative flex min-h-0 min-w-0 flex-1 flex-row bg-base-300/25">
+    <div
+      class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-base-300/25 lg:flex-row"
+    >
+      @if (!immersive() && vizSettingsOpen()) {
+        <button
+          type="button"
+          class="fixed inset-0 z-40 bg-black/40 max-lg:backdrop-blur-none lg:hidden lg:backdrop-blur-[2px]"
+          aria-label="3D-Einstellungen schließen"
+          (click)="closeVizSettings()"
+        ></button>
+      }
       @if (!immersive()) {
         <aside
-          class="flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-base-300 bg-base-200/90 px-3 py-3 text-base-content shadow-md backdrop-blur-md"
+          class="flex max-h-full min-h-0 w-[min(100%,22rem)] max-w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden border-r border-base-300 bg-base-200 px-3 py-3 text-base-content shadow-md max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-50 max-lg:max-h-dvh max-lg:transition-transform max-lg:duration-200 lg:relative lg:translate-x-0 lg:bg-base-200/90 lg:backdrop-blur-md"
+          [class.max-lg:-translate-x-full]="!vizSettingsOpen()"
           aria-label="3D-Netz Darstellung"
         >
+          <div
+            class="flex shrink-0 items-center justify-between gap-2 lg:hidden"
+          >
+            <span class="text-sm font-semibold">3D-Einstellungen</span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm btn-square"
+              aria-label="Schließen"
+              (click)="closeVizSettings()"
+            >
+              ✕
+            </button>
+          </div>
           <app-viz-settings-block heading="Eingabelayer">
             <div class="min-w-0">
               <label
@@ -1200,50 +1226,60 @@ import { VizSettingsBlockComponent } from './viz-settings-block.component';
         <div
           #vizMount
           id="viz"
-          class="col-start-1 row-start-1 min-h-0 min-w-0 size-full max-h-full"
+          class="col-start-1 row-start-1 min-h-0 min-w-0 size-full max-h-full touch-none"
         ></div>
         <div
           class="pointer-events-none col-start-1 row-start-1 z-10 relative size-full"
         >
+          @if (!immersive()) {
+            <button
+              type="button"
+              class="btn btn-outline btn-xs pointer-events-auto absolute left-2 top-2 z-20 shadow-lg sm:btn-sm lg:hidden"
+              [attr.aria-expanded]="vizSettingsOpen()"
+              (click)="toggleVizSettings()"
+            >
+              {{ vizSettingsOpen() ? 'Schließen' : '3D-Einst.' }}
+            </button>
+          }
           <div
-            class="pointer-events-auto absolute right-2 top-2 flex flex-col items-end gap-2"
+            class="pointer-events-auto absolute right-1 top-1 flex max-w-[calc(100%-5.5rem)] flex-row flex-wrap items-start justify-end gap-1 sm:right-2 sm:top-2 sm:max-w-none sm:flex-col sm:gap-2"
           >
             <button
               type="button"
-              class="btn btn-outline btn-sm shadow-lg"
+              class="btn btn-outline btn-xs shadow-lg sm:btn-sm"
               [attr.aria-pressed]="immersive()"
               (click)="toggleImmersive()"
             >
-              {{ immersive() ? 'Leisten anzeigen' : 'Nur 3D' }}
+              {{ immersive() ? 'Leisten' : 'Nur 3D' }}
             </button>
             <button
               type="button"
-              class="btn btn-secondary btn-sm shadow-lg"
+              class="btn btn-secondary btn-xs shadow-lg sm:btn-sm"
               [attr.aria-pressed]="vibeCameraOn()"
               (click)="toggleVibeCamera()"
             >
-              {{ vibeCameraOn() ? 'Kamera-Vibe aus' : 'Kamera-Vibe' }}
+              {{ vibeCameraOn() ? 'Vibe aus' : 'Vibe' }}
             </button>
             <button
               type="button"
-              class="btn btn-accent btn-sm shadow-lg"
+              class="btn btn-accent btn-xs shadow-lg sm:btn-sm"
               [attr.aria-pressed]="themeRotateOn()"
               (click)="toggleThemeRotate()"
             >
-              {{ themeRotateOn() ? 'Theme-Rotation aus' : 'Theme-Rotation' }}
+              {{ themeRotateOn() ? 'Theme aus' : 'Theme' }}
             </button>
             <button
               type="button"
-              class="btn btn-ghost btn-sm border border-base-300/80 bg-base-100/70 shadow-lg backdrop-blur-sm"
+              class="btn btn-ghost btn-xs border border-base-300/80 bg-base-100 shadow-lg max-lg:backdrop-blur-none lg:bg-base-100/70 lg:backdrop-blur-sm sm:btn-sm"
               [attr.aria-pressed]="fpsOverlayOn()"
               (click)="toggleFpsOverlay()"
             >
-              {{ fpsOverlayOn() ? 'FPS aus' : 'FPS an' }}
+              {{ fpsOverlayOn() ? 'FPS aus' : 'FPS' }}
             </button>
           </div>
           @if (fpsOverlayOn()) {
             <div
-              class="absolute bottom-2 left-2 flex max-w-[min(100%,12rem)] flex-col gap-1 rounded-box border border-base-300/60 bg-base-100/75 px-2 py-1.5 text-[0.68rem] shadow-lg backdrop-blur-md"
+              class="absolute bottom-2 left-2 flex max-w-[min(100%,12rem)] flex-col gap-1 rounded-box border border-base-300/60 bg-base-100 px-2 py-1.5 text-[0.68rem] shadow-lg max-lg:backdrop-blur-none lg:bg-base-100/75 lg:backdrop-blur-md"
               aria-live="polite"
             >
               <div
@@ -1275,9 +1311,10 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   private readonly neuronalApp = inject(NeuronalAppService);
   /** DaisyUI-Themenamen für das 3D-Farbschema-Dropdown. */
   protected readonly daisyThemeNames = [...DAISYUI_THEMES];
-  protected readonly vibeCameraOn = signal(true);
+  protected readonly vibeCameraOn = signal(mobileVibeCameraEnabledDefault());
   protected readonly themeRotateOn = signal(false);
   protected readonly fpsOverlayOn = signal(false);
+  protected readonly vizSettingsOpen = signal(false);
   protected readonly fpsDisplay = signal(0);
   protected readonly fpsHistory = signal<number[]>([]);
   private themeRotateTimer: number | null = null;
@@ -1754,7 +1791,22 @@ export class NetworkViz3dShellComponent implements OnDestroy {
   }
 
   toggleImmersive(): void {
+    this.vizSettingsOpen.set(false);
     this.store.dispatch(NeuronalActions.uiVizImmersiveToggled());
+  }
+
+  toggleVizSettings(): void {
+    this.vizSettingsOpen.update((open) => !open);
+  }
+
+  closeVizSettings(): void {
+    this.vizSettingsOpen.set(false);
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(ev: KeyboardEvent): void {
+    if (ev.key !== 'Escape' || !this.vizSettingsOpen()) return;
+    this.closeVizSettings();
   }
 
   toggleVibeCamera(): void {

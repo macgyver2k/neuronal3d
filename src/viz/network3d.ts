@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import {
+  createNetworkEdgeLineLayer,
+  disposeNetworkEdgeLineLayer,
+  fillNetworkEdgeLineDefaults,
+  updateNetworkEdgeLineBounds,
+  type NetworkEdgeLineLayer,
+} from './network-edge-lines';
+import {
   DEFAULT_VIZ_NETWORK_COLORS,
   isValidHexColor6,
   type VizNetworkColorSettings,
@@ -81,6 +88,13 @@ export function clampActiveNeuronMaxScaleMul(v: number): number {
     Math.max(ACTIVE_NEURON_MAX_SCALE_MUL_MIN, v),
   );
 }
+
+export type Network3DOptions = {
+  /** Erste Kantenschicht (784→64) nicht rendern — spart ~50k Segmente. */
+  omitHeavyInputEdges?: boolean;
+  /** Weniger Kugelsegmente pro Neuron. */
+  lowNeuronMeshDetail?: boolean;
+};
 
 function placeHiddenLayerPoints(
   n: number,
@@ -207,7 +221,7 @@ function defaultHiddenScales(layerSizes: number[]): number[] {
 export class Network3D {
   readonly root = new THREE.Group();
   private readonly meshes: THREE.InstancedMesh[] = [];
-  private readonly edgeLines: THREE.LineSegments[] = [];
+  private readonly edgeLayers: Array<NetworkEdgeLineLayer | null> = [];
   private readonly edgeFromTo: Array<Array<{ from: number; to: number }>> = [];
   private readonly edgeWeightScale: number[] = [];
   private readonly activationScale: number[] = [];
@@ -259,7 +273,7 @@ export class Network3D {
   private vibeLookWanderSpeed = 0.055;
   private vibeLookEqualLayerBlend = 0.34;
 
-  constructor(layerSizes: number[]) {
+  constructor(layerSizes: number[], options: Network3DOptions = {}) {
     this.layerSizes = [...layerSizes];
     this.hiddenLayouts = defaultHiddenLayouts(this.layerSizes);
     this.hiddenLayoutScales = defaultHiddenScales(this.layerSizes);
@@ -270,7 +284,13 @@ export class Network3D {
       this.inputLayerLayout,
       this.inputLayerScale,
     );
-    const geom = new THREE.SphereGeometry(0.09, 10, 8);
+    const neuronWidthSegments = options.lowNeuronMeshDetail ? 6 : 10;
+    const neuronHeightSegments = options.lowNeuronMeshDetail ? 4 : 8;
+    const geom = new THREE.SphereGeometry(
+      0.09,
+      neuronWidthSegments,
+      neuronHeightSegments,
+    );
     for (let L = 0; L < this.layerSizes.length; L++) {
       const n = this.layerSizes[L];
       const mat = new THREE.MeshPhongMaterial({
@@ -307,45 +327,27 @@ export class Network3D {
     for (let L = 0; L < this.layerSizes.length - 1; L++) {
       const fromCount = this.layerSizes[L];
       const toCount = this.layerSizes[L + 1];
-      const segCount = fromCount * toCount;
-      const positions = new Float32Array(segCount * 2 * 3);
-      const colors = new Float32Array(segCount * 2 * 3);
+      const omitLayer = options.omitHeavyInputEdges === true && L === 0;
+      const segCount = omitLayer ? 0 : fromCount * toCount;
       const fromTo: Array<{ from: number; to: number }> = new Array(segCount);
-      let k = 0;
-      for (let to = 0; to < toCount; to++) {
-        const pTo = this.positions[L + 1][to];
-        for (let from = 0; from < fromCount; from++) {
-          const pFrom = this.positions[L][from];
-          const i = k * 6;
-          positions[i + 0] = pFrom.x;
-          positions[i + 1] = pFrom.y;
-          positions[i + 2] = pFrom.z;
-          positions[i + 3] = pTo.x;
-          positions[i + 4] = pTo.y;
-          positions[i + 5] = pTo.z;
-          colors[i + 0] = 0.35;
-          colors[i + 1] = 0.35;
-          colors[i + 2] = 0.38;
-          colors[i + 3] = 0.35;
-          colors[i + 4] = 0.35;
-          colors[i + 5] = 0.38;
-          fromTo[k] = { from, to };
-          k++;
+      if (!omitLayer) {
+        let edgeIndex = 0;
+        for (let to = 0; to < toCount; to++) {
+          for (let from = 0; from < fromCount; from++) {
+            fromTo[edgeIndex] = { from, to };
+            edgeIndex++;
+          }
         }
       }
-      const geom = new THREE.BufferGeometry();
-      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      const edgeColors = new THREE.BufferAttribute(colors, 3);
-      edgeColors.setUsage(THREE.DynamicDrawUsage);
-      geom.setAttribute('color', edgeColors);
       const baseOpacity = L === 0 ? 0.25 : 0.55;
-      const mat = new THREE.LineBasicMaterial({
-        vertexColors: true,
-        transparent: true,
-        opacity: baseOpacity,
-      });
-      const lines = new THREE.LineSegments(geom, mat);
-      this.edgeLines.push(lines);
+      const edgeLayer = createNetworkEdgeLineLayer(segCount, baseOpacity);
+      if (edgeLayer) {
+        fillNetworkEdgeLineDefaults(edgeLayer);
+        this.edgeLayers.push(edgeLayer);
+        this.root.add(edgeLayer.mesh);
+      } else {
+        this.edgeLayers.push(null);
+      }
       this.edgeBaseOpacity.push(baseOpacity);
       this.edgeFromTo.push(fromTo);
       this.edgeWeightScale.push(0);
@@ -355,7 +357,13 @@ export class Network3D {
       eAge.fill(this.edgeRecentWindow + 1);
       this.edgeRecentAge.push(eAge);
       this.edgeRecentHighlightT.push(new Float32Array(segCount));
-      this.root.add(lines);
+    }
+    for (
+      let layerIndex = 0;
+      layerIndex < this.edgeLayers.length;
+      layerIndex++
+    ) {
+      this.refreshEdgeEndpoints(layerIndex);
     }
     const outIdx = this.layerSizes.length - 1;
     const outCount = this.layerSizes[outIdx];
@@ -463,44 +471,101 @@ export class Network3D {
     }
   }
 
+  private refreshEdgeEndpoints(edgeLayerIndex: number): void {
+    const edgeLayer = this.edgeLayers[edgeLayerIndex];
+    if (!edgeLayer) return;
+    const map = this.edgeFromTo[edgeLayerIndex];
+    if (!map || map.length === 0) return;
+    const startArray = edgeLayer.instanceStart.array as Float32Array;
+    const endArray = edgeLayer.instanceEnd.array as Float32Array;
+    const fromLayer = this.positions[edgeLayerIndex];
+    const toLayer = this.positions[edgeLayerIndex + 1];
+    if (!fromLayer || !toLayer) return;
+    for (let edgeIndex = 0; edgeIndex < map.length; edgeIndex++) {
+      const ref = map[edgeIndex]!;
+      const fromPoint = fromLayer[ref.from];
+      const toPoint = toLayer[ref.to];
+      if (!fromPoint || !toPoint) continue;
+      const startOffset = edgeIndex * 3;
+      startArray[startOffset + 0] = fromPoint.x;
+      startArray[startOffset + 1] = fromPoint.y;
+      startArray[startOffset + 2] = fromPoint.z;
+      endArray[startOffset + 0] = toPoint.x;
+      endArray[startOffset + 1] = toPoint.y;
+      endArray[startOffset + 2] = toPoint.z;
+    }
+    edgeLayer.instanceStart.needsUpdate = true;
+    edgeLayer.instanceEnd.needsUpdate = true;
+    updateNetworkEdgeLineBounds(edgeLayer);
+  }
+
+  private refreshEdgesTouchingNeuronLayer(neuronLayerIndex: number): void {
+    if (neuronLayerIndex > 0) {
+      this.refreshEdgeEndpoints(neuronLayerIndex - 1);
+    }
+    if (neuronLayerIndex < this.edgeLayers.length) {
+      this.refreshEdgeEndpoints(neuronLayerIndex);
+    }
+  }
+
   setHiddenLayerLayout(index: number, layout: HiddenLayerVizLayout): void {
     if (index < 0 || index >= this.hiddenLayouts.length) return;
     if (this.hiddenLayouts[index] === layout) return;
     this.hiddenLayouts[index] = layout;
-    const L = index + 1;
-    const n = this.layerSizes[L]!;
-    const x = L * LAYER_SPACING;
-    const sc = this.hiddenLayoutScales[index] ?? HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
-    placeHiddenLayerPoints(n, x, layout, this.positions[L]!, sc);
+    const layerIndex = index + 1;
+    const neuronCount = this.layerSizes[layerIndex]!;
+    const layerX = layerIndex * LAYER_SPACING;
+    const scale =
+      this.hiddenLayoutScales[index] ?? HIDDEN_LAYER_VIZ_SCALE_DEFAULT;
+    placeHiddenLayerPoints(
+      neuronCount,
+      layerX,
+      layout,
+      this.positions[layerIndex]!,
+      scale,
+    );
+    this.refreshEdgesTouchingNeuronLayer(layerIndex);
   }
 
   setInputLayerLayout(layout: InputLayerVizLayout): void {
     if (this.layerSizes[0] !== 784) return;
     if (this.inputLayerLayout === layout) return;
     this.inputLayerLayout = layout;
-    const x = 0;
-    placeInputLayer784(this.positions[0]!, x, layout, this.inputLayerScale);
+    placeInputLayer784(this.positions[0]!, 0, layout, this.inputLayerScale);
+    this.refreshEdgesTouchingNeuronLayer(0);
   }
 
   setInputLayerLayoutScale(scale: number): void {
     if (this.layerSizes[0] !== 784) return;
-    const s = clampHiddenLayerVizScale(scale);
-    if (this.inputLayerScale === s) return;
-    this.inputLayerScale = s;
-    const x = 0;
-    placeInputLayer784(this.positions[0]!, x, this.inputLayerLayout, s);
+    const clampedScale = clampHiddenLayerVizScale(scale);
+    if (this.inputLayerScale === clampedScale) return;
+    this.inputLayerScale = clampedScale;
+    placeInputLayer784(
+      this.positions[0]!,
+      0,
+      this.inputLayerLayout,
+      clampedScale,
+    );
+    this.refreshEdgesTouchingNeuronLayer(0);
   }
 
   setHiddenLayerLayoutScale(index: number, scale: number): void {
     if (index < 0 || index >= this.hiddenLayoutScales.length) return;
-    const s = clampHiddenLayerVizScale(scale);
-    if (this.hiddenLayoutScales[index] === s) return;
-    this.hiddenLayoutScales[index] = s;
-    const L = index + 1;
-    const n = this.layerSizes[L]!;
-    const x = L * LAYER_SPACING;
-    const mode = this.hiddenLayouts[index]!;
-    placeHiddenLayerPoints(n, x, mode, this.positions[L]!, s);
+    const clampedScale = clampHiddenLayerVizScale(scale);
+    if (this.hiddenLayoutScales[index] === clampedScale) return;
+    this.hiddenLayoutScales[index] = clampedScale;
+    const layerIndex = index + 1;
+    const neuronCount = this.layerSizes[layerIndex]!;
+    const layerX = layerIndex * LAYER_SPACING;
+    const layout = this.hiddenLayouts[index]!;
+    placeHiddenLayerPoints(
+      neuronCount,
+      layerX,
+      layout,
+      this.positions[layerIndex]!,
+      clampedScale,
+    );
+    this.refreshEdgesTouchingNeuronLayer(layerIndex);
   }
 
   setActiveNeuronMaxScaleMul(mul: number): void {
@@ -558,10 +623,16 @@ export class Network3D {
       const mat = mesh.material as THREE.MeshPhongMaterial;
       mat.emissiveIntensity = emissiveIntensity;
     }
-    const edgeScale = dim ? 0.33 : 1;
-    for (let i = 0; i < this.edgeLines.length; i++) {
-      const mat = this.edgeLines[i].material as THREE.LineBasicMaterial;
-      mat.opacity = this.edgeBaseOpacity[i] * edgeScale;
+    const edgeOpacityScale = dim ? 0.33 : 1;
+    for (
+      let layerIndex = 0;
+      layerIndex < this.edgeLayers.length;
+      layerIndex++
+    ) {
+      const edgeLayer = this.edgeLayers[layerIndex];
+      if (!edgeLayer) continue;
+      edgeLayer.material.uniforms['opacityMul']!.value =
+        this.edgeBaseOpacity[layerIndex]! * edgeOpacityScale;
     }
     for (const s of this.outputDigitSprites) {
       const mat = s.material as THREE.SpriteMaterial;
@@ -944,110 +1015,124 @@ export class Network3D {
   }
 
   setWeights(weights: number[][][]): void {
-    for (let L = 0; L < this.edgeLines.length; L++) {
-      const layerW = weights[L];
-      if (!layerW || layerW.length === 0) continue;
-      const lines = this.edgeLines[L];
-      const colorAttr = lines.geometry.getAttribute(
-        'color',
-      ) as THREE.BufferAttribute;
-      const arr = colorAttr.array as Float32Array;
-      const posAttr = lines.geometry.getAttribute(
-        'position',
-      ) as THREE.BufferAttribute;
-      const posArr = posAttr.array as Float32Array;
-      const map = this.edgeFromTo[L];
-      const lastWeight = this.edgeRecentLastWeight[L];
-      const deltaArr = this.edgeRecentDelta[L];
-      let mx = 1e-12;
-      let contribMx = 1e-12;
-      let deltaMx = 1e-12;
-      const fromActs =
+    for (
+      let layerIndex = 0;
+      layerIndex < this.edgeLayers.length;
+      layerIndex++
+    ) {
+      const layerWeights = weights[layerIndex];
+      if (!layerWeights || layerWeights.length === 0) continue;
+      const edgeLayer = this.edgeLayers[layerIndex];
+      if (!edgeLayer) continue;
+      const colorArray = edgeLayer.instanceColor.array as Float32Array;
+      const alphaArray = edgeLayer.instanceAlpha.array as Float32Array;
+      const map = this.edgeFromTo[layerIndex];
+      if (!map || map.length === 0) continue;
+      const lastWeight = this.edgeRecentLastWeight[layerIndex];
+      const deltaArray = this.edgeRecentDelta[layerIndex];
+      let weightMax = 1e-12;
+      let contribMax = 1e-12;
+      let deltaMax = 1e-12;
+      const fromActivations =
         this.edgeFocusMode === 'infer' &&
         this.edgeFocusActivations &&
-        this.edgeFocusActivations[L]
-          ? this.edgeFocusActivations[L]
+        this.edgeFocusActivations[layerIndex]
+          ? this.edgeFocusActivations[layerIndex]
           : null;
       const threshold =
-        L === 0 ? this.edgeFocusThresholdFirstLayer : this.edgeFocusThreshold;
+        layerIndex === 0
+          ? this.edgeFocusThresholdFirstLayer
+          : this.edgeFocusThreshold;
       const inferReuseScale =
         this.edgeFocusMode === 'infer' &&
-        fromActs !== null &&
-        this.edgeWeightScale[L] > 1e-9;
+        fromActivations !== null &&
+        this.edgeWeightScale[layerIndex]! > 1e-9;
       if (inferReuseScale) {
-        for (let k = 0; k < map.length; k++) {
-          const ref = map[k]!;
-          const wrc = layerW[ref.to]![ref.from] ?? 0;
-          const w0 = Number.isFinite(wrc) ? wrc : 0;
-          if (ref.from < fromActs!.length) {
-            const fa = Number.isFinite(fromActs![ref.from])
-              ? Math.max(0, fromActs![ref.from]!)
+        for (let edgeIndex = 0; edgeIndex < map.length; edgeIndex++) {
+          const ref = map[edgeIndex]!;
+          const weightRaw = layerWeights[ref.to]![ref.from] ?? 0;
+          const weightValue = Number.isFinite(weightRaw) ? weightRaw : 0;
+          if (ref.from < fromActivations!.length) {
+            const activation = Number.isFinite(fromActivations![ref.from])
+              ? Math.max(0, fromActivations![ref.from]!)
               : 0;
-            const contrib = Math.abs(w0) * fa;
-            if (contrib > contribMx) contribMx = contrib;
+            const contribution = Math.abs(weightValue) * activation;
+            if (contribution > contribMax) contribMax = contribution;
           }
         }
       } else {
-        for (let r = 0; r < layerW.length; r++) {
-          for (let c = 0; c < layerW[r].length; c++) {
-            const wrc = Number.isFinite(layerW[r][c]) ? layerW[r][c] : 0;
-            const a = Math.abs(wrc);
-            if (a > mx) mx = a;
-            const idx = r * layerW[r].length + c;
-            const delta = Math.abs(wrc - lastWeight[idx]);
-            deltaArr[idx] = delta;
-            if (delta > deltaMx) deltaMx = delta;
-            if (fromActs && c < fromActs.length) {
-              const fa = Number.isFinite(fromActs[c])
-                ? Math.max(0, fromActs[c])
+        for (let row = 0; row < layerWeights.length; row++) {
+          for (let column = 0; column < layerWeights[row]!.length; column++) {
+            const weightRaw = Number.isFinite(layerWeights[row]![column])
+              ? layerWeights[row]![column]!
+              : 0;
+            const magnitude = Math.abs(weightRaw);
+            if (magnitude > weightMax) weightMax = magnitude;
+            const flatIndex = row * layerWeights[row]!.length + column;
+            const delta = Math.abs(weightRaw - lastWeight![flatIndex]!);
+            deltaArray![flatIndex] = delta;
+            if (delta > deltaMax) deltaMax = delta;
+            if (fromActivations && column < fromActivations.length) {
+              const activation = Number.isFinite(fromActivations[column])
+                ? Math.max(0, fromActivations[column]!)
                 : 0;
-              const contrib = Math.abs(wrc) * fa;
-              if (contrib > contribMx) contribMx = contrib;
+              const contribution = Math.abs(weightRaw) * activation;
+              if (contribution > contribMax) contribMax = contribution;
             }
           }
         }
-        const prevScale = this.edgeWeightScale[L];
-        const nextScale = prevScale <= 0 ? mx : Math.max(mx, prevScale * 0.995);
-        this.edgeWeightScale[L] = Math.max(nextScale, 1e-6);
+        const previousScale = this.edgeWeightScale[layerIndex]!;
+        const nextScale =
+          previousScale <= 0
+            ? weightMax
+            : Math.max(weightMax, previousScale * 0.995);
+        this.edgeWeightScale[layerIndex] = Math.max(nextScale, 1e-6);
       }
-      const ageArr = this.edgeRecentAge[L];
-      const tMem = this.edgeRecentHighlightT[L];
-      for (let k = 0; k < map.length; k++) {
-        const ref = map[k];
-        const wRaw = layerW[ref.to][ref.from] ?? 0;
-        const w = Number.isFinite(wRaw) ? wRaw : 0;
-        const idx = ref.to * layerW[ref.to].length + ref.from;
-        const d = deltaArr[idx]!;
+      const ageArray = this.edgeRecentAge[layerIndex];
+      const highlightArray = this.edgeRecentHighlightT[layerIndex];
+      for (let edgeIndex = 0; edgeIndex < map.length; edgeIndex++) {
+        const ref = map[edgeIndex]!;
+        const weightRaw = layerWeights[ref.to]![ref.from] ?? 0;
+        const weightValue = Number.isFinite(weightRaw) ? weightRaw : 0;
+        const flatIndex = ref.to * layerWeights[ref.to]!.length + ref.from;
+        const delta = deltaArray![flatIndex]!;
         if (this.edgeFocusMode === 'trainRecent') {
-          if (deltaMx > 1e-12 && d >= this.edgeRecentDeltaAbsMin) {
-            ageArr[k] = 0;
-            tMem[k] = Math.min(1, Math.pow(d / deltaMx, 0.52));
+          if (deltaMax > 1e-12 && delta >= this.edgeRecentDeltaAbsMin) {
+            ageArray![edgeIndex] = 0;
+            highlightArray![edgeIndex] = Math.min(
+              1,
+              Math.pow(delta / deltaMax, 0.52),
+            );
           } else {
-            ageArr[k] = Math.min(
+            ageArray![edgeIndex] = Math.min(
               this.edgeRecentWindow + 1,
-              (ageArr[k] ?? 0) + 1,
+              (ageArray![edgeIndex] ?? 0) + 1,
             );
           }
         }
-        lastWeight[idx] = w;
+        lastWeight![flatIndex] = weightValue;
         let visible = true;
         let contribNorm = 1;
-        if (fromActs && ref.from < fromActs.length) {
-          const fa = Number.isFinite(fromActs[ref.from])
-            ? Math.max(0, fromActs[ref.from])
+        if (fromActivations && ref.from < fromActivations.length) {
+          const activation = Number.isFinite(fromActivations[ref.from])
+            ? Math.max(0, fromActivations[ref.from]!)
             : 0;
-          contribNorm = (Math.abs(w) * fa) / Math.max(1e-9, contribMx);
+          contribNorm =
+            (Math.abs(weightValue) * activation) / Math.max(1e-9, contribMax);
           visible = contribNorm >= threshold;
         }
         if (this.edgeFocusMode === 'trainRecent') {
-          visible = ageArr[k]! <= this.edgeRecentWindow;
+          visible = ageArray![edgeIndex]! <= this.edgeRecentWindow;
         }
-        const tBase = Math.min(
+        const weightTone = Math.min(
           1,
-          Math.pow(Math.abs(w) / this.edgeWeightScale[L], 0.65),
+          Math.pow(
+            Math.abs(weightValue) / this.edgeWeightScale[layerIndex]!,
+            0.65,
+          ),
         );
-        const tInfer =
-          fromActs && visible
+        const inferTone =
+          fromActivations && visible
             ? Math.min(
                 1,
                 Math.max(
@@ -1056,96 +1141,74 @@ export class Network3D {
                 ),
               )
             : 0;
-        const t =
+        const tone =
           this.edgeFocusMode === 'trainRecent'
             ? visible
               ? 1
               : 0
-            : fromActs
+            : fromActivations
               ? visible
-                ? tInfer
+                ? inferTone
                 : 0
-              : tBase;
-        let r = 0;
-        let g = 0;
-        let b = 0;
+              : weightTone;
+        let red = 0;
+        let green = 0;
+        let blue = 0;
+        let alpha = 0;
         if (visible) {
+          alpha = 1;
           if (this.edgeFocusMode === 'trainRecent') {
-            const tI = 0.15 + 0.85 * tMem[k]!;
-            const tAge = 1 - ageArr[k]! / (this.edgeRecentWindow + 1);
-            const mul = Math.pow(tAge, 0.7);
+            const highlightTone = 0.15 + 0.85 * highlightArray![edgeIndex]!;
+            const ageTone =
+              1 - ageArray![edgeIndex]! / (this.edgeRecentWindow + 1);
+            const multiplier = Math.pow(ageTone, 0.7);
             this.scratchNeuronColor
               .copy(this.colEdgeTrainRecent)
-              .multiplyScalar(tI * mul);
-            r = Math.min(1, this.scratchNeuronColor.r);
-            g = Math.min(1, this.scratchNeuronColor.g);
-            b = Math.min(1, this.scratchNeuronColor.b);
-          } else if (w >= 0) {
+              .multiplyScalar(highlightTone * multiplier);
+            red = Math.min(1, this.scratchNeuronColor.r);
+            green = Math.min(1, this.scratchNeuronColor.g);
+            blue = Math.min(1, this.scratchNeuronColor.b);
+          } else if (weightValue >= 0) {
             this.scratchNeuronColor
               .copy(this.colEdgePosCold)
-              .lerp(this.colEdgePosHot, t);
-            r = this.scratchNeuronColor.r;
-            g = this.scratchNeuronColor.g;
-            b = this.scratchNeuronColor.b;
+              .lerp(this.colEdgePosHot, tone);
+            red = this.scratchNeuronColor.r;
+            green = this.scratchNeuronColor.g;
+            blue = this.scratchNeuronColor.b;
           } else {
             this.scratchNeuronColor
               .copy(this.colEdgeNegCold)
-              .lerp(this.colEdgeNegHot, t);
-            r = this.scratchNeuronColor.r;
-            g = this.scratchNeuronColor.g;
-            b = this.scratchNeuronColor.b;
+              .lerp(this.colEdgeNegHot, tone);
+            red = this.scratchNeuronColor.r;
+            green = this.scratchNeuronColor.g;
+            blue = this.scratchNeuronColor.b;
           }
         } else if (this.edgeFocusMode === 'infer') {
-          r = this.colEdgeInferMuted.r;
-          g = this.colEdgeInferMuted.g;
-          b = this.colEdgeInferMuted.b;
+          alpha = 0.55;
+          red = this.colEdgeInferMuted.r;
+          green = this.colEdgeInferMuted.g;
+          blue = this.colEdgeInferMuted.b;
         }
-        const i = k * 6;
-        const pFrom = this.positions[L][ref.from];
-        const pTo = this.positions[L + 1][ref.to];
-        if (
-          (this.edgeFocusMode === 'infer' ||
-            this.edgeFocusMode === 'trainRecent') &&
-          !visible
-        ) {
-          posArr[i + 0] = pFrom.x;
-          posArr[i + 1] = pFrom.y;
-          posArr[i + 2] = pFrom.z;
-          posArr[i + 3] = pFrom.x;
-          posArr[i + 4] = pFrom.y;
-          posArr[i + 5] = pFrom.z;
-        } else {
-          posArr[i + 0] = pFrom.x;
-          posArr[i + 1] = pFrom.y;
-          posArr[i + 2] = pFrom.z;
-          posArr[i + 3] = pTo.x;
-          posArr[i + 4] = pTo.y;
-          posArr[i + 5] = pTo.z;
-        }
-        arr[i + 0] = r;
-        arr[i + 1] = g;
-        arr[i + 2] = b;
-        arr[i + 3] = r;
-        arr[i + 4] = g;
-        arr[i + 5] = b;
+        const colorOffset = edgeIndex * 3;
+        colorArray[colorOffset + 0] = red;
+        colorArray[colorOffset + 1] = green;
+        colorArray[colorOffset + 2] = blue;
+        alphaArray[edgeIndex] = alpha;
       }
-      posAttr.needsUpdate = true;
-      colorAttr.needsUpdate = true;
+      edgeLayer.instanceColor.needsUpdate = true;
+      edgeLayer.instanceAlpha.needsUpdate = true;
     }
   }
 
   dispose(): void {
-    for (const m of this.meshes) {
-      m.geometry.dispose();
-      if (Array.isArray(m.material))
-        m.material.forEach((mat: THREE.Material) => mat.dispose());
-      else m.material.dispose();
+    for (const mesh of this.meshes) {
+      mesh.geometry.dispose();
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((material: THREE.Material) => material.dispose());
+      } else mesh.material.dispose();
     }
-    for (const l of this.edgeLines) {
-      l.geometry.dispose();
-      if (Array.isArray(l.material))
-        l.material.forEach((mat: THREE.Material) => mat.dispose());
-      else l.material.dispose();
+    for (const edgeLayer of this.edgeLayers) {
+      if (edgeLayer) disposeNetworkEdgeLineLayer(edgeLayer);
     }
     for (const s of this.outputDigitSprites) {
       const mat = s.material as THREE.SpriteMaterial;

@@ -2,11 +2,12 @@ import { drawMnistPixelsOntoCanvas, MNIST_PIXEL_COUNT } from '../data/mnist';
 import { matFromColVec } from '../nn/matrix';
 import { activationSlices } from '../nn/network';
 import {
-  LIVE_INFER_MIN_MS,
-  MNIST_DRAW_GRID,
-  VIZ_DEBUG_INFER,
-} from './constants';
+  LIVE_INFER_STATUS_MIN_MS,
+  liveInferMinIntervalMs,
+} from '../viz/mobile-quality';
+import { MNIST_DRAW_GRID, VIZ_DEBUG_INFER } from './constants';
 import { resetCanvas2dPaintExtras } from './draw-canvas-ops';
+import type { InferWorkerOutcome } from './neuronal-infer-worker-host';
 import { RT } from './runtime-state';
 import { setStatus } from './store-dispatch';
 import { fmtInt } from './text-format';
@@ -15,16 +16,119 @@ import { publishVizState } from './viz-sync';
 function inferLayerMaxDiffs(prev: number[][], cur: number[][]): string {
   if (prev.length !== cur.length) return '';
   const parts: string[] = [];
-  for (let L = 0; L < cur.length; L++) {
-    const a = cur[L];
-    const b = prev[L];
-    if (!a || !b || a.length !== b.length) continue;
-    let mx = 0;
-    for (let i = 0; i < a.length; i++)
-      mx = Math.max(mx, Math.abs(a[i]! - b[i]!));
-    parts.push(`${L}:${mx.toExponential(2)}`);
+  for (let layerIndex = 0; layerIndex < cur.length; layerIndex++) {
+    const currentLayer = cur[layerIndex];
+    const previousLayer = prev[layerIndex];
+    if (!currentLayer || !previousLayer) continue;
+    if (currentLayer.length !== previousLayer.length) continue;
+    let maxDiff = 0;
+    for (
+      let neuronIndex = 0;
+      neuronIndex < currentLayer.length;
+      neuronIndex++
+    ) {
+      maxDiff = Math.max(
+        maxDiff,
+        Math.abs(currentLayer[neuronIndex]! - previousLayer[neuronIndex]!),
+      );
+    }
+    parts.push(`${layerIndex}:${maxDiff.toExponential(2)}`);
   }
   return parts.length ? `  Δmax ${parts.join(' ')}` : '';
+}
+
+let lastLiveStatusAt = 0;
+
+function formatProbSummary(prob: number[]): {
+  probStr: string;
+  top: string;
+} {
+  const probs = prob.map((value, digit) => ({ digit, probability: value }));
+  const probStr = probs.map((entry) => entry.probability.toFixed(4)).join(' ');
+  const top = [...probs]
+    .sort((left, right) => right.probability - left.probability)
+    .slice(0, 3)
+    .map((entry) => `${entry.digit}:${(entry.probability * 100).toFixed(2)}%`)
+    .join(' ');
+  return { probStr, top };
+}
+
+function applyInferOutcome(
+  outcome: InferWorkerOutcome,
+  label: number | undefined,
+  sampleIndex: number | undefined,
+  pixels: number[],
+  live: boolean,
+): void {
+  if (!RT.net3d) return;
+  let diffStr = '';
+  if (VIZ_DEBUG_INFER && RT.lastInferActsDebug) {
+    diffStr = inferLayerMaxDiffs(RT.lastInferActsDebug, outcome.activations);
+  }
+  if (VIZ_DEBUG_INFER) {
+    RT.lastInferActsDebug = outcome.activations.map((layer) => [...layer]);
+  }
+  publishVizState('infer', outcome.activations, undefined, {
+    predictedDigit: outcome.predictedDigit,
+    expectedDigit: label ?? null,
+  });
+  if (sampleIndex !== undefined) paintMnistPixelsToInferCanvas(pixels);
+  if (!live) RT.renderDisplayBound();
+  const { probStr, top } = formatProbSummary(outcome.prob);
+  const now = performance.now();
+  const shouldUpdateStatus =
+    !live || now - lastLiveStatusAt >= LIVE_INFER_STATUS_MIN_MS;
+  if (!shouldUpdateStatus) return;
+  if (live) lastLiveStatusAt = now;
+  if (label !== undefined) {
+    if (outcome.invalidProb) {
+      setStatus(
+        `Infer #${fmtInt(RT.inferCounter, 4)}: ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren`,
+      );
+      return;
+    }
+    const indexStr =
+      sampleIndex === undefined ? '' : ` idx=${fmtInt(sampleIndex, 5)} `;
+    setStatus(
+      `Infer #${fmtInt(RT.inferCounter, 4)}:${indexStr}wahr=${label} pred=${outcome.predictedDigit}  softmax ${probStr}  top ${top}${diffStr}`,
+    );
+    return;
+  }
+  if (outcome.invalidProb) {
+    setStatus(
+      live
+        ? 'Canvas (live): ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren'
+        : `Infer #${fmtInt(RT.inferCounter, 4)} (Canvas): ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren`,
+    );
+    return;
+  }
+  setStatus(
+    live
+      ? `Canvas (live): pred=${outcome.predictedDigit}  softmax ${probStr}  top ${top}${diffStr}`
+      : `Infer #${fmtInt(RT.inferCounter, 4)} (Canvas): pred=${outcome.predictedDigit}  softmax ${probStr}  top ${top}${diffStr}`,
+  );
+}
+
+function inferOnMainThread(
+  pixels: number[],
+  label: number | undefined,
+  sampleIndex: number | undefined,
+  live: boolean,
+): void {
+  if (!RT.net || !RT.net3d) return;
+  const input = matFromColVec(pixels);
+  const forward = RT.net.forward(input);
+  const predictedDigit = RT.net.predictClass(forward.prob);
+  const activations = activationSlices(input, forward);
+  const prob = forward.prob.map((row) => row[0]!);
+  const invalidProb = prob.some((value) => !Number.isFinite(value));
+  applyInferOutcome(
+    { predictedDigit, activations, prob, invalidProb },
+    label,
+    sampleIndex,
+    pixels,
+    live,
+  );
 }
 
 export function cancelLiveCanvasInferRaf(): void {
@@ -48,7 +152,7 @@ export function scheduleLiveCanvasInfer(): void {
     RT.liveCanvasInferRaf = null;
     if (!RT.net || !RT.net3d) return;
     const now = performance.now();
-    if (now - RT.liveInferLastRun < LIVE_INFER_MIN_MS) {
+    if (now - RT.liveInferLastRun < liveInferMinIntervalMs()) {
       RT.liveCanvasInferRaf = requestAnimationFrame(step);
       return;
     }
@@ -60,33 +164,42 @@ export function scheduleLiveCanvasInfer(): void {
 }
 
 export function canvasToMnistPixels(): number[] {
-  const w = RT.surfaceDrawCanvas.width;
-  const h = RT.surfaceDrawCanvas.height;
-  const img = RT.ctx2d.getImageData(0, 0, w, h);
-  const d = img.data;
+  const width = RT.surfaceDrawCanvas.width;
+  const height = RT.surfaceDrawCanvas.height;
+  const image = RT.ctx2d.getImageData(0, 0, width, height);
+  const data = image.data;
 
-  if (w === MNIST_DRAW_GRID && h === MNIST_DRAW_GRID) {
-    const out = new Array<number>(784);
-    let k = 0;
-    for (let gy = 0; gy < MNIST_DRAW_GRID; gy++) {
-      for (let gx = 0; gx < MNIST_DRAW_GRID; gx++) {
-        const i = (gy * w + gx) * 4;
-        out[k++] = (d[i]! + d[i + 1]! + d[i + 2]!) / 3 / 255;
+  if (width === MNIST_DRAW_GRID && height === MNIST_DRAW_GRID) {
+    const output = new Array<number>(784);
+    let pixelIndex = 0;
+    for (let gridY = 0; gridY < MNIST_DRAW_GRID; gridY++) {
+      for (let gridX = 0; gridX < MNIST_DRAW_GRID; gridX++) {
+        const channelIndex = (gridY * width + gridX) * 4;
+        output[pixelIndex++] =
+          (data[channelIndex]! +
+            data[channelIndex + 1]! +
+            data[channelIndex + 2]!) /
+          3 /
+          255;
       }
     }
-    return out;
+    return output;
   }
 
-  let minX = w;
-  let minY = h;
+  let minX = width;
+  let minY = height;
   let maxX = -1;
   let maxY = -1;
   const inkThreshold = 20;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const v = (d[i]! + d[i + 1]! + d[i + 2]!) / 3;
-      if (v > inkThreshold) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const channelIndex = (y * width + x) * 4;
+      const value =
+        (data[channelIndex]! +
+          data[channelIndex + 1]! +
+          data[channelIndex + 2]!) /
+        3;
+      if (value > inkThreshold) {
         if (x < minX) minX = x;
         if (y < minY) minY = y;
         if (x > maxX) maxX = x;
@@ -95,40 +208,44 @@ export function canvasToMnistPixels(): number[] {
     }
   }
   if (maxX < minX || maxY < minY) return new Array<number>(784).fill(0);
-  const bw = maxX - minX + 1;
-  const bh = maxY - minY + 1;
-  const side = Math.max(bw, bh);
+  const boxWidth = maxX - minX + 1;
+  const boxHeight = maxY - minY + 1;
+  const side = Math.max(boxWidth, boxHeight);
   const pad = Math.max(2, Math.floor(side * 0.2));
-  const cx = (minX + maxX) * 0.5;
-  const cy = (minY + maxY) * 0.5;
+  const centerX = (minX + maxX) * 0.5;
+  const centerY = (minY + maxY) * 0.5;
   const cropSide = side + pad * 2;
-  const cropX0 = cx - cropSide * 0.5;
-  const cropY0 = cy - cropSide * 0.5;
-  const out = new Array<number>(784);
-  let k = 0;
-  for (let gy = 0; gy < 28; gy++) {
-    for (let gx = 0; gx < 28; gx++) {
-      const sx0 = cropX0 + (gx / 28) * cropSide;
-      const sy0 = cropY0 + (gy / 28) * cropSide;
-      const sx1 = cropX0 + ((gx + 1) / 28) * cropSide;
-      const sy1 = cropY0 + ((gy + 1) / 28) * cropSide;
-      const x0 = Math.max(0, Math.floor(sx0));
-      const y0 = Math.max(0, Math.floor(sy0));
-      const x1 = Math.min(w, Math.ceil(sx1));
-      const y1 = Math.min(h, Math.ceil(sy1));
+  const cropX0 = centerX - cropSide * 0.5;
+  const cropY0 = centerY - cropSide * 0.5;
+  const output = new Array<number>(784);
+  let outputIndex = 0;
+  for (let gridY = 0; gridY < MNIST_DRAW_GRID; gridY++) {
+    for (let gridX = 0; gridX < MNIST_DRAW_GRID; gridX++) {
+      const sampleX0 = cropX0 + (gridX / MNIST_DRAW_GRID) * cropSide;
+      const sampleY0 = cropY0 + (gridY / MNIST_DRAW_GRID) * cropSide;
+      const sampleX1 = cropX0 + ((gridX + 1) / MNIST_DRAW_GRID) * cropSide;
+      const sampleY1 = cropY0 + ((gridY + 1) / MNIST_DRAW_GRID) * cropSide;
+      const x0 = Math.max(0, Math.floor(sampleX0));
+      const y0 = Math.max(0, Math.floor(sampleY0));
+      const x1 = Math.min(width, Math.ceil(sampleX1));
+      const y1 = Math.min(height, Math.ceil(sampleY1));
       let sum = 0;
-      let cnt = 0;
+      let count = 0;
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
-          const i = (y * w + x) * 4;
-          sum += (d[i]! + d[i + 1]! + d[i + 2]!) / 3;
-          cnt++;
+          const channelIndex = (y * width + x) * 4;
+          sum +=
+            (data[channelIndex]! +
+              data[channelIndex + 1]! +
+              data[channelIndex + 2]!) /
+            3;
+          count++;
         }
       }
-      out[k++] = cnt > 0 ? sum / cnt / 255 : 0;
+      output[outputIndex++] = count > 0 ? sum / count / 255 : 0;
     }
   }
-  return out;
+  return output;
 }
 
 /** MNIST 28×28 (0…1) direkt aufs Zeichen-Canvas (Bitmap 28×28 = kein Hochskalieren nötig). */
@@ -149,54 +266,18 @@ export function inferWithPixels(
   const live = opts?.live === true;
   try {
     if (!live) RT.inferCounter += 1;
-    const x = matFromColVec(pixels);
-    const fwd = RT.net.forward(x);
-    const pred = RT.net.predictClass(fwd.prob);
-    const invalidProb = fwd.prob.some((row) => !Number.isFinite(row[0]));
-    const acts = activationSlices(x, fwd);
-    let diffStr = '';
-    if (VIZ_DEBUG_INFER && RT.lastInferActsDebug)
-      diffStr = inferLayerMaxDiffs(RT.lastInferActsDebug, acts);
-    if (VIZ_DEBUG_INFER) RT.lastInferActsDebug = acts.map((row) => [...row]);
-    RT.net3d.setInferResult(pred, label ?? null);
-    publishVizState('infer', acts);
-    if (sampleIndex !== undefined) {
-      paintMnistPixelsToInferCanvas(pixels);
+    const inferWorker = RT.inferWorkerHost;
+    if (inferWorker?.isReady()) {
+      void inferWorker
+        .inferAsync(pixels, { live })
+        .then((outcome) =>
+          applyInferOutcome(outcome, label, sampleIndex, pixels, live),
+        )
+        .catch((error) => setStatus(`Infer-Fehler: ${String(error)}`));
+      return;
     }
-    if (!live) RT.renderDisplayBound();
-    const probs = fwd.prob.map((row, i) => ({ digit: i, p: row[0]! }));
-    const probStr = probs.map((x) => x.p.toFixed(4)).join(' ');
-    const top = [...probs]
-      .sort((a, b) => b.p - a.p)
-      .slice(0, 3)
-      .map((x) => `${x.digit}:${(x.p * 100).toFixed(2)}%`)
-      .join(' ');
-    if (label !== undefined) {
-      if (invalidProb) {
-        setStatus(
-          `Infer #${fmtInt(RT.inferCounter, 4)}: ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren`,
-        );
-      } else {
-        const idxStr =
-          sampleIndex === undefined ? '' : ` idx=${fmtInt(sampleIndex, 5)} `;
-        setStatus(
-          `Infer #${fmtInt(RT.inferCounter, 4)}:${idxStr}wahr=${label} pred=${pred}  softmax ${probStr}  top ${top}${diffStr}`,
-        );
-      }
-    } else if (invalidProb) {
-      setStatus(
-        live
-          ? 'Canvas (live): ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren'
-          : `Infer #${fmtInt(RT.inferCounter, 4)} (Canvas): ungültige Modellwerte erkannt (NaN/Inf), bitte neu trainieren`,
-      );
-    } else {
-      setStatus(
-        live
-          ? `Canvas (live): pred=${pred}  softmax ${probStr}  top ${top}${diffStr}`
-          : `Infer #${fmtInt(RT.inferCounter, 4)} (Canvas): pred=${pred}  softmax ${probStr}  top ${top}${diffStr}`,
-      );
-    }
-  } catch (err) {
-    setStatus(`Infer-Fehler: ${String(err)}`);
+    inferOnMainThread(pixels, label, sampleIndex, live);
+  } catch (error) {
+    setStatus(`Infer-Fehler: ${String(error)}`);
   }
 }

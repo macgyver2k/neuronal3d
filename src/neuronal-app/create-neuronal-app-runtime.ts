@@ -1,5 +1,6 @@
 import { Store } from '@ngrx/store';
 import { createFreshStoredModelEntry } from '../app/core/create-fresh-model-entry';
+import { createRandomUuid } from '../app/core/create-random-uuid';
 import type { PersistedEpochRow, StoredModel } from '../app/core/model.types';
 import { NeuronalAppInstance } from '../app/core/neuronal-app-instance';
 import { NeuronalEpochsIdbService } from '../app/core/neuronal-epochs-idb.service';
@@ -11,11 +12,16 @@ import type { NeuronalState } from '../app/store/neuronal/neuronal.state';
 import { MLP } from '../nn/network';
 import type { TrainingRunLastBatch } from '../train/trainer';
 import {
+  mobilePostProcessPatch,
+  mobileVibeCameraEnabledDefault,
+} from '../viz/mobile-quality';
+import {
   normalizeVibeCameraTuning,
   type VibeCameraTuning,
 } from '../viz/vibe-camera-settings';
 import {
   isValidHexColor6,
+  mergeVizPostProcess,
   type VizLightColorSettings,
   type VizNetworkColorSettings,
   type VizPostProcessSettings,
@@ -49,6 +55,7 @@ import { loadCsvData } from './mnist-csv-load';
 import { getMnistTestDataRef, getMnistTrainDataRef } from './mnist-data';
 import { packMnistTrainForTransfer } from './mnist-train-pack';
 import { loadSelectedModelIntoNet, selectModelById } from './model-selection';
+import { NeuronalInferWorkerHost } from './neuronal-infer-worker-host';
 import { NeuronalTrainWorkerHost } from './neuronal-train-worker-host';
 import type { NeuronalTrainWorkerWorkerToHostMessage } from './neuronal-train-worker.protocol';
 import { NeuronalVizRenderWorkerHost } from './neuronal-viz-worker-host';
@@ -99,6 +106,7 @@ export async function createNeuronalAppRuntime(
   RT.surfaceVizMount = surfaces.vizMount;
   RT.surfaceDrawCanvas = surfaces.inferDrawCanvas;
   let neuronalTrainWorkerHost: NeuronalTrainWorkerHost | null = null;
+  let neuronalInferWorkerHost: NeuronalInferWorkerHost | null = null;
 
   const unSubN = RT.appStore
     .select(selectNeuronalState)
@@ -155,9 +163,16 @@ export async function createNeuronalAppRuntime(
   } = await neuronalVizHost.start();
   neuronalTrainWorkerHost = new NeuronalTrainWorkerHost();
   await neuronalTrainWorkerHost.whenReady();
+  neuronalInferWorkerHost = new NeuronalInferWorkerHost();
+  await neuronalInferWorkerHost.whenReady();
+  RT.inferWorkerHost = neuronalInferWorkerHost;
   applyVizSceneColors(RT.nLatest.viz3d.sceneColors);
   applyVizLightColors(RT.nLatest.viz3d.lightColors);
-  applyVizPostProcess(RT.nLatest.viz3d.postProcess);
+  const initialPostProcess = mergeVizPostProcess(
+    RT.nLatest.viz3d.postProcess,
+    mobilePostProcessPatch(),
+  );
+  applyVizPostProcess(initialPostProcess);
   applyVibeCameraSettings(
     normalizeVibeCameraTuning(RT.nLatest.viz3d.vibeCamera),
   );
@@ -171,7 +186,7 @@ export async function createNeuronalAppRuntime(
     ...RT.nLatest.viz3d.networkColors,
   };
   let postProcessBaseline: VizPostProcessSettings = {
-    ...RT.nLatest.viz3d.postProcess,
+    ...initialPostProcess,
   };
 
   let sceneColorPreviewRaf = 0;
@@ -263,7 +278,7 @@ export async function createNeuronalAppRuntime(
     neuronalVizHost?.destroy();
     neuronalVizHost = null;
   };
-  setVibeCameraMode(true);
+  setVibeCameraMode(mobileVibeCameraEnabledDefault());
   const vizSurface = neuronalVizHost.vizSurface;
   RT.net3d = vizSurface;
   vizSurface.applyVizNetworkColors(networkColorBaseline);
@@ -400,8 +415,11 @@ export async function createNeuronalAppRuntime(
     }
     renderFrame();
   };
-  const onVizPostProcessApply = (pp: VizPostProcessSettings): void => {
-    postProcessBaseline = { ...pp };
+  const onVizPostProcessApply = (postProcess: VizPostProcessSettings): void => {
+    postProcessBaseline = mergeVizPostProcess(
+      postProcess,
+      mobilePostProcessPatch(),
+    );
     applyVizPostProcess(postProcessBaseline);
     renderFrame();
   };
@@ -531,7 +549,7 @@ export async function createNeuronalAppRuntime(
       const now = new Date().toISOString();
       const testMetrics = await computeDatasetMetrics(n, getMnistTestDataRef());
       upsertModelEntry({
-        id: crypto.randomUUID(),
+        id: createRandomUuid(),
         name,
         createdAt: now,
         updatedAt: now,
@@ -573,6 +591,7 @@ export async function createNeuronalAppRuntime(
       },
     });
     applyEpochHistoryToUi(currentId);
+    syncVizWeightsFromNet();
     publishVizState('idle', zeroActivationsForLayout());
     setStatus(`Modell neu initialisiert: ${currentEntry.name}`);
     publishKernelCaps();
@@ -589,7 +608,7 @@ export async function createNeuronalAppRuntime(
         RT.net = new MLP(784, HIDDEN, 10);
         const now = new Date().toISOString();
         upsertModelEntry({
-          id: crypto.randomUUID(),
+          id: createRandomUuid(),
           name: defaultModelName(),
           createdAt: now,
           updatedAt: now,
@@ -781,6 +800,9 @@ export async function createNeuronalAppRuntime(
       RT.disposeSceneBound?.();
       neuronalTrainWorkerHost?.dispose();
       neuronalTrainWorkerHost = null;
+      neuronalInferWorkerHost?.destroy();
+      neuronalInferWorkerHost = null;
+      RT.inferWorkerHost = null;
       RT.net3d = null;
       RT.stopAnimCleanup = null;
       RT.disposeSceneBound = null;
